@@ -101,9 +101,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, [fetchProfile, repairInBackground]);
 
-    return () => subscription.unsubscribe();
-  }, [fetchProfile, repairInBackground]);
-
   const login = useCallback(async (email: string, password: string) => {
     console.log("Context: login attempt for", email);
     const { data, error } = await supabase.auth.signInWithPassword({
