@@ -107,6 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: email.toLowerCase().trim(),
       password,
     });
+    console.log("Supabase Auth sign in result:", { user: data.user, session: !!data.session, error });
     if (error) {
       console.error("Context: login error", error.message);
       throw new Error(error.message);
