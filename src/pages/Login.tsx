@@ -29,8 +29,11 @@ export default function Login() {
   const [isForgot, setIsForgot] = useState(false);
 
   if (user) {
+    console.log("Login page: User detected, redirecting...", user.email, user.role);
     if (user.must_change_password) return <Navigate to="/change-password" replace />;
-    return <Navigate to={user.role === "profissional" ? "/professional-panel" : "/dashboard"} replace />;
+    const dest = user.role === "profissional" ? "/professional-panel" : "/dashboard";
+    console.log("Redirecting to:", dest);
+    return <Navigate to={dest} replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
