@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/sidebar";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
-import { Users, Settings, Shield, Scissors, BarChart2, Clock, CreditCard, MessageSquare, Bot, CalendarClock, Megaphone, UserCheck, Kanban } from "lucide-react";
+import { Users, Settings, Shield, Scissors, BarChart2, Clock, CreditCard, MessageSquare, Bot, CalendarClock, Megaphone, UserCheck, Kanban, Smartphone } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const mainItems = [
@@ -21,6 +21,7 @@ const mainItems = [
   { title: "Vencimentos", url: "/expirations", icon: Clock },
   { title: "Assinaturas", url: "/subscriptions", icon: CreditCard },
   { title: "Configurações", url: "/settings", icon: Settings },
+  { title: "Página do Cliente", url: "/client-preview", icon: Smartphone },
 ];
 
 const automationItems = [
