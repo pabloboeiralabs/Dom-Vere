@@ -54,7 +54,7 @@ const App = () => (
             <Route path="/booking/:userId" element={<SuspenseWrap><Booking /></SuspenseWrap>} />
             <Route path="/professional-panel" element={<ProtectedRoute requiredRole="profissional"><SuspenseWrap><ProfessionalDashboard /></SuspenseWrap></ProtectedRoute>} />
             <Route path="/" element={<Navigate to="/reports" replace />} />
-            <Route path="/dashboard" element={<Navigate to="/reports" replace />} />
+            <Route path="/home" element={<Navigate to="/reports" replace />} />
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
               <Route path="/dashboard" element={<SuspenseWrap><Dashboard /></SuspenseWrap>} />
               <Route path="/clients" element={<SuspenseWrap><Clients /></SuspenseWrap>} />
