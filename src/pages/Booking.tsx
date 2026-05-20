@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,9 @@ import {
   Clock,
   CalendarDays,
   Sparkles,
+  History,
+  Info,
+  Plus,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
@@ -41,7 +44,7 @@ interface SlotInfo {
   available: boolean;
 }
 
-const STEPS = ["professional", "service", "datetime", "info"] as const;
+const STEPS = ["professional", "service", "datetime", "info", "history"] as const;
 type Step = (typeof STEPS)[number];
 
 const stepMeta: Record<Step, { icon: any; title: string; subtitle: string }> = {
@@ -64,6 +67,11 @@ const stepMeta: Record<Step, { icon: any; title: string; subtitle: string }> = {
     icon: User,
     title: "Seus Dados",
     subtitle: "Quase lá! Informe seu nome",
+  },
+  history: {
+    icon: History,
+    title: "Seu Histórico",
+    subtitle: "Veja seus agendamentos anteriores",
   },
 };
 
@@ -99,10 +107,19 @@ export default function Booking() {
   const [booked, setBooked] = useState(false);
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState(1);
+  const [userHistory, setUserHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const days = useMemo(
     () => Array.from({ length: 14 }, (_, i) => addDays(new Date(), i)),
     []
   );
+
+  useEffect(() => {
+    const savedName = localStorage.getItem("customerName");
+    const savedPhone = localStorage.getItem("customerPhone");
+    if (savedName) setCustomerName(savedName);
+    if (savedPhone) setCustomerPhone(savedPhone);
+  }, []);
 
   const currentStep = STEPS[step];
 
@@ -220,6 +237,39 @@ export default function Booking() {
     loadSlots();
   }, [selectedProf, selectedDate, schedules]);
 
+  const loadUserHistory = async () => {
+    if (!customerPhone.trim() || !userId) return;
+    setLoadingHistory(true);
+    try {
+      const { data: customerData } = await supabase
+        .from("customers")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("phone", customerPhone.trim())
+        .maybeSingle();
+
+      if (customerData) {
+        const { data: appointments } = await supabase
+          .from("appointments")
+          .select("*, professionals(name, photo_url), services(name)")
+          .eq("customer_id", customerData.id)
+          .order("date", { ascending: false })
+          .limit(10);
+        setUserHistory(appointments || []);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentStep === "history") {
+      loadUserHistory();
+    }
+  }, [currentStep]);
+
   const goNext = () => {
     setDirection(1);
     setStep((s) => Math.min(s + 1, STEPS.length - 1));
@@ -315,6 +365,8 @@ export default function Booking() {
         },
       }).catch(() => {});
 
+      localStorage.setItem("customerName", customerName.trim());
+      localStorage.setItem("customerPhone", customerPhone.trim());
       setBooked(true);
       toast.success("Agendamento realizado com sucesso!");
     } catch (e: any) {
@@ -414,15 +466,26 @@ export default function Booking() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex flex-col">
       {/* Header */}
-      <div className="pt-8 pb-4 px-4 text-center">
+      <div className="pt-8 pb-4 px-4 flex items-center justify-between">
+        <div className="w-10" /> {/* Spacer */}
         <motion.div
           initial={{ y: -20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          className="space-y-1"
+          className="space-y-1 text-center"
         >
           <Scissors className="h-8 w-8 text-primary mx-auto" />
           <h1 className="text-xl font-bold text-foreground">{shopName}</h1>
         </motion.div>
+        <div className="flex gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setStep(4)}
+            className={`rounded-full ${step === 4 ? "text-primary bg-primary/10" : "text-muted-foreground"}`}
+          >
+            <History className="h-5 w-5" />
+          </Button>
+        </div>
       </div>
 
       {/* Progress bar */}
@@ -759,6 +822,79 @@ export default function Booking() {
                 </div>
               </div>
             )}
+
+            {currentStep === "history" && (
+              <div className="space-y-4">
+                {loadingHistory ? (
+                  <div className="flex justify-center py-12">
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                      className="h-8 w-8 border-3 border-primary border-t-transparent rounded-full"
+                    />
+                  </div>
+                ) : userHistory.length > 0 ? (
+                  <div className="space-y-3">
+                    {userHistory.map((appt, i) => (
+                      <motion.div
+                        key={appt.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                        className="bg-card rounded-2xl border border-border/50 p-4 space-y-2 shadow-sm"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-bold text-foreground">
+                              {appt.services?.name || "Serviço"}
+                            </p>
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
+                              <CalendarDays className="h-3 w-3" />
+                              {format(new Date(appt.date + "T12:00:00"), "dd/MM/yyyy")}
+                              <span className="mx-1">•</span>
+                              <Clock className="h-3 w-3" />
+                              {appt.start_time.slice(0, 5)}
+                            </div>
+                          </div>
+                          <Badge
+                            className={`text-[10px] ${
+                              appt.status === "concluido"
+                                ? "bg-green-500/10 text-green-500 border-green-500/20"
+                                : appt.status === "cancelado"
+                                ? "bg-red-500/10 text-red-500 border-red-500/20"
+                                : "bg-primary/10 text-primary border-primary/20"
+                            }`}
+                          >
+                            {appt.status.charAt(0).toUpperCase() + appt.status.slice(1)}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2 pt-1 border-t border-border/30 mt-1">
+                          <Avatar className="h-5 w-5">
+                            <AvatarImage src={appt.professionals?.photo_url} />
+                            <AvatarFallback className="text-[8px] bg-primary/20 text-primary">
+                              {appt.professionals?.name?.[0]}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="text-[11px] font-medium text-muted-foreground">
+                            Profissional: {appt.professionals?.name}
+                          </span>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 bg-card rounded-3xl border border-dashed border-border/50">
+                    <History className="h-12 w-12 mx-auto mb-3 opacity-20" />
+                    <p className="text-muted-foreground font-medium">
+                      Nenhum agendamento encontrado
+                    </p>
+                    <p className="text-xs text-muted-foreground/60 px-6 mt-1">
+                      Certifique-se de usar o mesmo telefone informado nos agendamentos.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -793,6 +929,14 @@ export default function Booking() {
                   Confirmar Agendamento
                 </>
               )}
+            </Button>
+          ) : currentStep === "history" ? (
+            <Button
+              onClick={() => setStep(0)}
+              className="flex-1 rounded-xl h-12 text-base font-semibold"
+            >
+              Novo Agendamento
+              <Plus className="h-5 w-5 ml-1" />
             </Button>
           ) : (
             <Button
