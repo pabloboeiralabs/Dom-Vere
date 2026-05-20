@@ -33,7 +33,8 @@ export default function Login() {
     if (user.must_change_password) return <Navigate to="/change-password" replace />;
     const dest = user.role === "profissional" ? "/professional-panel" : "/dashboard";
     console.log("DESTINATION:", dest);
-    return <Navigate to={dest} replace />;
+    window.location.href = dest; // Force hard redirect
+    return null;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
