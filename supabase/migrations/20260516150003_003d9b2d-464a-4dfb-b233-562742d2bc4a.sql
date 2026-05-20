@@ -1,0 +1,1 @@
+UPDATE public.settings SET shop_name='Léo, a Barbearia' WHERE user_id='f191cae4-8c14-463d-98c9-2fed153f25c3';

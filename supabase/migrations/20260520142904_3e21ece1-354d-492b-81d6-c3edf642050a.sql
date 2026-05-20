@@ -1,0 +1,1 @@
+UPDATE public.whatsapp_config SET instance_token = 'afddebef-2a82-4fc9-8688-c656faf22663' WHERE user_id = 'f191cae4-8c14-463d-98c9-2fed153f25c3';

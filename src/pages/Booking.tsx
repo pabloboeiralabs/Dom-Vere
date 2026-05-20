@@ -1,0 +1,811 @@
+import { useEffect, useState, useMemo } from "react";
+import { useParams } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { toast } from "sonner";
+import { format, addDays, isSameDay } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import {
+  Check,
+  Scissors,
+  ChevronLeft,
+  ChevronRight,
+  User,
+  Clock,
+  CalendarDays,
+  Sparkles,
+} from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { motion, AnimatePresence } from "framer-motion";
+
+interface Professional {
+  id: string;
+  name: string;
+  photo_url: string | null;
+}
+interface Service {
+  id: string;
+  name: string;
+  price: number;
+}
+interface Schedule {
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  active: boolean;
+}
+interface SlotInfo {
+  time: string;
+  available: boolean;
+}
+
+const STEPS = ["professional", "service", "datetime", "info"] as const;
+type Step = (typeof STEPS)[number];
+
+const stepMeta: Record<Step, { icon: any; title: string; subtitle: string }> = {
+  professional: {
+    icon: Scissors,
+    title: "Escolha o Profissional",
+    subtitle: "Quem você prefere?",
+  },
+  service: {
+    icon: Sparkles,
+    title: "Escolha o Serviço",
+    subtitle: "O que deseja fazer?",
+  },
+  datetime: {
+    icon: CalendarDays,
+    title: "Data e Horário",
+    subtitle: "Quando fica melhor pra você?",
+  },
+  info: {
+    icon: User,
+    title: "Seus Dados",
+    subtitle: "Quase lá! Informe seu nome",
+  },
+};
+
+const slideVariants = {
+  enter: (dir: number) => ({
+    x: dir > 0 ? 300 : -300,
+    opacity: 0,
+    scale: 0.95,
+  }),
+  center: { x: 0, opacity: 1, scale: 1 },
+  exit: (dir: number) => ({
+    x: dir > 0 ? -300 : 300,
+    opacity: 0,
+    scale: 0.95,
+  }),
+};
+
+export default function Booking() {
+  const { userId } = useParams<{ userId: string }>();
+  const [shopName, setShopName] = useState("Barbearia");
+  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [schedules, setSchedules] = useState<Record<string, Schedule[]>>({});
+  const [selectedProf, setSelectedProf] = useState("");
+  const [selectedService, setSelectedService] = useState("");
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [availableSlots, setAvailableSlots] = useState<SlotInfo[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [booking, setBooking] = useState(false);
+  const [booked, setBooked] = useState(false);
+  const [step, setStep] = useState(0);
+  const [direction, setDirection] = useState(1);
+  const days = useMemo(
+    () => Array.from({ length: 14 }, (_, i) => addDays(new Date(), i)),
+    []
+  );
+
+  const currentStep = STEPS[step];
+
+  useEffect(() => {
+    if (!userId) return;
+    const load = async () => {
+      try {
+        const [settingsRes, profsRes, servsRes] = await Promise.all([
+          supabase
+            .from("settings")
+            .select("shop_name")
+            .eq("user_id", userId)
+            .single(),
+          supabase
+            .from("professionals")
+            .select("id, name, photo_url")
+            .eq("user_id", userId)
+            .eq("active", true)
+            .order("name"),
+          supabase
+            .from("services")
+            .select("id, name, price")
+            .eq("user_id", userId)
+            .eq("active", true)
+            .order("name"),
+        ]);
+
+        if (settingsRes.data?.shop_name) setShopName(settingsRes.data.shop_name);
+        const profs = profsRes.data || [];
+        setProfessionals(profs as Professional[]);
+        setServices((servsRes.data || []) as Service[]);
+
+        if (profs.length > 0) {
+          const profIds = profs.map((p: any) => p.id);
+          const { data: schRows } = await supabase
+            .from("professional_schedules")
+            .select(
+              "professional_id, day_of_week, start_time, end_time, active"
+            )
+            .in("professional_id", profIds);
+
+          const schMap: Record<string, Schedule[]> = {};
+          for (const r of (schRows || []) as any[]) {
+            if (!schMap[r.professional_id]) schMap[r.professional_id] = [];
+            schMap[r.professional_id].push(r);
+          }
+          setSchedules(schMap);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [userId]);
+
+  useEffect(() => {
+    if (!selectedProf) {
+      setAvailableSlots([]);
+      return;
+    }
+    const daySchedule = schedules[selectedProf]?.find(
+      (s) => s.day_of_week === selectedDate.getDay()
+    );
+    if (!daySchedule || !daySchedule.active) {
+      setAvailableSlots([]);
+      return;
+    }
+
+    const loadSlots = async () => {
+      const dateStr = format(selectedDate, "yyyy-MM-dd");
+      const { data: existingAppts } = await supabase
+        .from("appointments")
+        .select("start_time, end_time")
+        .eq("professional_id", selectedProf)
+        .eq("date", dateStr)
+        .neq("status", "cancelado");
+
+      const occupiedMinutes = new Set<number>();
+      for (const a of existingAppts || []) {
+        const [sh, sm] = (a.start_time || "").split(":").map(Number);
+        const [eh, em] = (a.end_time || "").split(":").map(Number);
+        let c = sh * 60 + (sm || 0);
+        const end = eh * 60 + (em || 0);
+        while (c < end) {
+          occupiedMinutes.add(c);
+          c += 30;
+        }
+      }
+
+      const slots: SlotInfo[] = [];
+      const [sh, sm] = daySchedule.start_time.split(":").map(Number);
+      const [eh, em] = daySchedule.end_time.split(":").map(Number);
+      let current = sh * 60 + (sm || 0);
+      const endMin = eh * 60 + (em || 0);
+      const now = new Date();
+      const isToday = isSameDay(selectedDate, now);
+
+      while (current < endMin) {
+        const h = Math.floor(current / 60);
+        const m = current % 60;
+        const timeStr = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+        const isPast =
+          isToday && h * 60 + m <= now.getHours() * 60 + now.getMinutes();
+        slots.push({
+          time: timeStr,
+          available: !occupiedMinutes.has(current) && !isPast,
+        });
+        current += 30;
+      }
+      setAvailableSlots(slots);
+      setSelectedSlot("");
+    };
+    loadSlots();
+  }, [selectedProf, selectedDate, schedules]);
+
+  const goNext = () => {
+    setDirection(1);
+    setStep((s) => Math.min(s + 1, STEPS.length - 1));
+  };
+  const goBack = () => {
+    setDirection(-1);
+    setStep((s) => Math.max(s - 1, 0));
+  };
+
+  const canProceed = () => {
+    switch (currentStep) {
+      case "professional":
+        return !!selectedProf;
+      case "service":
+        return !!selectedService;
+      case "datetime":
+        return !!selectedSlot;
+      case "info":
+        return !!customerName.trim();
+    }
+  };
+
+  const handleBook = async () => {
+    if (!userId || !selectedProf || !selectedSlot || !customerName.trim()) {
+      toast.error("Preencha todos os campos obrigatórios");
+      return;
+    }
+    setBooking(true);
+    try {
+      let customerId: string;
+      if (customerPhone.trim()) {
+        const { data: existing } = await supabase
+          .from("customers")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("phone", customerPhone.trim())
+          .limit(1);
+        if (existing && existing.length > 0) {
+          customerId = existing[0].id;
+        } else {
+          const { data: newC, error } = await supabase
+            .from("customers")
+            .insert({
+              user_id: userId,
+              name: customerName.trim(),
+              phone: customerPhone.trim(),
+            })
+            .select("id")
+            .single();
+          if (error) throw error;
+          customerId = newC!.id;
+        }
+      } else {
+        const { data: newC, error } = await supabase
+          .from("customers")
+          .insert({
+            user_id: userId,
+            name: customerName.trim(),
+            phone: customerPhone.trim(),
+          })
+          .select("id")
+          .single();
+        if (error) throw error;
+        customerId = newC!.id;
+      }
+
+      const [sh, sm] = selectedSlot.split(":").map(Number);
+      const endMin = sh * 60 + sm + 30;
+      const endTime = `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`;
+
+      const { error } = await supabase.from("appointments").insert({
+        user_id: userId,
+        professional_id: selectedProf,
+        customer_id: customerId,
+        service_id: selectedService || null,
+        date: format(selectedDate, "yyyy-MM-dd"),
+        start_time: selectedSlot,
+        end_time: endTime,
+        notes: "Agendamento online",
+      });
+      if (error) throw error;
+
+      // Notify professional via WhatsApp (fire and forget)
+      const svcName = services.find((s: any) => s.id === selectedService)?.name || "";
+      supabase.functions.invoke("notify-professional", {
+        body: {
+          professional_id: selectedProf,
+          user_id: userId,
+          customer_name: customerName.trim(),
+          service_name: svcName,
+          date: format(selectedDate, "yyyy-MM-dd"),
+          start_time: selectedSlot,
+        },
+      }).catch(() => {});
+
+      setBooked(true);
+      toast.success("Agendamento realizado com sucesso!");
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setBooking(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+          className="h-10 w-10 border-4 border-primary border-t-transparent rounded-full"
+        />
+      </div>
+    );
+  }
+
+  if (booked) {
+    const selectedProfObj = professionals.find((p) => p.id === selectedProf);
+    const selectedSvcObj = services.find((s) => s.id === selectedService);
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", damping: 20 }}
+          className="max-w-md w-full rounded-3xl bg-card border border-border/50 shadow-2xl p-8 text-center space-y-6"
+        >
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ delay: 0.2, type: "spring", damping: 15 }}
+            className="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center mx-auto"
+          >
+            <Check className="h-10 w-10 text-green-500" />
+          </motion.div>
+          <div className="space-y-1">
+            <h2 className="text-3xl font-bold text-foreground">Confirmado!</h2>
+            <p className="text-muted-foreground">Seu agendamento está pronto</p>
+          </div>
+          <div className="bg-muted/50 rounded-2xl p-5 space-y-3 text-left">
+            <div className="flex items-center gap-3">
+              <CalendarDays className="h-5 w-5 text-primary flex-shrink-0" />
+              <span className="text-foreground font-medium">
+                {format(selectedDate, "dd 'de' MMMM, EEEE", { locale: ptBR })}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <Clock className="h-5 w-5 text-primary flex-shrink-0" />
+              <span className="text-foreground font-medium">{selectedSlot}</span>
+            </div>
+            {selectedProfObj && (
+              <div className="flex items-center gap-3">
+                <Avatar className="h-6 w-6">
+                  <AvatarImage src={selectedProfObj.photo_url || undefined} />
+                  <AvatarFallback className="text-[10px]">
+                    {selectedProfObj.name[0]}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-foreground font-medium">
+                  {selectedProfObj.name}
+                </span>
+              </div>
+            )}
+            {selectedSvcObj && (
+              <div className="flex items-center gap-3">
+                <Scissors className="h-5 w-5 text-primary flex-shrink-0" />
+                <span className="text-foreground font-medium">
+                  {selectedSvcObj.name}
+                </span>
+              </div>
+            )}
+          </div>
+          <Button
+            onClick={() => {
+              setBooked(false);
+              setSelectedSlot("");
+              setStep(0);
+            }}
+            variant="outline"
+            className="rounded-xl"
+          >
+            Fazer outro agendamento
+          </Button>
+        </motion.div>
+      </div>
+    );
+  }
+
+  const progress = ((step + 1) / STEPS.length) * 100;
+  const StepIcon = stepMeta[currentStep].icon;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex flex-col">
+      {/* Header */}
+      <div className="pt-8 pb-4 px-4 text-center">
+        <motion.div
+          initial={{ y: -20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="space-y-1"
+        >
+          <Scissors className="h-8 w-8 text-primary mx-auto" />
+          <h1 className="text-xl font-bold text-foreground">{shopName}</h1>
+        </motion.div>
+      </div>
+
+      {/* Progress bar */}
+      <div className="px-6 pb-2">
+        <div className="flex items-center justify-between mb-2">
+          {STEPS.map((s, i) => {
+            const Icon = stepMeta[s].icon;
+            return (
+              <motion.div
+                key={s}
+                className={`flex items-center justify-center w-9 h-9 rounded-full transition-all duration-300 ${
+                  i <= step
+                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30"
+                    : "bg-muted text-muted-foreground"
+                }`}
+                animate={{ scale: i === step ? 1.15 : 1 }}
+              >
+                <Icon className="h-4 w-4" />
+              </motion.div>
+            );
+          })}
+        </div>
+        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+          <motion.div
+            className="h-full bg-gradient-to-r from-primary to-primary/70 rounded-full"
+            animate={{ width: `${progress}%` }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+          />
+        </div>
+      </div>
+
+      {/* Step title */}
+      <div className="px-6 py-3">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentStep}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="space-y-0.5"
+          >
+            <h2 className="text-xl font-bold text-foreground">
+              {stepMeta[currentStep].title}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {stepMeta[currentStep].subtitle}
+            </p>
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* Content area */}
+      <div className="flex-1 px-4 pb-4 overflow-hidden relative">
+        <AnimatePresence mode="wait" custom={direction}>
+          <motion.div
+            key={currentStep}
+            custom={direction}
+            variants={slideVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+            className="w-full"
+          >
+            {currentStep === "professional" && (
+              <div className="grid grid-cols-2 gap-3">
+                {professionals.map((p, i) => (
+                  <motion.button
+                    key={p.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.08 }}
+                    onClick={() => {
+                      setSelectedProf(p.id);
+                      setTimeout(goNext, 300);
+                    }}
+                    className={`relative rounded-2xl overflow-hidden border-2 transition-all duration-200 ${
+                      selectedProf === p.id
+                        ? "border-primary shadow-lg shadow-primary/20 scale-[1.02]"
+                        : "border-border/50 hover:border-primary/50"
+                    }`}
+                  >
+                    <div className="aspect-[3/4] relative bg-muted">
+                      {p.photo_url ? (
+                        <img
+                          src={p.photo_url}
+                          alt={p.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary/5">
+                          <span className="text-4xl font-bold text-primary/40">
+                            {p.name
+                              .split(" ")
+                              .map((n) => n[0])
+                              .join("")
+                              .slice(0, 2)}
+                          </span>
+                        </div>
+                      )}
+                      {/* Gradient overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+                      {/* Name at bottom */}
+                      <div className="absolute bottom-0 left-0 right-0 p-3">
+                        <p className="text-white font-semibold text-sm text-left">
+                          {p.name}
+                        </p>
+                      </div>
+                      {/* Selected badge */}
+                      {selectedProf === p.id && (
+                        <motion.div
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          className="absolute top-2 right-2 w-7 h-7 rounded-full bg-primary flex items-center justify-center shadow-lg"
+                        >
+                          <Check className="h-4 w-4 text-primary-foreground" />
+                        </motion.div>
+                      )}
+                    </div>
+                  </motion.button>
+                ))}
+              </div>
+            )}
+
+            {currentStep === "service" && (
+              <div className="space-y-2">
+                {services.map((s, i) => (
+                  <motion.button
+                    key={s.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.06 }}
+                    onClick={() => {
+                      setSelectedService(s.id);
+                      setTimeout(goNext, 300);
+                    }}
+                    className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all duration-200 text-left ${
+                      selectedService === s.id
+                        ? "border-primary bg-primary/5 shadow-md shadow-primary/10"
+                        : "border-border/50 bg-card hover:border-primary/50"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                          selectedService === s.id
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        <Scissors className="h-5 w-5" />
+                      </div>
+                      <span
+                        className={`font-medium ${
+                          selectedService === s.id
+                            ? "text-foreground"
+                            : "text-foreground/80"
+                        }`}
+                      >
+                        {s.name}
+                      </span>
+                    </div>
+                    <Badge
+                      variant="secondary"
+                      className={`text-sm px-3 py-1 ${
+                        selectedService === s.id
+                          ? "bg-primary/20 text-primary"
+                          : ""
+                      }`}
+                    >
+                      R$ {Number(s.price).toFixed(2)}
+                    </Badge>
+                  </motion.button>
+                ))}
+              </div>
+            )}
+
+            {currentStep === "datetime" && (
+              <div className="space-y-5">
+                {/* Date picker carousel */}
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground mb-3">
+                    Escolha o dia
+                  </p>
+                  <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 snap-x">
+                    {days.map((d, i) => {
+                      const sch = schedules[selectedProf]?.find(
+                        (s) => s.day_of_week === d.getDay()
+                      );
+                      const isOff = !sch || !sch.active;
+                      const isSelected = isSameDay(d, selectedDate);
+                      return (
+                        <motion.button
+                          key={d.toISOString()}
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: i * 0.03 }}
+                          disabled={isOff}
+                          onClick={() => setSelectedDate(d)}
+                          className={`snap-start flex-shrink-0 flex flex-col items-center py-3 px-3.5 rounded-2xl border-2 transition-all min-w-[60px] ${
+                            isOff
+                              ? "opacity-30 border-transparent"
+                              : isSelected
+                              ? "border-primary bg-primary text-primary-foreground shadow-lg shadow-primary/30"
+                              : "border-border/50 bg-card hover:border-primary/50"
+                          }`}
+                        >
+                          <span
+                            className={`text-[10px] uppercase font-semibold ${
+                              isSelected
+                                ? "text-primary-foreground/70"
+                                : "text-muted-foreground"
+                            }`}
+                          >
+                            {format(d, "EEE", { locale: ptBR })}
+                          </span>
+                          <span className="text-xl font-bold leading-tight">
+                            {format(d, "dd")}
+                          </span>
+                          <span
+                            className={`text-[10px] ${
+                              isSelected
+                                ? "text-primary-foreground/70"
+                                : "text-muted-foreground"
+                            }`}
+                          >
+                            {format(d, "MMM", { locale: ptBR })}
+                          </span>
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Time slots */}
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground mb-3">
+                    Horários disponíveis
+                  </p>
+                  {availableSlots.length > 0 ? (
+                    <div className="grid grid-cols-4 gap-2">
+                      {availableSlots.map((s, i) => (
+                        <motion.button
+                          key={s.time}
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: i * 0.02 }}
+                          disabled={!s.available}
+                          onClick={() => setSelectedSlot(s.time)}
+                          className={`py-2.5 px-2 rounded-xl text-sm font-medium border-2 transition-all ${
+                            !s.available
+                              ? "opacity-20 border-transparent bg-muted line-through text-muted-foreground"
+                              : selectedSlot === s.time
+                              ? "border-primary bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                              : "border-border/50 bg-card hover:border-primary/50 text-foreground"
+                          }`}
+                        >
+                          {s.time}
+                        </motion.button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Clock className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                      <p className="text-sm">
+                        Sem horários disponíveis neste dia
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {currentStep === "info" && (
+              <div className="space-y-4">
+                {/* Summary card */}
+                <div className="bg-card rounded-2xl border border-border/50 p-4 space-y-3">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Resumo
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage
+                        src={
+                          professionals.find((p) => p.id === selectedProf)
+                            ?.photo_url || undefined
+                        }
+                      />
+                      <AvatarFallback className="text-xs bg-primary/20 text-primary">
+                        {professionals
+                          .find((p) => p.id === selectedProf)
+                          ?.name[0] || "?"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-semibold text-foreground text-sm">
+                        {professionals.find((p) => p.id === selectedProf)?.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {services.find((s) => s.id === selectedService)?.name ||
+                          "Serviço"}{" "}
+                        •{" "}
+                        {format(selectedDate, "dd/MM", { locale: ptBR })} às{" "}
+                        {selectedSlot}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Form */}
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">
+                      Nome completo *
+                    </label>
+                    <Input
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder="Como podemos te chamar?"
+                      className="rounded-xl h-12 text-base"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-1.5 block">
+                      Telefone
+                    </label>
+                    <Input
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      placeholder="(00) 00000-0000"
+                      className="rounded-xl h-12 text-base"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* Bottom navigation */}
+      <div className="sticky bottom-0 bg-background/80 backdrop-blur-xl border-t border-border/50 p-4 pb-6 safe-area-bottom">
+        <div className="max-w-lg mx-auto flex gap-3">
+          {step > 0 && (
+            <Button
+              variant="outline"
+              onClick={goBack}
+              className="rounded-xl h-12 px-4"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+          )}
+          {currentStep === "info" ? (
+            <Button
+              onClick={handleBook}
+              disabled={booking || !customerName.trim()}
+              className="flex-1 rounded-xl h-12 text-base font-semibold bg-gradient-to-r from-primary to-primary/80 shadow-lg shadow-primary/30"
+            >
+              {booking ? (
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ repeat: Infinity, duration: 1 }}
+                  className="h-5 w-5 border-2 border-primary-foreground border-t-transparent rounded-full"
+                />
+              ) : (
+                <>
+                  <Check className="h-5 w-5 mr-2" />
+                  Confirmar Agendamento
+                </>
+              )}
+            </Button>
+          ) : (
+            <Button
+              onClick={goNext}
+              disabled={!canProceed()}
+              className="flex-1 rounded-xl h-12 text-base font-semibold"
+            >
+              Continuar
+              <ChevronRight className="h-5 w-5 ml-1" />
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

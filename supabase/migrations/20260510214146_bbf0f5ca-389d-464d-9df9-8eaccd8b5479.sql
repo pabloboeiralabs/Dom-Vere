@@ -1,0 +1,1 @@
+DELETE FROM public.whatsapp_config WHERE instance_token = 'Barber-pay' OR api_url LIKE '%create-instance-url%' OR api_url = '';

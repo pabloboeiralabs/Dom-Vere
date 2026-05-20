@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN subscription_expires_at date DEFAULT NULL;

@@ -1,0 +1,1 @@
+ALTER TABLE profiles ADD COLUMN subscription_type text NOT NULL DEFAULT 'basico';

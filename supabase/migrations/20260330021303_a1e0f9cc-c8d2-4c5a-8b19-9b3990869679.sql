@@ -1,0 +1,4 @@
+UPDATE professionals SET photo_url = 'https://cjkzhxlmtwzbscqiiqin.supabase.co/storage/v1/object/public/professionals/barber-carlos.jpg' WHERE name ILIKE '%Carlos%';
+UPDATE professionals SET photo_url = 'https://cjkzhxlmtwzbscqiiqin.supabase.co/storage/v1/object/public/professionals/barber-rafael.jpg' WHERE name ILIKE '%Rafael%';
+UPDATE professionals SET photo_url = 'https://cjkzhxlmtwzbscqiiqin.supabase.co/storage/v1/object/public/professionals/barber-diego.jpg' WHERE name ILIKE '%Diego%';
+UPDATE professionals SET photo_url = 'https://cjkzhxlmtwzbscqiiqin.supabase.co/storage/v1/object/public/professionals/barber-lucas.jpg' WHERE name ILIKE '%Lucas%';

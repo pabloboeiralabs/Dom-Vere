@@ -1,0 +1,99 @@
+#lovable-badge {
+  display: none !important;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 220 25% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 10%;
+
+    --primary: 173 58% 39%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 18% 93%;
+    --secondary-foreground: 220 25% 10%;
+
+    --muted: 210 18% 93%;
+    --muted-foreground: 215 14% 46%;
+
+    --accent: 173 40% 92%;
+    --accent-foreground: 173 58% 25%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 20% 88%;
+    --input: 214 20% 88%;
+    --ring: 173 58% 39%;
+
+    --radius: 0.625rem;
+
+    --sidebar-background: 220 25% 10%;
+    --sidebar-foreground: 210 18% 80%;
+    --sidebar-primary: 173 58% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 20% 16%;
+    --sidebar-accent-foreground: 210 18% 90%;
+    --sidebar-border: 220 20% 18%;
+    --sidebar-ring: 173 58% 39%;
+  }
+
+  .dark {
+    --background: 220 25% 7%;
+    --foreground: 210 18% 93%;
+
+    --card: 220 25% 10%;
+    --card-foreground: 210 18% 93%;
+
+    --popover: 220 25% 10%;
+    --popover-foreground: 210 18% 93%;
+
+    --primary: 173 58% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 20% 16%;
+    --secondary-foreground: 210 18% 93%;
+
+    --muted: 220 20% 16%;
+    --muted-foreground: 215 14% 55%;
+
+    --accent: 220 20% 16%;
+    --accent-foreground: 173 58% 55%;
+
+    --destructive: 0 62% 35%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 20% 18%;
+    --input: 220 20% 18%;
+    --ring: 173 58% 45%;
+
+    --sidebar-background: 220 30% 6%;
+    --sidebar-foreground: 210 18% 75%;
+    --sidebar-primary: 173 58% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 25% 12%;
+    --sidebar-accent-foreground: 210 18% 90%;
+    --sidebar-border: 220 25% 14%;
+    --sidebar-ring: 173 58% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
