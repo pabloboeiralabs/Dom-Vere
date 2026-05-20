@@ -8,7 +8,7 @@ interface User {
   email: string;
   name: string;
   role: "admin" | "barbearia" | "profissional";
-  subscription_type: "basico" | "premium";
+  subscription_type: "basico" | "premium" | null;
   professional_id?: string | null;
   owner_id?: string | null;
   must_change_password?: boolean;
@@ -45,7 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .eq("id", supabaseUser.id)
       .maybeSingle();
     
-    console.log("FetchProfile result:", { data, error });
+    console.log("FetchProfile result for", supabaseUser.email, ":", { data, error });
 
     if (error || !data) {
       console.warn("Returning null from fetchProfile - user might not have a profile yet");
