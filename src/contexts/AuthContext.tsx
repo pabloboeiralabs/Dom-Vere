@@ -44,6 +44,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .select("id, email, name, role, subscription_type, professional_id, owner_id, must_change_password")
       .eq("id", supabaseUser.id)
       .maybeSingle();
+    
+    console.log("FetchProfile for ID:", supabaseUser.id, "Data:", data, "Error:", error);
 
     if (error || !data) return null;
     return data as User;
@@ -61,13 +63,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         if (session?.user) {
+          console.log("Auth state change: session found for", session.user.email);
           const profile = await fetchProfile(session.user);
           if (profile) {
+            console.log("Profile loaded:", profile.email, "Role:", profile.role);
             setUser(profile);
             repairInBackground(profile.id);
+          } else {
+            console.error("Profile not found for user ID:", session.user.id);
           }
           setLoading(false);
         } else {
+          console.log("Auth state change: no session");
           setUser(null);
           setLoading(false);
         }
@@ -76,14 +83,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
+        console.log("Initial session found for", session.user.email);
         fetchProfile(session.user).then((profile) => {
           if (profile) {
+            console.log("Initial profile loaded:", profile.email);
             setUser(profile);
             repairInBackground(profile.id);
+          } else {
+            console.error("Initial profile not found for user ID:", session.user.id);
           }
           setLoading(false);
         });
       } else {
+        console.log("No initial session");
         setLoading(false);
       }
     });
@@ -92,11 +104,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchProfile, repairInBackground]);
 
   const login = useCallback(async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    console.log("Context: login attempt for", email);
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: email.toLowerCase().trim(),
       password,
     });
-    if (error) throw new Error(error.message);
+    if (error) {
+      console.error("Context: login error", error.message);
+      throw new Error(error.message);
+    }
+    console.log("Context: login response data:", data);
   }, []);
 
   const register = useCallback(async (email: string, password: string, name: string) => {
@@ -112,6 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    console.log("Context: logging out...");
     await supabase.auth.signOut();
     setUser(null);
   }, []);
