@@ -107,13 +107,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: email.toLowerCase().trim(),
       password,
     });
-    console.log("Supabase Auth sign in attempt for", email, "result:", { user: data.user?.email, session: !!data.session, error: error?.message });
+    console.log("Supabase Auth sign in result for", email, ":", { user: data.user?.email, session: !!data.session, error: error?.message });
+    
     if (error) {
       console.error("Context: login error", error.message);
       throw new Error(error.message);
     }
-    console.log("Context: login response data:", data);
-  }, []);
+    
+    if (data.session) {
+      console.log("Session established, fetching profile manually for immediate redirect");
+      const profile = await fetchProfile(data.user);
+      if (profile) {
+        setUser(profile);
+      }
+    }
+  }, [fetchProfile]);
 
   const register = useCallback(async (email: string, password: string, name: string) => {
     const { error } = await supabase.auth.signUp({
