@@ -1,14 +1,14 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { repairPlanTransactions } from "@/lib/repairPlanTransactions";
-import type { User as SupabaseUser } from "@supabase/supabase-js";
+import type { User as SupabaseUser, Session } from "@supabase/supabase-js";
 
 interface User {
   id: string;
   email: string;
   name: string;
   role: "admin" | "barbearia" | "profissional";
-  subscription_type: "basico" | "premium";
+  subscription_type: "basico" | "premium" | null;
   professional_id?: string | null;
   owner_id?: string | null;
   must_change_password?: boolean;
@@ -45,9 +45,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .eq("id", supabaseUser.id)
       .maybeSingle();
     
-    console.log("FetchProfile for ID:", supabaseUser.id, "Data:", data, "Error:", error);
+    console.log("FetchProfile result for", supabaseUser.email, ":", { data, error });
 
-    if (error || !data) return null;
+    if (error || !data) {
+      console.warn("Returning null from fetchProfile - user might not have a profile yet");
+      return null;
+    }
     return data as User;
   }, []);
 
@@ -60,45 +63,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        if (session?.user) {
-          console.log("Auth state change: session found for", session.user.email);
-          const profile = await fetchProfile(session.user);
-          if (profile) {
-            console.log("Profile loaded:", profile.email, "Role:", profile.role);
-            setUser(profile);
-            repairInBackground(profile.id);
-          } else {
-            console.error("Profile not found for user ID:", session.user.id);
-          }
-          setLoading(false);
+    const handleSession = async (session: Session | null) => {
+      console.log("Handling session:", session?.user?.email);
+      if (session?.user) {
+        const profile = await fetchProfile(session.user);
+        if (profile) {
+          console.log("Setting user profile:", profile.email);
+          setUser(profile);
+          repairInBackground(profile.id);
         } else {
-          console.log("Auth state change: no session");
+          console.error("No profile found for logged in user");
+        }
+      } else {
+        console.log("No session, clearing user");
+        setUser(null);
+      }
+      setLoading(false);
+    };
+
+    // Initial check
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      handleSession(session);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log("Auth event:", event);
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+          handleSession(session);
+        } else if (event === 'SIGNED_OUT') {
           setUser(null);
           setLoading(false);
         }
       }
     );
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        console.log("Initial session found for", session.user.email);
-        fetchProfile(session.user).then((profile) => {
-          if (profile) {
-            console.log("Initial profile loaded:", profile.email);
-            setUser(profile);
-            repairInBackground(profile.id);
-          } else {
-            console.error("Initial profile not found for user ID:", session.user.id);
-          }
-          setLoading(false);
-        });
-      } else {
-        console.log("No initial session");
-        setLoading(false);
-      }
-    });
 
     return () => subscription.unsubscribe();
   }, [fetchProfile, repairInBackground]);
@@ -109,12 +107,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: email.toLowerCase().trim(),
       password,
     });
+    console.log("Supabase Auth sign in result for", email, ":", { user: data.user?.email, session: !!data.session, error: error?.message });
+    
     if (error) {
       console.error("Context: login error", error.message);
       throw new Error(error.message);
     }
-    console.log("Context: login response data:", data);
-  }, []);
+    
+    if (data.session) {
+      console.log("Session established, fetching profile manually for immediate redirect");
+      const profile = await fetchProfile(data.user);
+      if (profile) {
+        setUser(profile);
+      }
+    }
+  }, [fetchProfile]);
 
   const register = useCallback(async (email: string, password: string, name: string) => {
     const { error } = await supabase.auth.signUp({

@@ -29,12 +29,14 @@ export default function Login() {
   const [isForgot, setIsForgot] = useState(false);
 
   if (user) {
-    console.log("LOGIN PAGE REDIRECT TRIGGERED", user);
+    console.log("LOGIN PAGE REDIRECT TRIGGERED", user.email, user.role);
     if (user.must_change_password) return <Navigate to="/change-password" replace />;
-    const dest = user.role === "profissional" ? "/professional-panel" : "/dashboard";
-    console.log("DESTINATION:", dest);
-    window.location.href = dest; // Force hard redirect
-    return null;
+    
+    // Determine target based on role
+    const dest = user.role === "profissional" ? "/professional-panel" : "/reports";
+    
+    console.log("Redirecting to:", dest);
+    return <Navigate to={dest} replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
