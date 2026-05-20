@@ -61,13 +61,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         if (session?.user) {
+          console.log("Auth state change: session found for", session.user.email);
           const profile = await fetchProfile(session.user);
           if (profile) {
+            console.log("Profile loaded:", profile.email, "Role:", profile.role);
             setUser(profile);
             repairInBackground(profile.id);
+          } else {
+            console.error("Profile not found for user ID:", session.user.id);
           }
           setLoading(false);
         } else {
+          console.log("Auth state change: no session");
           setUser(null);
           setLoading(false);
         }
@@ -76,14 +81,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
+        console.log("Initial session found for", session.user.email);
         fetchProfile(session.user).then((profile) => {
           if (profile) {
+            console.log("Initial profile loaded:", profile.email);
             setUser(profile);
             repairInBackground(profile.id);
+          } else {
+            console.error("Initial profile not found for user ID:", session.user.id);
           }
           setLoading(false);
         });
       } else {
+        console.log("No initial session");
         setLoading(false);
       }
     });
