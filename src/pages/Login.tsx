@@ -29,10 +29,10 @@ export default function Login() {
   const [isForgot, setIsForgot] = useState(false);
 
   if (user) {
-    console.log("Login page: User detected, redirecting...", user.email, user.role);
+    console.log("LOGIN PAGE REDIRECT TRIGGERED", user);
     if (user.must_change_password) return <Navigate to="/change-password" replace />;
     const dest = user.role === "profissional" ? "/professional-panel" : "/dashboard";
-    console.log("Redirecting to:", dest);
+    console.log("DESTINATION:", dest);
     return <Navigate to={dest} replace />;
   }
 
