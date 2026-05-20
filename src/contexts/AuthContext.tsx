@@ -45,9 +45,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .eq("id", supabaseUser.id)
       .maybeSingle();
     
-    console.log("FetchProfile for ID:", supabaseUser.id, "Data:", data, "Error:", error);
+    console.log("FetchProfile result:", { data, error });
 
-    if (error || !data) return null;
+    if (error || !data) {
+      console.warn("Returning null from fetchProfile - user might not have a profile yet");
+      return null;
+    }
     return data as User;
   }, []);
 
