@@ -110,7 +110,7 @@ export default function Reports() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-bold text-foreground">Relatórios</h1>
+        <h1 className="text-2xl font-bold text-foreground">Relatórios (Olá, {user?.name})</h1>
 
         <div className="flex items-center gap-2 flex-wrap">
           <Tabs value={period === "custom" ? "" : period} onValueChange={(v) => { if (v) setPeriod(v as Period); }}>
