@@ -44,6 +44,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .select("id, email, name, role, subscription_type, professional_id, owner_id, must_change_password")
       .eq("id", supabaseUser.id)
       .maybeSingle();
+    
+    console.log("FetchProfile for ID:", supabaseUser.id, "Data:", data, "Error:", error);
 
     if (error || !data) return null;
     return data as User;
@@ -102,11 +104,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchProfile, repairInBackground]);
 
   const login = useCallback(async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    console.log("Context: login attempt for", email);
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: email.toLowerCase().trim(),
       password,
     });
-    if (error) throw new Error(error.message);
+    if (error) {
+      console.error("Context: login error", error.message);
+      throw new Error(error.message);
+    }
+    console.log("Context: login response data:", data);
   }, []);
 
   const register = useCallback(async (email: string, password: string, name: string) => {
