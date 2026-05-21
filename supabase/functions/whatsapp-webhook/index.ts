@@ -1300,6 +1300,7 @@ Deno.serve(async (req) => {
       ];
       for (const msg of history) {
         if (!msg.text) continue;
+        if (msg.text.startsWith("[") && msg.from_me) continue;
         profAiMessages.push({ role: msg.from_me ? "assistant" : "user", content: msg.text });
       }
       // Extract context from history to help AI
