@@ -603,7 +603,7 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     console.log("[webhook] Body keys:", Object.keys(body));
-    console.log("[webhook] Full Body:", JSON.stringify(body));
+
 
     const eventType = extractEventType(body, req.url);
     console.log("[webhook] EventType:", eventType);
