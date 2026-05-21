@@ -631,9 +631,13 @@ Deno.serve(async (req) => {
         } else if (tc.function.name === "create_appointment") {
           replyText = await handleToolCall(supabase, cfg.user_id, args, sender, professionals, services);
         } else if (tc.function.name === "send_professional_carousel") {
-          await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl);
-          carouselAlreadySent = true;
-          replyText = "Escolha o profissional 👆";
+          const carouselResult = await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl);
+          if (carouselResult === "CAROUSEL_SENT") {
+            carouselAlreadySent = true;
+            replyText = "Escolha o profissional 👆";
+          } else {
+            replyText = carouselResult;
+          }
         }
       } else {
         replyText = message?.content || "Como posso ajudar?";
@@ -641,6 +645,21 @@ Deno.serve(async (req) => {
     }
 
     if (replyText) {
+      // Avoid duplicated AI replies for the same messageId
+      const { data: existingReply } = await supabase
+        .from("whatsapp_messages")
+        .select("id")
+        .eq("user_id", cfg.user_id)
+        .eq("wa_chatid", `${sender}@s.whatsapp.net`)
+        .eq("text", replyText)
+        .gt("created_at", new Date(Date.now() - 5000).toISOString())
+        .maybeSingle();
+
+      if (existingReply) {
+        console.log("[webhook] Preventing duplicate bot reply");
+        return new Response(JSON.stringify({ ok: true, ignored: "duplicate_reply" }));
+      }
+
       // Auto-create CRM lead
       try {
         const { data: existingLead } = await supabase.from("crm_leads").select("id").eq("user_id", cfg.user_id).eq("wa_chatid", `${sender}@s.whatsapp.net`).maybeSingle();
