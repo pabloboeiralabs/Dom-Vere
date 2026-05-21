@@ -465,16 +465,16 @@ function WeeklyView({ professionals, weekDays, schedules, getAppointmentsForCell
               return (
                 <div
                   key={day.toISOString()}
-                  className={`min-h-[80px] p-1 rounded-lg border border-border/50 ${isOff ? "bg-muted/30" : "bg-card cursor-pointer hover:bg-accent/20"} ${isSameDay(day, new Date()) ? "ring-1 ring-primary/30" : ""}`}
-                  onClick={() => !isOff && onDayClick(day)}
+                  className={`min-h-[80px] p-1 rounded-lg border border-border/50 ${isOff && dayAppts.length === 0 ? "bg-muted/30" : "bg-card cursor-pointer hover:bg-accent/20"} ${isSameDay(day, new Date()) ? "ring-1 ring-primary/30" : ""}`}
+                  onClick={() => (!isOff || dayAppts.length > 0) && onDayClick(day)}
                 >
-                  {isOff ? (
-                    <span className="text-[10px] text-muted-foreground">Folga</span>
-                  ) : dayAppts.length > 0 ? (
+                  {dayAppts.length > 0 ? (
                     <div className="flex flex-col items-center justify-center h-full gap-1">
                       <span className="text-lg font-bold text-primary">{dayAppts.length}</span>
                       <span className="text-[10px] text-muted-foreground">{dayAppts.length === 1 ? "serviço" : "serviços"}</span>
                     </div>
+                  ) : isOff ? (
+                    <span className="text-[10px] text-muted-foreground">Folga</span>
                   ) : (
                     <span className="text-[10px] text-muted-foreground opacity-50">—</span>
                   )}
