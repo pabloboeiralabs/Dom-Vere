@@ -661,7 +661,9 @@ async function handleSendCarousel(
     `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&size=600&length=2&background=333&color=fff&format=png`;
   const safeImage = (p: any) => {
     const url = String(p.photo_url || "").trim();
-    return /\.(png|jpe?g)(\?|$)/i.test(url) ? url : defaultFallback(p.name);
+    if (!url) return defaultFallback(p.name);
+    // WhatsApp aceita jpg/png/webp; avif e outros formatos caem no fallback
+    return /\.(png|jpe?g|webp)(\?|$)/i.test(url) ? url : defaultFallback(p.name);
   };
 
   const carousel = professionals.map((p: any) => ({
