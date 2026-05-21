@@ -837,17 +837,22 @@ Deno.serve(async (req) => {
       wa_timestamp: Date.now()
     });
 
-    const [settingsRes, profsRes, servsRes, historyRes] = await Promise.all([
+    const phoneDigits = sender.replace(/\D/g, "");
+    const [settingsRes, profsRes, servsRes, historyRes, stagesRes, customerRes] = await Promise.all([
       supabase.from("settings").select("*").eq("user_id", cfg.user_id).maybeSingle(),
       supabase.from("professionals").select("*").eq("user_id", cfg.user_id).eq("active", true),
       supabase.from("services").select("*").eq("user_id", cfg.user_id).eq("active", true),
       supabase.from("whatsapp_messages").select("*").eq("user_id", cfg.user_id).eq("wa_chatid", `${sender}@s.whatsapp.net`).order("wa_timestamp", { ascending: false }).limit(10),
+      supabase.from("bot_conversation_stages").select("name, instruction, stage_order, skip_if_registered").eq("user_id", cfg.user_id).eq("active", true).order("stage_order"),
+      supabase.from("customers").select("id, name, birth_date, phone").eq("user_id", cfg.user_id).ilike("phone", `%${phoneDigits.slice(-8)}%`).maybeSingle(),
     ]);
 
     const shopName = settingsRes.data?.shop_name || "Barbearia";
     const professionals = profsRes.data || [];
     const services = servsRes.data || [];
     const history = (historyRes.data || []).reverse();
+    const stages = stagesRes.data || [];
+    const customerInfo = customerRes.data || null;
     const bookingUrl = `https://booking.lovable.app/booking/${cfg.user_id}`;
     const apiUrl = cfg.api_url.replace(/\/$/, "");
     const token = cfg.instance_token;
@@ -863,13 +868,13 @@ Deno.serve(async (req) => {
       const carouselResult = await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl);
       if (carouselResult === "CAROUSEL_SENT") {
         carouselAlreadySent = true;
-        replyText = ""; // não envia texto por cima do carrossel
+        replyText = "";
       } else {
         replyText = carouselResult;
       }
     } else {
       const slots = await getAvailableSlots(supabase, cfg.user_id, professionals, 7);
-      const systemPrompt = buildSystemPrompt(shopName, bookingUrl, professionals, services, slots);
+      const systemPrompt = buildSystemPrompt(shopName, bookingUrl, professionals, services, slots, customerInfo, stages);
       const aiMessages = [{ role: "system", content: systemPrompt }, ...history.map(m => ({ role: m.from_me ? "assistant" : "user", content: m.text }))];
       
       // Ensure current message is in context if not in history yet
