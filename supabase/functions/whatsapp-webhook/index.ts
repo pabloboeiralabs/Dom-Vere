@@ -253,6 +253,113 @@ function formatUtcDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+// Normalize date strings from AI: YYYY-MM-DD, DD/MM/YYYY, DD/MM, DD-MM, "amanha", "hoje"
+function normalizeDate(raw: unknown): string | null {
+  if (!raw) return null;
+  const s = String(raw).trim().toLowerCase();
+  const today = getBrasiliaTodayUtc();
+  if (s === "hoje" || s === "today") return formatUtcDate(today);
+  if (s === "amanha" || s === "amanhã" || s === "tomorrow") return formatUtcDate(addUtcDays(today, 1));
+  // YYYY-MM-DD
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+  // DD/MM/YYYY or DD-MM-YYYY
+  m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (m) {
+    const y = m[3].length === 2 ? `20${m[3]}` : m[3];
+    return `${y}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  }
+  // DD/MM or DD-MM → use current year (or next year if date already passed)
+  m = s.match(/^(\d{1,2})[/-](\d{1,2})$/);
+  if (m) {
+    const y = today.getUTCFullYear();
+    const candidate = `${y}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+    return candidate < formatUtcDate(today) ? `${y + 1}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : candidate;
+  }
+  return null;
+}
+
+// Normalize time strings: "11", "11h", "11h00", "11:00", "11:00:00", "11.00"
+function normalizeTime(raw: unknown): string | null {
+  if (raw === null || raw === undefined) return null;
+  const s = String(raw).trim().toLowerCase().replace(/\s+/g, "");
+  let m = s.match(/^(\d{1,2})[:h.]?(\d{0,2})(?::\d{1,2})?$/);
+  if (!m) return null;
+  const h = parseInt(m[1], 10);
+  const min = m[2] ? parseInt(m[2], 10) : 0;
+  if (isNaN(h) || h < 0 || h > 23 || isNaN(min) || min < 0 || min > 59) return null;
+  return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+}
+
+// Check availability directly against the DB (schedule range + appointment overlap)
+async function isSlotAvailable(
+  supabase: any,
+  userId: string,
+  dateISO: string,
+  timeHHMM: string,
+  professionalName?: string,
+  professionals?: any[]
+): Promise<{ available: boolean; reason?: string; professional_id?: string }> {
+  const day = new Date(`${dateISO}T12:00:00Z`);
+  const dow = day.getUTCDay();
+  const [hh, mm] = timeHHMM.split(":").map(Number);
+  const minute = hh * 60 + mm;
+
+  // Determine which professionals to check
+  let profsToCheck = professionals || [];
+  if (professionalName) {
+    const filt = profsToCheck.filter((p: any) => p.name.toLowerCase() === professionalName.toLowerCase());
+    if (filt.length > 0) profsToCheck = filt;
+  }
+  if (profsToCheck.length === 0) {
+    const { data } = await supabase.from("professionals").select("id, name").eq("user_id", userId).eq("active", true);
+    profsToCheck = data || [];
+  }
+  const profIds = profsToCheck.map((p: any) => p.id);
+  if (profIds.length === 0) return { available: false, reason: "no_professionals" };
+
+  const { data: schedRows } = await supabase
+    .from("professional_schedules")
+    .select("professional_id, start_time, end_time, active")
+    .in("professional_id", profIds)
+    .eq("day_of_week", dow);
+
+  const candidateProfs = (schedRows || [])
+    .filter((r: any) => r.active !== false)
+    .filter((r: any) => {
+      const [sh, sm] = (r.start_time || "00:00").split(":").map(Number);
+      const [eh, em] = (r.end_time || "00:00").split(":").map(Number);
+      const startM = sh * 60 + (sm || 0);
+      const endM = eh * 60 + (em || 0);
+      return minute >= startM && minute < endM;
+    })
+    .map((r: any) => r.professional_id);
+
+  if (candidateProfs.length === 0) return { available: false, reason: "out_of_schedule" };
+
+  // Check existing appointments overlap
+  const { data: appts } = await supabase
+    .from("appointments")
+    .select("professional_id, start_time, end_time")
+    .eq("user_id", userId)
+    .eq("date", dateISO)
+    .in("professional_id", candidateProfs)
+    .neq("status", "cancelado");
+
+  for (const profId of candidateProfs) {
+    const conflict = (appts || []).some((a: any) => {
+      if (a.professional_id !== profId) return false;
+      const [sh, sm] = (a.start_time || "00:00").split(":").map(Number);
+      const [eh, em] = (a.end_time || "00:00").split(":").map(Number);
+      const startM = sh * 60 + (sm || 0);
+      const endM = eh * 60 + (em || 0);
+      return minute >= startM && minute < endM;
+    });
+    if (!conflict) return { available: true, professional_id: profId };
+  }
+  return { available: false, reason: "occupied" };
+}
+
 async function getAvailableSlots(
   supabase: any,
   userId: string,
