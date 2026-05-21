@@ -613,7 +613,11 @@ Deno.serve(async (req) => {
       const slots = await getAvailableSlots(supabase, cfg.user_id, professionals, 7);
       const systemPrompt = buildSystemPrompt(shopName, bookingUrl, professionals, services, slots);
       const aiMessages = [{ role: "system", content: systemPrompt }, ...history.map(m => ({ role: m.from_me ? "assistant" : "user", content: m.text }))];
-      if (!history.some(m => m.text === text)) aiMessages.push({ role: "user", content: text });
+      
+      // Ensure current message is in context if not in history yet
+      if (!history.some(m => m.wa_message_id === messageId)) {
+        aiMessages.push({ role: "user", content: text || `[Button: ${buttonId}]` });
+      }
 
       const aiResponse = await callAI(aiMessages, [checkAvailabilityTool, appointmentTool, sendCarouselTool]);
       const message = aiResponse.choices?.[0]?.message;
