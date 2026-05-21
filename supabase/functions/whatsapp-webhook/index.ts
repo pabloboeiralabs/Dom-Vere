@@ -2021,68 +2021,6 @@ Deno.serve(async (req) => {
             replyText = responseText || "Como posso te ajudar? 😊";
           }
 
-            // Detect professional from context
-            const profFromCtx = ctx.detectedProf || (professionals.length === 1 ? professionals[0].name : null);
-
-            // Force a second AI call
-            aiMessages.push({ role: "assistant", content: responseText });
-            aiMessages.push({
-              role: "user",
-              content: `[Sistema: O cliente está aguardando. Execute check_availability AGORA com date=${ctx.resolvedDate}, time=${ctx.detectedTime}${profFromCtx ? `, professional_name=${profFromCtx}` : ""}. NÃO responda com texto, USE A TOOL.]`,
-            });
-
-            try {
-              const followUpResp = await callAI(aiMessages, allTools);
-              const followUpMsg2 = followUpResp.choices?.[0]?.message;
-
-              if (followUpMsg2?.tool_calls?.length > 0) {
-                const tc3 = followUpMsg2.tool_calls[0];
-                let tc3Args: any;
-                try { tc3Args = typeof tc3.function.arguments === "string" ? JSON.parse(tc3.function.arguments) : tc3.function.arguments; } catch { tc3Args = {}; }
-
-                if (tc3.function?.name === "check_availability") {
-                  if (!tc3Args.date) tc3Args.date = ctx.resolvedDate;
-                  if (!tc3Args.time) tc3Args.time = ctx.detectedTime;
-                  const exactSlot = slots.find(
-                    (s) => s.date === tc3Args.date && s.time === tc3Args.time &&
-                      (!tc3Args.professional_name || s.professional_name.toLowerCase() === tc3Args.professional_name.toLowerCase())
-                  );
-                  if (exactSlot) {
-                    replyText = `Horário disponível! ${exactSlot.date_label} às ${exactSlot.time} com ${exactSlot.professional_name}. Quer que eu confirme? 😊`;
-                  } else {
-                    const closestSlot = findClosestSlot(slots, tc3Args.date, tc3Args.time, tc3Args.professional_name);
-                    replyText = closestSlot
-                      ? `Esse horário não está disponível 😕 Mas tem vaga ${closestSlot.date_label} às ${closestSlot.time} com ${closestSlot.professional_name}. Quer esse? 😊`
-                      : `Infelizmente não temos horários disponíveis nesse período. Quer tentar outro? 😊`;
-                  }
-                } else if (tc3.function?.name === "create_appointment") {
-                  if (!tc3Args.customer_phone) tc3Args.customer_phone = sender;
-                  replyText = await handleToolCall(supabase, cfg.user_id, tc3Args, sender, professionals, services, customTemplates);
-                } else {
-                  replyText = followUpMsg2?.content || responseText;
-                }
-              } else {
-                // Manual fallback
-                const manualSlot = slots.find(
-                  (s) => s.date === ctx.resolvedDate && s.time === ctx.detectedTime &&
-                    (!profFromCtx || s.professional_name.toLowerCase() === profFromCtx.toLowerCase())
-                );
-                if (manualSlot) {
-                  replyText = `Horário disponível! ${manualSlot.date_label} às ${manualSlot.time} com ${manualSlot.professional_name}. Quer que eu confirme? 😊`;
-                } else {
-                  const closestManual = findClosestSlot(slots, ctx.resolvedDate!, ctx.detectedTime!, profFromCtx || undefined);
-                  replyText = closestManual
-                    ? `Esse horário não está disponível 😕 Mas tem vaga ${closestManual.date_label} às ${closestManual.time} com ${closestManual.professional_name}. Quer esse? 😊`
-                    : `Infelizmente não temos horários disponíveis nesse período. Quer tentar outro? 😊`;
-                }
-              }
-            } catch (followErr: any) {
-              console.error("[webhook] Regular flow follow-up error:", followErr.message);
-              // Manual fallback on error
-              const manualSlot = slots.find(
-                (s) => s.date === ctx.resolvedDate && s.time === ctx.detectedTime
-              );
-              replyText = manualSlot
                 ? `Horário disponível! ${manualSlot.date_label} às ${manualSlot.time} com ${manualSlot.professional_name}. Quer que eu confirme? 😊`
                 : `Infelizmente não encontrei esse horário disponível. Quer tentar outro? 😊`;
             }
