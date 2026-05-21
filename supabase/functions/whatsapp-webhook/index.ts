@@ -941,12 +941,6 @@ Deno.serve(async (req) => {
             replyText = "";
           }
         }
-          const carouselResult = await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl);
-          if (carouselResult === "CAROUSEL_SENT") {
-            carouselAlreadySent = true;
-            replyText = "";
-          }
-        }
       }
     }
 
