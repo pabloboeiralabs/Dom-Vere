@@ -63,13 +63,53 @@ export function WhatsAppConversation({ chat, messages, onSendMessage, onBack, se
         {[...messages].reverse().map((msg, i) => (
           <div key={msg.id || i} className={`flex ${msg.wa_fromMe ? "justify-end" : "justify-start"}`}>
             <div
-              className={`max-w-[75%] rounded-lg px-3 py-2 text-sm shadow-sm ${
+              className={`max-w-[85%] rounded-lg px-3 py-2 text-sm shadow-sm ${
                 msg.wa_fromMe
                   ? "bg-[#dcf8c6] dark:bg-green-900/50 text-foreground"
                   : "bg-card text-foreground"
               }`}
             >
-              <p className="whitespace-pre-wrap break-words">{msg.wa_text || `[${msg.wa_type}]`}</p>
+              {msg.wa_type === "carousel" ? (
+                <div className="space-y-3 py-1">
+                  <p className="font-medium text-xs mb-1">Escolha uma opção:</p>
+                  <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide snap-x">
+                    {(() => {
+                      try {
+                        const content = typeof msg.wa_text === 'string' ? JSON.parse(msg.wa_text) : msg.wa_text;
+                        const cards = Array.isArray(content) ? content : (content?.cards || []);
+                        return cards.map((card: any, idx: number) => (
+                          <div key={idx} className="min-w-[200px] flex-shrink-0 bg-background rounded-md border border-border overflow-hidden snap-center shadow-sm">
+                            {card.image_url && (
+                              <img src={card.image_url} alt="" className="w-full h-24 object-cover" />
+                            )}
+                            <div className="p-2 space-y-1">
+                              <p className="font-bold text-xs truncate">{card.title}</p>
+                              <p className="text-[10px] text-muted-foreground line-clamp-2 leading-tight">{card.description}</p>
+                              <div className="pt-1 flex flex-col gap-1">
+                                {(card.buttons || []).map((btn: any, bIdx: number) => (
+                                  <Button 
+                                    key={bIdx} 
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="h-7 text-[10px] w-full py-0"
+                                    onClick={() => onSendMessage(btn.text || btn.title)}
+                                  >
+                                    {btn.title || btn.text}
+                                  </Button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        ));
+                      } catch (e) {
+                        return <p className="text-xs text-destructive italic">Erro ao carregar carrossel</p>;
+                      }
+                    })()}
+                  </div>
+                </div>
+              ) : (
+                <p className="whitespace-pre-wrap break-words">{msg.wa_text || `[${msg.wa_type}]`}</p>
+              )}
               <p className={`text-[10px] mt-1 text-right ${msg.wa_fromMe ? "text-green-700 dark:text-green-400" : "text-muted-foreground"}`}>
                 {formatMsgTime(msg.wa_timestamp)}
               </p>
