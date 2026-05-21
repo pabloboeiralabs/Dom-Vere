@@ -1089,6 +1089,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      client_portal_appointments: {
+        Args: { p_customer_id: string }
+        Returns: {
+          date: string
+          end_time: string
+          id: string
+          notes: string
+          professional_name: string
+          service_name: string
+          start_time: string
+          status: string
+        }[]
+      }
       client_portal_history: {
         Args: { p_customer_id: string }
         Returns: {
@@ -1096,6 +1109,22 @@ export type Database = {
           description: string
           record_date: string
           record_type: string
+        }[]
+      }
+      client_portal_login: {
+        Args: { p_birth_date: string; p_phone: string }
+        Returns: {
+          credit_balance: number
+          customer_id: string
+          name: string
+          phone: string
+          plan_expires_at: string
+          plan_id: string
+          plan_name: string
+          plan_usage_count: number
+          plan_usage_limit: number
+          shop_name: string
+          user_id: string
         }[]
       }
       exec_sql: { Args: { sql_query: string }; Returns: Json }
