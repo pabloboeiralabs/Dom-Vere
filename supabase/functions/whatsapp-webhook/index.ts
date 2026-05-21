@@ -543,7 +543,6 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
   try {
-  try {
     const body = await req.json();
     console.log("[webhook] received body:", JSON.stringify(body).slice(0, 500));
 
