@@ -1656,6 +1656,7 @@ Deno.serve(async (req) => {
     let carouselAlreadySent = false;
 
     try {
+      console.log("[webhook] Calling AI with", aiMessages.length, "messages");
       // If client already picked a professional in history, don't offer carousel again
       const ctxMain0 = extractContextFromHistory(history);
       const baseTools = [checkAvailabilityTool, appointmentTool, checkAllAvailabilityTool, registerCustomerTool, updateCustomerTool, ...customTools];
