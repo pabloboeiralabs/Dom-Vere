@@ -70,9 +70,10 @@ export default function ClientPortal() {
   useEffect(() => {
     if (!session) return;
     (async () => {
+      const client = supabase as any;
       const [appts, hist] = await Promise.all([
-        supabase.rpc("client_portal_appointments", { p_customer_id: session.customer_id }),
-        supabase.rpc("client_portal_history", { p_customer_id: session.customer_id }),
+        client.rpc("client_portal_appointments", { p_customer_id: session.customer_id }),
+        client.rpc("client_portal_history", { p_customer_id: session.customer_id }),
       ]);
       if (appts.data) setAppointments(appts.data as Appointment[]);
       if (hist.data) setHistory(hist.data as HistoryItem[]);
