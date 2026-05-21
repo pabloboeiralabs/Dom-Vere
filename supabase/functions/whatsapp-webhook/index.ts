@@ -2003,14 +2003,23 @@ Deno.serve(async (req) => {
           // Check if AI promised to verify availability but didn't use a tool
           const ctx = extractContextFromHistory(history);
           if (responseText.match(/verificar|disponibilidade|checar|consultar|vou ver|deixa eu/i) && ctx.resolvedDate && ctx.detectedTime) {
-            console.log("[webhook] Regular flow follow-up: AI promised but didn't act. Forcing check_availability.");
-            // Send the "checking" message first
-            await fetch(`${apiUrl}/send/text?token=${token}`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", token, Authorization: `Bearer ${token}` },
-              body: JSON.stringify({ number: sender, text: responseText }),
-            });
-            await new Promise(r => setTimeout(r, 1500));
+            console.log("[webhook] AI promised but didn't act. Performing manual check.");
+            const profFromCtx = ctx.detectedProf || (professionals.length === 1 ? professionals[0].name : null);
+            const manualSlot = slots.find(
+              (s) => s.date === ctx.resolvedDate && s.time === ctx.detectedTime &&
+                (!profFromCtx || s.professional_name.toLowerCase() === profFromCtx.toLowerCase())
+            );
+            if (manualSlot) {
+              replyText = `Horário disponível! ${manualSlot.date_label} às ${manualSlot.time} com ${manualSlot.professional_name}. Quer que eu confirme? 😊`;
+            } else {
+              const closestManual = findClosestSlot(slots, ctx.resolvedDate!, ctx.detectedTime!, profFromCtx || undefined);
+              replyText = closestManual
+                ? `Esse horário não está disponível 😕 Mas tem vaga ${closestManual.date_label} às ${closestManual.time} com ${closestManual.professional_name}. Quer esse? 😊`
+                : `Infelizmente não temos horários disponíveis nesse período. Quer tentar outro? 😊`;
+            }
+          } else {
+            replyText = responseText || "Como posso te ajudar? 😊";
+          }
 
             // Detect professional from context
             const profFromCtx = ctx.detectedProf || (professionals.length === 1 ? professionals[0].name : null);
