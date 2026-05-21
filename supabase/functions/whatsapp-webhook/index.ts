@@ -575,6 +575,7 @@ const appointmentTool = { type: "function", function: { name: "create_appointmen
 const sendCarouselTool = { type: "function", function: { name: "send_professional_carousel", parameters: { type: "object", properties: {} } } };
 
 Deno.serve(async (req) => {
+  console.log("[webhook] Request received:", req.method, req.url);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method === "GET") return new Response("Online");
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
