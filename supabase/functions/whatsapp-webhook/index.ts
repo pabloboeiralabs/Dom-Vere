@@ -748,7 +748,7 @@ async function handleToolCall(supabase: any, userId: string, args: any, senderPh
     date: dateISO,
     start_time: timeHHMM,
     end_time: endTime,
-    status: "confirmado",
+    status: "agendado",
   });
 
   if (error) {
