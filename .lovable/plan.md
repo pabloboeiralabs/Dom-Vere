@@ -1,25 +1,56 @@
-Diagnóstico confirmado: o erro acontece porque o webhook tenta salvar o agendamento com status `confirmado`, mas a tabela `appointments` só aceita `agendado`, `concluido`, `cancelado` e `no_show`.
+## Problema
 
-Plano de correção:
+Hoje, quando o profissional marca um agendamento como **Concluído**, nada é registrado financeiramente para a barbearia. O relatório de Faturamento (`get_report_summary`) só lê a tabela `transactions` (compras de crédito). Da mesma forma, as vendas de produtos vão para `product_sales`, mas não entram no faturamento da loja nem na comissão exibida no painel do barbeiro.
 
-1. Ajustar o webhook de WhatsApp
-   - Em `supabase/functions/whatsapp-webhook/index.ts`, trocar o status enviado no insert de `confirmado` para `agendado`.
-   - Manter a mensagem para o cliente como “Confirmado”, porque isso é só texto no WhatsApp; o status interno ficará compatível com o banco.
+## Objetivo
 
-2. Preservar compatibilidade com o app
-   - O agendamento online em `src/pages/Booking.tsx` já usa o padrão correto, que vira `agendado` automaticamente.
-   - A tela de agenda já reconhece `agendado`, `concluido`, `cancelado` e `no_show`, então não precisa mudar a interface.
+Quando o profissional confirmar o comparecimento (status = `concluido`), o valor do serviço deve entrar automaticamente:
+- no **faturamento da barbearia** (relatórios)
+- na **comissão do barbeiro** (painel do profissional)
 
-3. Publicar a função corrigida
-   - Fazer deploy da função `whatsapp-webhook` após o ajuste.
-   - Depois disso, repetir o fluxo pelo WhatsApp deve criar o agendamento sem cair em “Erro ao agendar”.
+E o mesmo deve valer para **produtos vendidos**.
 
-Detalhe técnico:
+## Mudanças
+
+### 1. Trigger no banco para agendamentos concluídos
+Criar um trigger em `appointments` que, ao mudar status para `concluido`:
+- insere uma linha em `transactions` com `type = 'service'`, `total = services.price`, `professional_id`, `customer_id`, `notes = 'Serviço: <nome>'`
+- evita duplicar se o trigger disparar novamente (chave: appointment_id em notes, ou flag de idempotência)
+- se voltar de `concluido` para outro status, remove a transação correspondente
+
+### 2. Atualizar `get_report_summary`
+Passar a somar receita de:
+- `transactions` (compras de crédito + serviços concluídos)
+- `product_sales` onde `sale_type = 'venda'`
+
+### 3. Atualizar `get_professional_stats`
+Incluir na receita/comissão do barbeiro:
+- serviços concluídos (já contabiliza)
+- `product_sales.commission_amount` do profissional no período
+
+### 4. Atualizar `get_sales_chart`
+Incluir vendas de produtos no gráfico de faturamento diário.
+
+## Detalhes técnicos
 
 ```text
-Erro atual:
-appointments_status_check rejeita status = "confirmado"
-
-Correção:
-status = "agendado"
+appointments.status: agendado → concluido
+        │
+        ▼ (trigger AFTER UPDATE)
+   INSERT transactions {
+     type='service', total=service.price,
+     professional_id, customer_id, user_id
+   }
 ```
+
+- Tipo novo de transação: `'service'` (mantém `'purchase'` para créditos)
+- Idempotência: armazenar `appointment_id` em `transactions.notes` (ex.: `appt:<uuid>`) e checar antes de inserir
+- Revertendo o status: `DELETE FROM transactions WHERE notes LIKE 'appt:<id>%'`
+- `get_report_summary.revenue` passa a somar `transactions.total` (qualquer tipo de receita) + `product_sales.total_price` no período
+- `get_professional_stats.revenue` soma serviços concluídos + product_sales do profissional; comissão usa `commission_percent` para serviços e `commission_amount` direto de product_sales
+
+## Perguntas
+
+1. O valor a ser registrado no faturamento ao concluir o agendamento deve ser o **preço do serviço cadastrado** (`services.price`) — ok?
+2. Se o profissional clicar em "Concluir" por engano e desfizer, devo **remover** a receita gerada? (recomendo sim)
+3. Para produtos: devo contabilizar como receita da barbearia somente vendas (`sale_type = 'venda'`) e ignorar consumo interno?
