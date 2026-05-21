@@ -594,11 +594,29 @@ function extractContextFromHistory(history: Array<{ text?: string | null; from_m
   };
 }
 
-function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: any[], services: any[], _slots: AvailableSlot[], customerInfo?: any): string {
+function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: any[], services: any[], slots: AvailableSlot[], customerInfo?: any): string {
   const profList = professionals.map((p: any) => `- ${p.name}`).join("\n");
   const svcList = services.map((s: any) => `- ${s.name}: R$ ${Number(s.price || 0).toFixed(2)}`).join("\n");
   const todayStr = formatUtcDate(getBrasiliaTodayUtc());
-  
+
+  // Group slots by date+professional (limit to next ~12 entries)
+  const grouped: Record<string, Record<string, string[]>> = {};
+  for (const s of slots) {
+    if (!grouped[s.date]) grouped[s.date] = {};
+    if (!grouped[s.date][s.professional_name]) grouped[s.date][s.professional_name] = [];
+    grouped[s.date][s.professional_name].push(s.time);
+  }
+  const availLines: string[] = [];
+  for (const date of Object.keys(grouped).sort().slice(0, 5)) {
+    for (const prof of Object.keys(grouped[date])) {
+      const times = grouped[date][prof].slice(0, 12).join(", ");
+      availLines.push(`- ${date} ${prof}: ${times}`);
+    }
+  }
+  const availability = availLines.length > 0
+    ? `DISPONIBILIDADE (próximos dias):\n${availLines.join("\n")}\n`
+    : "";
+
   return `Você é a atendente virtual da *${shopName}*. Seu nome é Lia.
 Informal, simpática, natural. Frases curtas.
 DATA ATUAL: ${todayStr}.
@@ -606,12 +624,14 @@ SERVIÇOS:
 ${svcList}
 PROFISSIONAIS:
 ${profList}
-LINK: ${bookingUrl}
+${availability}LINK: ${bookingUrl}
 
 REGRAS:
 - Nunca liste profissionais em texto. Use send_professional_carousel.
 - Se já escolheu profissional, não envie carrossel.
-- Quando tiver tudo, use check_availability ou create_appointment.`;
+- Use sempre formato de data YYYY-MM-DD e hora HH:MM ao chamar tools.
+- Quando tiver tudo, use check_availability ou create_appointment.
+- Se o horário pedido pelo cliente estiver dentro do expediente, considere disponível mesmo que não esteja na lista acima.`;
 }
 
 async function handleSendCarousel(apiUrl: string, token: string, sender: string, professionals: any[], bookingUrl: string, _config?: any): Promise<string> {
