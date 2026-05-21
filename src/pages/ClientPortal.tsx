@@ -93,6 +93,7 @@ export default function ClientPortal() {
     });
     setLoading(false);
     if (error) {
+      console.error("Login error:", error);
       toast.error("Erro ao buscar seus dados");
       return;
     }
