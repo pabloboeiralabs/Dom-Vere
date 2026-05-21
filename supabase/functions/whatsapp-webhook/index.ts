@@ -635,59 +635,59 @@ REGRAS:
 }
 
 async function handleSendCarousel(apiUrl: string, token: string, sender: string, professionals: any[], bookingUrl: string, _config?: any): Promise<string> {
-  // Verificamos se profissionais têm os dados necessários
-  const cards = professionals.map((p: any) => ({
-    title: p.name,
-    description: "Profissional",
-    image: p.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}`,
+  // Payload conforme docs uazapi: carousel = array de { text, image, buttons:[{id,text,type}] }
+  // O id de um botão REPLY é o texto que volta como resposta ao chat.
+  const carousel = professionals.map((p: any) => ({
+    text: p.name,
+    image: p.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&size=512`,
     buttons: [
       {
-        type: "reply",
+        id: `PROF_${p.name}`,
         text: `Escolher ${p.name.split(" ")[0]}`,
-        id: `PROF_${p.name}`
-      }
-    ]
+        type: "REPLY",
+      },
+    ],
   }));
 
   try {
-    // Tentativa com o novo formato de carrossel (alguns provedores mudaram para 'cards')
     const res = await fetch(`${apiUrl}/send/carousel?token=${token}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        number: sender, 
-        text: "Escolha o profissional:", 
-        cards: cards, // Algumas APIs usam 'cards' em vez de 'carousel'
-        carousel: cards, // Manter fallback
-        readchat: true 
+      headers: { "Content-Type": "application/json", token },
+      body: JSON.stringify({
+        number: sender,
+        text: "Escolha o profissional:",
+        carousel,
+        readchat: true,
       }),
     });
-    console.log("[webhook] carousel attempt:", res.status);
-    
+    const bodyTxt = await res.text();
+    console.log("[webhook] carousel attempt:", res.status, bodyTxt.slice(0, 200));
+
     if (res.status === 200) return "CAROUSEL_SENT";
-    
-    // Se falhar ou não for 200, fallback para botões simples (limitado a 3)
+
+    // Fallback: botões simples (limite 3)
     if (professionals.length <= 3) {
-      await fetch(`${apiUrl}/send/buttons?token=${token}`, {
+      const btnRes = await fetch(`${apiUrl}/send/buttons?token=${token}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", token },
         body: JSON.stringify({
           number: sender,
           text: "Escolha o profissional abaixo:",
-          buttons: professionals.map(p => ({
-            type: "reply",
+          buttons: professionals.map((p) => ({
+            id: `PROF_${p.name}`,
             text: p.name,
-            id: `PROF_${p.name}`
-          }))
-        })
+            type: "REPLY",
+          })),
+        }),
       });
-      return "CAROUSEL_SENT";
+      console.log("[webhook] buttons fallback:", btnRes.status);
+      if (btnRes.status === 200) return "CAROUSEL_SENT";
     }
 
-    throw new Error("Carousel failed");
+    throw new Error(`Carousel failed: ${res.status}`);
   } catch (err: any) {
     console.error("[webhook] carousel error:", err.message);
-    return `Escolha um profissional:\n${professionals.map((p, i) => `${i+1} ${p.name}`).join("\n")}\n\nOu agende pelo link: ${bookingUrl}`;
+    return `Escolha um profissional:\n${professionals.map((p, i) => `${i + 1} ${p.name}`).join("\n")}\n\nOu agende pelo link: ${bookingUrl}`;
   }
 }
 
