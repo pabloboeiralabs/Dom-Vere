@@ -28,7 +28,6 @@ const mainItems = [
 const automationItems = [
   { title: "WhatsApp", url: "/whatsapp", icon: MessageSquare },
   { title: "CRM", url: "/crm", icon: Kanban },
-  { title: "Agendamento", url: "/scheduling", icon: CalendarClock },
   { title: "Campanhas", url: "/campaigns", icon: Megaphone },
 ];
 
