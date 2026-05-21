@@ -320,20 +320,35 @@ async function isSlotAvailable(
 
   const { data: schedRows } = await supabase
     .from("professional_schedules")
-    .select("professional_id, start_time, end_time, active")
-    .in("professional_id", profIds)
-    .eq("day_of_week", dow);
+    .select("professional_id, start_time, end_time, active, day_of_week")
+    .in("professional_id", profIds);
 
-  const candidateProfs = (schedRows || [])
-    .filter((r: any) => r.active !== false)
-    .filter((r: any) => {
-      const [sh, sm] = (r.start_time || "00:00").split(":").map(Number);
-      const [eh, em] = (r.end_time || "00:00").split(":").map(Number);
-      const startM = sh * 60 + (sm || 0);
-      const endM = eh * 60 + (em || 0);
-      return minute >= startM && minute < endM;
-    })
-    .map((r: any) => r.professional_id);
+  const profsWithSchedule = new Set((schedRows || []).map((r: any) => r.professional_id));
+  const todaySched = (schedRows || []).filter((r: any) => r.day_of_week === dow);
+
+  // Fallback default schedule for professionals without any registered schedule
+  // (mon-sat 08:00-18:00, matching DB defaults)
+  const DEFAULT_START = 8 * 60;
+  const DEFAULT_END = 18 * 60;
+  const isWorkDayDefault = dow >= 1 && dow <= 6;
+
+  const candidateProfs: string[] = [];
+  for (const profId of profIds) {
+    if (profsWithSchedule.has(profId)) {
+      const ok = todaySched.some((r: any) => {
+        if (r.professional_id !== profId || r.active === false) return false;
+        const [sh, sm] = (r.start_time || "00:00").split(":").map(Number);
+        const [eh, em] = (r.end_time || "00:00").split(":").map(Number);
+        return minute >= sh * 60 + (sm || 0) && minute < eh * 60 + (em || 0);
+      });
+      if (ok) candidateProfs.push(profId);
+    } else {
+      // No schedule configured → use default
+      if (isWorkDayDefault && minute >= DEFAULT_START && minute < DEFAULT_END) {
+        candidateProfs.push(profId);
+      }
+    }
+  }
 
   if (candidateProfs.length === 0) return { available: false, reason: "out_of_schedule" };
 
