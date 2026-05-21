@@ -543,21 +543,50 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
   try {
+  try {
     const body = await req.json();
-    const eventType = extractEventType(body);
-    if (eventType && !["messages", "message", "messages.upsert"].includes(eventType)) return new Response(JSON.stringify({ ok: true }));
+    console.log("[webhook] received body:", JSON.stringify(body).slice(0, 500));
 
-    if (isFromMe(body) || isGroupMessage(body)) return new Response(JSON.stringify({ ok: true }));
+    const eventType = extractEventType(body);
+    if (eventType && !["messages", "message", "messages.upsert"].includes(eventType)) return new Response(JSON.stringify({ ok: true, ignored: "event_type" }));
+
+    if (isFromMe(body) || isGroupMessage(body)) return new Response(JSON.stringify({ ok: true, ignored: "self_or_group" }));
 
     const text = extractMessageText(body);
     const sender = extractSender(body);
     const messageId = extractMessageId(body);
+
+    if (!messageId) return new Response(JSON.stringify({ ok: true, ignored: "no_message_id" }));
+
     const payloadToken = extractPayloadToken(body);
     const buttonId = extractButtonId(body);
 
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const cfg = await findWhatsappConfig(supabase, payloadToken, req.url);
     if (!cfg) return new Response(JSON.stringify({ error: "No config" }));
+
+    // Persistent deduplication using DB
+    const { data: existingMsg } = await supabase
+      .from("whatsapp_messages")
+      .select("id")
+      .eq("user_id", cfg.user_id)
+      .eq("wa_message_id", messageId)
+      .maybeSingle();
+
+    if (existingMsg) {
+      console.log("[webhook] Duplicate message detected (DB):", messageId);
+      return new Response(JSON.stringify({ ok: true, ignored: "duplicate" }));
+    }
+
+    // Save inbound message immediately to prevent race conditions
+    await supabase.from("whatsapp_messages").insert({
+      user_id: cfg.user_id,
+      wa_chatid: `${sender}@s.whatsapp.net`,
+      wa_message_id: messageId,
+      text: text || `[Button: ${buttonId}]`,
+      from_me: false,
+      wa_timestamp: Date.now()
+    });
 
     const [settingsRes, profsRes, servsRes, historyRes] = await Promise.all([
       supabase.from("settings").select("*").eq("user_id", cfg.user_id).maybeSingle(),
