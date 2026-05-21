@@ -671,8 +671,9 @@ async function handleSendCarousel(
   const safeImage = (p: any) => {
     const url = String(p.photo_url || "").trim();
     if (!url) return defaultFallback(p.name);
-    // WhatsApp aceita jpg/png/webp; avif e outros formatos caem no fallback
-    return /\.(png|jpe?g|webp)(\?|$)/i.test(url) ? url : defaultFallback(p.name);
+    // WhatsApp Carousel só renderiza JPG/PNG de forma confiável.
+    // webp/avif/svg/etc caem no fallback PNG (ui-avatars).
+    return /\.(png|jpe?g)(\?|$)/i.test(url) ? url : defaultFallback(p.name);
   };
 
   const carousel = professionals.map((p: any) => ({
