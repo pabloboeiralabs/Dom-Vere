@@ -28,10 +28,18 @@ function isDuplicateMessage(key: string): boolean {
   return false;
 }
 
-function extractEventType(body: any): string {
+function extractEventType(body: any, url?: string): string {
   const raw = body?.EventType || body?.eventType || body?.type || body?.event;
   if (typeof raw === "string") return raw.toLowerCase();
   if (typeof body?.event?.Type === "string") return body.event.Type.toLowerCase();
+  
+  if (url) {
+    const urlObj = new URL(url);
+    const path = urlObj.pathname + urlObj.search;
+    if (path.includes("messages/text")) return "text_message";
+    if (path.includes("messages_update")) return "messages_update";
+    if (path.includes("chats")) return "chats_update";
+  }
   return "";
 }
 
@@ -585,7 +593,7 @@ Deno.serve(async (req) => {
     console.log("[webhook] Body keys:", Object.keys(body));
     console.log("[webhook] Full Body:", JSON.stringify(body));
 
-    const eventType = extractEventType(body);
+    const eventType = extractEventType(body, req.url);
     console.log("[webhook] EventType:", eventType);
     
     // Whitelist event types - extended to be more permissive
