@@ -19,6 +19,7 @@ const mainItems = [
   { title: "Clientes", url: "/clients", icon: Users },
   { title: "Profissionais", url: "/professionals", icon: UserCheck },
   { title: "Vencimentos", url: "/expirations", icon: Clock },
+  { title: "Produtos", url: "/products", icon: Package },
   { title: "Assinaturas", url: "/subscriptions", icon: CreditCard },
   { title: "Configurações", url: "/settings", icon: Settings },
   { title: "Página do Cliente", url: "/client-preview", icon: Smartphone },
