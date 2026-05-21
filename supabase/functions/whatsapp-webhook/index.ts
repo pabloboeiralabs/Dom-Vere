@@ -697,6 +697,19 @@ async function handleToolCall(supabase: any, userId: string, args: any, senderPh
   const svc = services.find(s => s.name.toLowerCase() === (args.service_name || "").toLowerCase()) || services[0];
   const customerName = args.customer_name || "Cliente";
 
+  const dateISO = normalizeDate(args.date);
+  const timeHHMM = normalizeTime(args.time);
+  console.log("[webhook] create_appointment normalized:", { raw: args, dateISO, timeHHMM });
+  if (!dateISO || !timeHHMM) return "Não consegui entender a data ou horário. Pode repetir? 😊";
+
+  // Validate against schedule + existing appointments
+  const check = await isSlotAvailable(supabase, userId, dateISO, timeHHMM, prof.name, professionals);
+  if (!check.available) {
+    if (check.reason === "out_of_schedule") return "Esse horário está fora do expediente. Quer tentar outro? 😊";
+    if (check.reason === "occupied") return "Esse horário já está ocupado. Quer tentar outro? 😊";
+    return "Não consegui validar esse horário. Quer tentar outro? 😊";
+  }
+
   const { data: cust } = await supabase.from("customers").select("id").eq("user_id", userId).eq("phone", senderPhone).maybeSingle();
   let customerId = cust?.id;
   if (!customerId) {
@@ -704,17 +717,23 @@ async function handleToolCall(supabase: any, userId: string, args: any, senderPh
     customerId = nCust.id;
   }
 
+  // Compute end_time = start + 30min default
+  const [hh, mm] = timeHHMM.split(":").map(Number);
+  const endMin = hh * 60 + mm + 30;
+  const endTime = `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`;
+
   const { error } = await supabase.from("appointments").insert({
     user_id: userId,
     professional_id: prof.id,
-    service_id: svc.id,
+    service_id: svc?.id,
     customer_id: customerId,
-    date: args.date,
-    start_time: args.time,
+    date: dateISO,
+    start_time: timeHHMM,
+    end_time: endTime,
     status: "confirmado",
   });
 
-  return error ? "Erro ao agendar." : `✅ Confirmado! ${args.date} às ${args.time} com ${prof.name}.`;
+  return error ? "Erro ao agendar." : `✅ Confirmado! ${dateISO} às ${timeHHMM} com ${prof.name}.`;
 }
 
 const checkAvailabilityTool = { type: "function", function: { name: "check_availability", parameters: { type: "object", properties: { date: { type: "string" }, time: { type: "string" }, professional_name: { type: "string" } }, required: ["date", "time"] } } };
