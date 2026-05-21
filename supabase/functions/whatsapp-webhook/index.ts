@@ -618,12 +618,11 @@ function extractContextFromHistory(history: Array<{ text?: string | null; from_m
   };
 }
 
-function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: any[], services: any[], slots: AvailableSlot[], customerInfo?: any): string {
+function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: any[], services: any[], slots: AvailableSlot[], customerInfo?: any, stages?: Array<{ name: string; instruction: string; skip_if_registered: boolean }>): string {
   const profList = professionals.map((p: any) => `- ${p.name}`).join("\n");
   const svcList = services.map((s: any) => `- ${s.name}: R$ ${Number(s.price || 0).toFixed(2)}`).join("\n");
   const todayStr = formatUtcDate(getBrasiliaTodayUtc());
 
-  // Group slots by date+professional (limit to next ~12 entries)
   const grouped: Record<string, Record<string, string[]>> = {};
   for (const s of slots) {
     if (!grouped[s.date]) grouped[s.date] = {};
@@ -641,6 +640,16 @@ function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: 
     ? `DISPONIBILIDADE (próximos dias):\n${availLines.join("\n")}\n`
     : "";
 
+  const isRegistered = !!customerInfo?.id;
+  const activeStages = (stages || []).filter(s => !(s.skip_if_registered && isRegistered));
+  const stagesBlock = activeStages.length > 0
+    ? `\nETAPAS DA CONVERSA (siga nesta ordem; identifique em qual está pelo histórico e dê o próximo passo):\n${activeStages.map((s, i) => `${i + 1}. [${s.name}] ${s.instruction}`).join("\n")}\n`
+    : "";
+
+  const customerBlock = isRegistered
+    ? `\nCLIENTE JÁ CADASTRADO: ${customerInfo.name}${customerInfo.birth_date ? ` (nasc. ${customerInfo.birth_date})` : ""}. NÃO peça cadastro novamente.\n`
+    : "";
+
   return `Você é a atendente virtual da *${shopName}*. Seu nome é Lia.
 Informal, simpática, natural. Frases curtas.
 DATA ATUAL: ${todayStr}.
@@ -649,8 +658,9 @@ ${svcList}
 PROFISSIONAIS:
 ${profList}
 ${availability}LINK: ${bookingUrl}
-
+${customerBlock}${stagesBlock}
 REGRAS:
+- Siga ESTRITAMENTE as ETAPAS DA CONVERSA acima na ordem definida.
 - Nunca liste profissionais em texto. Use send_professional_carousel.
 - Se já escolheu profissional, não envie carrossel.
 - Use sempre formato de data YYYY-MM-DD e hora HH:MM ao chamar tools.
@@ -827,17 +837,22 @@ Deno.serve(async (req) => {
       wa_timestamp: Date.now()
     });
 
-    const [settingsRes, profsRes, servsRes, historyRes] = await Promise.all([
+    const phoneDigits = sender.replace(/\D/g, "");
+    const [settingsRes, profsRes, servsRes, historyRes, stagesRes, customerRes] = await Promise.all([
       supabase.from("settings").select("*").eq("user_id", cfg.user_id).maybeSingle(),
       supabase.from("professionals").select("*").eq("user_id", cfg.user_id).eq("active", true),
       supabase.from("services").select("*").eq("user_id", cfg.user_id).eq("active", true),
       supabase.from("whatsapp_messages").select("*").eq("user_id", cfg.user_id).eq("wa_chatid", `${sender}@s.whatsapp.net`).order("wa_timestamp", { ascending: false }).limit(10),
+      supabase.from("bot_conversation_stages").select("name, instruction, stage_order, skip_if_registered").eq("user_id", cfg.user_id).eq("active", true).order("stage_order"),
+      supabase.from("customers").select("id, name, birth_date, phone").eq("user_id", cfg.user_id).ilike("phone", `%${phoneDigits.slice(-8)}%`).maybeSingle(),
     ]);
 
     const shopName = settingsRes.data?.shop_name || "Barbearia";
     const professionals = profsRes.data || [];
     const services = servsRes.data || [];
     const history = (historyRes.data || []).reverse();
+    const stages = stagesRes.data || [];
+    const customerInfo = customerRes.data || null;
     const bookingUrl = `https://booking.lovable.app/booking/${cfg.user_id}`;
     const apiUrl = cfg.api_url.replace(/\/$/, "");
     const token = cfg.instance_token;
@@ -853,13 +868,13 @@ Deno.serve(async (req) => {
       const carouselResult = await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl);
       if (carouselResult === "CAROUSEL_SENT") {
         carouselAlreadySent = true;
-        replyText = ""; // não envia texto por cima do carrossel
+        replyText = "";
       } else {
         replyText = carouselResult;
       }
     } else {
       const slots = await getAvailableSlots(supabase, cfg.user_id, professionals, 7);
-      const systemPrompt = buildSystemPrompt(shopName, bookingUrl, professionals, services, slots);
+      const systemPrompt = buildSystemPrompt(shopName, bookingUrl, professionals, services, slots, customerInfo, stages);
       const aiMessages = [{ role: "system", content: systemPrompt }, ...history.map(m => ({ role: m.from_me ? "assistant" : "user", content: m.text }))];
       
       // Ensure current message is in context if not in history yet
