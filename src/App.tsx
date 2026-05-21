@@ -15,6 +15,7 @@ const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const Clients = lazy(() => import("@/pages/Clients"));
 const ClientDetail = lazy(() => import("@/pages/ClientDetail"));
 const Sales = lazy(() => import("@/pages/Sales"));
+const Products = lazy(() => import("@/pages/Products"));
 const Expirations = lazy(() => import("@/pages/Expirations"));
 const Settings = lazy(() => import("@/pages/Settings"));
 const Admin = lazy(() => import("@/pages/Admin"));
@@ -61,6 +62,7 @@ const App = () => (
               <Route path="/clients" element={<SuspenseWrap><Clients /></SuspenseWrap>} />
               <Route path="/clients/:id" element={<SuspenseWrap><ClientDetail /></SuspenseWrap>} />
               <Route path="/sales" element={<SuspenseWrap><Sales /></SuspenseWrap>} />
+              <Route path="/products" element={<SuspenseWrap><Products /></SuspenseWrap>} />
               <Route path="/expirations" element={<SuspenseWrap><Expirations /></SuspenseWrap>} />
               <Route path="/reports" element={<SuspenseWrap><Reports /></SuspenseWrap>} />
               <Route path="/subscriptions" element={<SuspenseWrap><Subscriptions /></SuspenseWrap>} />
