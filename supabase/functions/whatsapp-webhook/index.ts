@@ -1,306 +1,624 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
 };
 
-interface WebhookPayload {
-  instance: {
-    instanceName: string;
-  };
-  data: {
-    key: {
-      remoteJid: string;
-      fromMe: boolean;
-    };
-    message: {
-      conversation: string;
-      extendedTextMessage: {
-        text: string;
-      };
-    };
-    pushName: string;
-  };
+const recentMessageKeys = new Map<string, number>();
+const MESSAGE_DEDUPE_WINDOW_MS = 2 * 60 * 1000;
+
+function normalizeWaNumber(value: unknown): string {
+  return String(value || "")
+    .trim()
+    .replace(/^\+/, "")
+    .replace("@s.whatsapp.net", "")
+    .replace("@g.us", "")
+    .replace("@lid", "");
 }
 
-async function callAI(messages: any[], tools: any[]) {
-  const apiKey = Deno.env.get("OPENAI_API_KEY");
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+function isDuplicateMessage(key: string): boolean {
+  const now = Date.now();
+  for (const [k, ts] of recentMessageKeys.entries()) {
+    if (now - ts > MESSAGE_DEDUPE_WINDOW_MS) recentMessageKeys.delete(k);
+  }
+  if (recentMessageKeys.has(key)) return true;
+  recentMessageKeys.set(key, now);
+  return false;
+}
+
+function extractEventType(body: any): string {
+  const raw = body?.EventType || body?.eventType || body?.type || body?.event;
+  if (typeof raw === "string") return raw.toLowerCase();
+  if (typeof body?.event?.Type === "string") return body.event.Type.toLowerCase();
+  return "";
+}
+
+function extractMessageId(body: any): string {
+  return (
+    body?.data?.key?.id ||
+    body?.key?.id ||
+    body?.message?.id ||
+    body?.message?.messageid ||
+    body?.wa_message_id ||
+    body?.event?.MessageIDs?.[0] ||
+    ""
+  )
+    .toString()
+    .trim();
+}
+
+function extractMessageTimestamp(body: any): number {
+  const raw =
+    body?.message?.messageTimestamp ||
+    body?.message?.wa_timestamp ||
+    body?.data?.messageTimestamp ||
+    body?.event?.Timestamp ||
+    Date.now();
+
+  const ts = Number(raw);
+  if (!Number.isFinite(ts)) return Date.now();
+  return ts < 1_000_000_000_000 ? ts * 1000 : ts;
+}
+
+function extractMessageText(body: any): string {
+  const msg = body?.data?.message || body?.message || body;
+  const text =
+    msg?.content?.text ||
+    msg?.conversation ||
+    msg?.extendedTextMessage?.text ||
+    body?.data?.message?.conversation ||
+    body?.data?.message?.extendedTextMessage?.text ||
+    body?.wa_text ||
+    msg?.wa_text ||
+    msg?.text ||
+    body?.text ||
+    // Fallback for button/carousel clicks (TemplateButtonReplyMessage)
+    msg?.content?.selectedDisplayText ||
+    msg?.selectedDisplayText ||
+    msg?.buttonOrListid ||
+    "";
+  return text.trim();
+}
+
+function extractButtonId(body: any): string {
+  const msg = body?.data?.message || body?.message || body;
+  return (msg?.buttonOrListid || msg?.content?.buttonOrListid || "").trim();
+}
+
+function extractSender(body: any): string {
+  const key = body?.data?.key || body?.key || {};
+  const remoteJid =
+    key.remoteJid ||
+    body?.message?.chatid ||
+    body?.chat?.wa_chatid ||
+    body?.data?.remoteJid ||
+    body?.remoteJid ||
+    body?.wa_chatid ||
+    body?.data?.wa_chatid ||
+    body?.chatid ||
+    body?.data?.chatid ||
+    body?.event?.Chat ||
+    "";
+  return normalizeWaNumber(remoteJid);
+}
+
+function extractMessageSenderNumber(body: any): string {
+  const raw =
+    body?.message?.sender ||
+    body?.event?.Sender ||
+    body?.chat?.wa_lastMessageSender ||
+    body?.wa_lastMessageSender ||
+    "";
+  return normalizeWaNumber(raw);
+}
+
+function extractOwnerNumber(body: any): string {
+  return normalizeWaNumber(body?.owner || body?.chat?.owner || body?.instance?.owner || "");
+}
+
+function extractPayloadToken(body: any): string {
+  return String(
+    body?.token ||
+      body?.Token ||
+      body?.instance?.token ||
+      body?.instance?.Token ||
+      body?.data?.token ||
+      body?.data?.Token ||
+      ""
+  ).trim();
+}
+
+async function findWhatsappConfig(supabase: any, payloadToken: string, requestUrl: string, _ownerNumber = "") {
+  let urlUserId = "";
+  try {
+    const url = new URL(requestUrl);
+    urlUserId = url.searchParams.get("user_id") || "";
+    if (urlUserId.includes("/")) {
+      urlUserId = urlUserId.split("/")[0];
+    }
+  } catch (e) {
+    console.error("[webhook] invalid request URL", requestUrl);
+  }
+
+  console.log("[webhook] findConfig", {
+    urlUserId,
+    tokenPrefix: payloadToken?.slice(0, 8),
+    tokenLen: payloadToken?.length || 0,
+  });
+
+  if (payloadToken) {
+    const { data: byToken, error: tokenErr } = await supabase
+      .from("whatsapp_config")
+      .select("api_url, instance_token, user_id")
+      .eq("instance_token", payloadToken)
+      .limit(10);
+    if (tokenErr) console.error("[webhook] config lookup by token error:", tokenErr.message);
+    if (byToken?.length === 1) return byToken[0];
+  }
+
+  if (urlUserId) {
+    const { data, error } = await supabase
+      .from("whatsapp_config")
+      .select("api_url, instance_token, user_id")
+      .eq("user_id", urlUserId)
+      .maybeSingle();
+    if (error) console.error("[webhook] config lookup by user_id error:", error.message);
+    if (data) return data;
+  }
+
+  return null;
+}
+
+function isFromMe(body: any): boolean {
+  const key = body?.data?.key || body?.key || {};
+  return !!(
+    key.fromMe ||
+    body?.fromMe ||
+    body?.wa_fromMe ||
+    body?.data?.wa_fromMe ||
+    body?.message?.wa_fromMe ||
+    body?.message?.fromMe ||
+    body?.event?.IsFromMe
+  );
+}
+
+function isGroupMessage(body: any): boolean {
+  const key = body?.data?.key || body?.key || {};
+  const remoteJid =
+    key.remoteJid ||
+    body?.message?.chatid ||
+    body?.chat?.wa_chatid ||
+    body?.data?.remoteJid ||
+    body?.remoteJid ||
+    body?.wa_chatid ||
+    body?.event?.Chat ||
+    "";
+  return (
+    String(remoteJid).endsWith("@g.us") ||
+    !!body?.chat?.wa_isGroup ||
+    !!body?.event?.IsGroup
+  );
+}
+
+interface AvailableSlot {
+  professional_name: string;
+  professional_id: string;
+  date: string;
+  date_label: string;
+  time: string;
+}
+
+const BRASILIA_OFFSET_HOURS = -3;
+
+function getBrasiliaNow(): Date {
+  const now = new Date();
+  return new Date(now.getTime() + BRASILIA_OFFSET_HOURS * 60 * 60 * 1000);
+}
+
+function getBrasiliaTodayUtc(): Date {
+  const brNow = getBrasiliaNow();
+  return new Date(Date.UTC(brNow.getUTCFullYear(), brNow.getUTCMonth(), brNow.getUTCDate()));
+}
+
+function addUtcDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function formatUtcDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+async function getAvailableSlots(
+  supabase: any,
+  userId: string,
+  professionals: any[],
+  daysAhead = 3
+): Promise<AvailableSlot[]> {
+  const profIds = professionals.map((p: any) => p.id);
+
+  const { data: schedRows } = await supabase
+    .from("professional_schedules")
+    .select("professional_id, day_of_week, start_time, end_time, active")
+    .in("professional_id", profIds);
+
+  const schedMap: Record<string, any[]> = {};
+  for (const r of schedRows || []) {
+    if (!r.active) continue;
+    if (!schedMap[r.professional_id]) schedMap[r.professional_id] = [];
+    schedMap[r.professional_id].push(r);
+  }
+
+  const brNow = getBrasiliaNow();
+  const today = getBrasiliaTodayUtc();
+  const dates: Date[] = [];
+  for (let i = 0; i < daysAhead; i++) {
+    dates.push(addUtcDays(today, i));
+  }
+
+  const dateStrings = dates.map(formatUtcDate);
+
+  const { data: existingAppts } = await supabase
+    .from("appointments")
+    .select("professional_id, date, start_time, end_time")
+    .eq("user_id", userId)
+    .in("date", dateStrings)
+    .neq("status", "cancelado");
+
+  const occupiedKey = (profId: string, date: string, minute: number) =>
+    `${profId}:${date}:${minute}`;
+
+  const occupied = new Set<string>();
+  for (const a of existingAppts || []) {
+    const [sh, sm] = (a.start_time || "").split(":").map(Number);
+    const [eh, em] = (a.end_time || "").split(":").map(Number);
+    let c = sh * 60 + (sm || 0);
+    const end = eh * 60 + (em || 0);
+    while (c < end) {
+      occupied.add(occupiedKey(a.professional_id, a.date, c));
+      c += 30;
+    }
+  }
+
+  const dayNames = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+  const todayStr = formatUtcDate(today);
+  const nowMinutes = brNow.getUTCHours() * 60 + brNow.getUTCMinutes();
+
+  const slots: AvailableSlot[] = [];
+
+  for (const prof of professionals) {
+    const profScheds = schedMap[prof.id] || [];
+    for (const d of dates) {
+      const dow = d.getUTCDay();
+      const daySchedAll = profScheds.filter((s: any) => s.day_of_week === dow);
+      if (daySchedAll.length === 0) continue;
+
+      const dateStr = formatUtcDate(d);
+      const isToday = dateStr === todayStr;
+      const dedupe = new Set<number>();
+
+      for (const daySched of daySchedAll) {
+        const [sh, sm] = daySched.start_time.split(":").map(Number);
+        const [eh, em] = daySched.end_time.split(":").map(Number);
+        let current = sh * 60 + (sm || 0);
+        const endMin = eh * 60 + (em || 0);
+
+        while (current < endMin) {
+          if (isToday && current <= nowMinutes) {
+            current += 30;
+            continue;
+          }
+          if (dedupe.has(current)) {
+            current += 30;
+            continue;
+          }
+          if (!occupied.has(occupiedKey(prof.id, dateStr, current))) {
+            dedupe.add(current);
+            const h = Math.floor(current / 60);
+            const m = current % 60;
+            const dd = d.getUTCDate();
+            const mm = d.getUTCMonth() + 1;
+            slots.push({
+              professional_name: prof.name,
+              professional_id: prof.id,
+              date: dateStr,
+              date_label: isToday
+                ? "hoje"
+                : `${dayNames[dow]} ${String(dd).padStart(2, "0")}/${String(mm).padStart(2, "0")}`,
+              time: `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`,
+            });
+          }
+          current += 30;
+        }
+      }
+    }
+  }
+  return slots;
+}
+
+async function callAI(
+  messages: Array<{ role: string; content: string }>,
+  tools: any[]
+): Promise<any> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${apiKey}`,
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-4o-mini",
+      model: "google/gemini-2.5-flash",
       messages,
       tools,
-      tool_choice: "auto",
+      max_tokens: 300,
     }),
   });
+
+  if (!response.ok) {
+    const status = response.status;
+    const text = await response.text();
+    console.error("[AI] error:", status, text);
+    throw new Error(`AI error ${status}`);
+  }
+
   return await response.json();
 }
 
-function extractContextFromHistory(history: any[]) {
-  let detectedProf = null;
-  let resolvedDate = null;
-  let detectedTime = null;
-  for (const m of history) {
-    if (m.text?.includes("[Selecionou profissional:")) {
-      detectedProf = m.text.replace(/.*\[Selecionou profissional:\s*/, "").replace(/\].*/, "").trim();
+function resolveRelativeDate(dateKeyword: string): string | null {
+  const today = getBrasiliaTodayUtc();
+  const keyword = dateKeyword.toLowerCase().trim();
+  if (keyword === "hoje") return formatUtcDate(today);
+  if (keyword === "amanhã" || keyword === "amanha") return formatUtcDate(addUtcDays(today, 1));
+  if (keyword === "depois de amanhã" || keyword === "depois de amanha") return formatUtcDate(addUtcDays(today, 2));
+  
+  const dayMap: Record<string, number> = {
+    domingo: 0, segunda: 1, "terça": 2, terca: 2, quarta: 3, quinta: 4, sexta: 5, "sábado": 6, sabado: 6,
+  };
+  if (dayMap[keyword] !== undefined) {
+    const target = dayMap[keyword];
+    const currentDay = today.getUTCDay();
+    let diff = target - currentDay;
+    if (diff <= 0) diff += 7;
+    return formatUtcDate(addUtcDays(today, diff));
+  }
+  const ddmm = keyword.match(/^(\d{1,2})\/(\d{1,2})$/);
+  if (ddmm) {
+    const day = parseInt(ddmm[1]), month = parseInt(ddmm[2]) - 1;
+    let year = today.getUTCFullYear();
+    const d = new Date(Date.UTC(year, month, day));
+    if (d < today) d.setUTCFullYear(year + 1);
+    return formatUtcDate(d);
+  }
+  return null;
+}
+
+interface ExtractedContext {
+  summary: string;
+  detectedService: string | null;
+  detectedTime: string | null;
+  detectedDate: string | null;
+  resolvedDate: string | null;
+  detectedProf: string | null;
+}
+
+function extractContextFromHistory(history: Array<{ text?: string | null; from_me?: boolean | null }>): ExtractedContext {
+  const found: string[] = [];
+  const servicePatterns = ["corte", "barba", "combo", "sobrancelha", "pigmentação", "luzes", "pezinho"];
+  const timeRegex = /\b(\d{1,2})\s*[:h]\s*(\d{0,2})\b/i;
+  const timeAsRegex = /\b(?:[àa]s|@)\s*(\d{1,2})(?:\s*[:h]\s*(\d{0,2}))?\b/i;
+  const dateKeywords = ["hoje", "amanhã", "amanha", "segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"];
+  const dateRegex = /\b(\d{1,2})\/(\d{1,2})\b/;
+
+  let detectedService: string | null = null;
+  let detectedTime: string | null = null;
+  let detectedDate: string | null = null;
+
+  const scanMsg = (t: string) => {
+    if (!detectedService) {
+      for (const svc of servicePatterns) {
+        if (t.includes(svc)) { detectedService = svc; break; }
+      }
     }
-    if (m.text?.includes("[Data:")) {
-      resolvedDate = m.text.replace(/.*\[Data:\s*/, "").replace(/\].*/, "").trim();
+    if (!detectedTime) {
+      const tm = t.match(timeRegex) || t.match(timeAsRegex);
+      if (tm) {
+        const hNum = parseInt(tm[1], 10);
+        if (hNum >= 0 && hNum <= 23) {
+          detectedTime = `${String(hNum).padStart(2, "0")}:${(tm[2] || "00").padStart(2, "0")}`;
+        }
+      }
     }
-    if (m.text?.includes("[Hora:")) {
-      detectedTime = m.text.replace(/.*\[Hora:\s*/, "").replace(/\].*/, "").trim();
+    if (!detectedDate) {
+      for (const dk of dateKeywords) { if (t.includes(dk)) { detectedDate = dk; break; } }
+      if (!detectedDate) { const dm = t.match(dateRegex); if (dm) detectedDate = `${dm[1]}/${dm[2]}`; }
+    }
+  };
+
+  for (let i = history.length - 1; i >= 0; i--) {
+    const msg = history[i];
+    if (msg.from_me || !msg.text) continue;
+    scanMsg(msg.text.toLowerCase());
+  }
+
+  let detectedProf: string | null = null;
+  for (const msg of history) {
+    if (msg.text?.startsWith("[Selecionou profissional:")) {
+      detectedProf = msg.text.replace("[Selecionou profissional:", "").replace("]", "").trim();
     }
   }
-  return { detectedProf, resolvedDate, detectedTime };
+
+  if (detectedService) found.push(`serviço=${detectedService}`);
+  if (detectedDate) found.push(`dia=${detectedDate}`);
+  if (detectedTime) found.push(`horário=${detectedTime}`);
+  if (detectedProf) found.push(`profissional=${detectedProf}`);
+
+  return {
+    summary: found.length === 0 ? "Nenhum dado detectado." : `[Dados informados: ${found.join(", ")}]`,
+    detectedService, detectedTime, detectedDate,
+    resolvedDate: detectedDate ? resolveRelativeDate(detectedDate) : null,
+    detectedProf
+  };
 }
 
-function buildUnavailableMessage(slots: any[], date: string, time: string, profName: string) {
-  const profSlots = slots.filter(s => s.professional_name.toLowerCase() === profName.toLowerCase());
-  const closest = profSlots.find(s => s.date >= date) || profSlots[0];
-  return closest 
-    ? `Esse horário não está disponível 😕 Mas tem vaga ${closest.date_label} às ${closest.time} com ${closest.professional_name}. Quer esse? 😊`
-    : `Infelizmente não temos horários disponíveis com ${profName.split(" ")[0]}. Quer tentar outro profissional? 😊`;
+function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: any[], services: any[], _slots: AvailableSlot[], customerInfo?: any): string {
+  const profList = professionals.map((p: any) => `- ${p.name}`).join("\n");
+  const svcList = services.map((s: any) => `- ${s.name}: R$ ${Number(s.price || 0).toFixed(2)}`).join("\n");
+  const todayStr = formatUtcDate(getBrasiliaTodayUtc());
+  
+  return `Você é a atendente virtual da *${shopName}*. Seu nome é Lia.
+Informal, simpática, natural. Frases curtas.
+DATA ATUAL: ${todayStr}.
+SERVIÇOS:
+${svcList}
+PROFISSIONAIS:
+${profList}
+LINK: ${bookingUrl}
+
+REGRAS:
+- Nunca liste profissionais em texto. Use send_professional_carousel.
+- Se já escolheu profissional, não envie carrossel.
+- Quando tiver tudo, use check_availability ou create_appointment.`;
 }
 
-function findClosestSlot(slots: any[], date: string, time: string, profName?: string) {
-  let filtered = slots;
-  if (profName) filtered = filtered.filter(s => s.professional_name.toLowerCase() === profName.toLowerCase());
-  return filtered.find(s => s.date >= date) || filtered[0];
-}
-
-async function handleSendCarousel(apiUrl: string, token: string, sender: string, professionals: any[], bookingUrl: string, config: any) {
-  const cards = professionals.map(p => ({
-    title: p.name,
-    description: "Profissional qualificado",
-    image_url: p.photo_url || "https://via.placeholder.com/150",
-    buttons: [{ title: "Escolher", text: `[Selecionou profissional: ${p.name}]` }]
+async function handleSendCarousel(apiUrl: string, token: string, sender: string, professionals: any[], bookingUrl: string, _config?: any): Promise<string> {
+  const carousel = professionals.map((p: any) => ({
+    text: `💈 *${p.name}*`,
+    image: p.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}`,
+    buttons: [{ id: `PROF_${p.name}`, text: `Escolher ${p.name.split(" ")[0]}`, type: "REPLY" }],
   }));
-  
-  const response = await fetch(`${apiUrl}/send/carousel?token=${token}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", token, Authorization: `Bearer ${token}` },
-    body: JSON.stringify({
-      number: sender,
-      title: "Escolha seu profissional",
-      description: "Clique abaixo para selecionar",
-      cards
-    }),
-  });
-  return response.ok ? "CAROUSEL_SENT" : "Não consegui enviar o carrossel, mas pode agendar aqui: " + bookingUrl;
-}
-
-async function handleToolCall(supabase: any, userId: string, args: any, sender: string, professionals: any[], services: any[], templates: any[]) {
-  if (args.professional_name) {
-    const prof = professionals.find(p => p.name.toLowerCase().includes(args.professional_name.toLowerCase()));
-    if (prof) args.professional_id = prof.id;
-  }
-  if (args.service_name) {
-    const svc = services.find(s => s.name.toLowerCase().includes(args.service_name.toLowerCase()));
-    if (svc) args.service_id = svc.id;
-  }
-  
-  const { data, error } = await supabase.from("appointments").insert({
-    user_id: userId,
-    professional_id: args.professional_id,
-    service_id: args.service_id,
-    date: args.date,
-    start_time: args.time,
-    notes: `Agendamento via Bot. Cliente: ${args.customer_name || "WhatsApp"}`,
-    status: "agendado"
-  });
-  
-  if (error) return "Erro ao criar agendamento: " + error.message;
-  return `Agendamento confirmado para ${args.date} às ${args.time}! 🎉`;
-}
-
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  
-  const url = new URL(req.url);
-  const userId = url.searchParams.get("user_id");
-  if (!userId) return new Response("Missing user_id", { status: 400 });
-
-  const payload: WebhookPayload = await req.json();
-  const sender = payload.data.key.remoteJid;
-  const text = payload.data.message.conversation || payload.data.message.extendedTextMessage?.text || "";
-  
-  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  
-  const { data: cfg } = await supabase.from("whatsapp_config").select("*").eq("user_id", userId).single();
-  const { data: settings } = await supabase.from("settings").select("*").eq("user_id", userId).single();
-  const { data: professionals } = await supabase.from("professionals").select("*").eq("user_id", userId).eq("active", true);
-  const { data: services } = await supabase.from("services").select("*").eq("user_id", userId).eq("active", true);
-  const { data: slots } = await supabase.rpc("get_available_slots", { p_user_id: userId });
-  
-  const apiUrl = cfg.api_url;
-  const token = cfg.instance_token;
-  const bookingUrl = `${Deno.env.get("APP_URL")}/booking/${userId}`;
-
-  const { data: history } = await supabase
-    .from("whatsapp_messages")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("wa_chatid", sender)
-    .order("wa_timestamp", { ascending: false })
-    .limit(10);
-
-  const aiMessages = [
-    { role: "system", content: settings.bot_prompt || "Você é um assistente de barbearia." },
-    ...(history || []).reverse().map(m => ({ role: m.from_me ? "assistant" : "user", content: m.text }))
-  ];
-
-  const checkAvailabilityTool = { type: "function", function: { name: "check_availability", description: "Verifica disponibilidade", parameters: { type: "object", properties: { date: { type: "string" }, time: { type: "string" } } } } };
-  const appointmentTool = { type: "function", function: { name: "create_appointment", description: "Cria agendamento", parameters: { type: "object", properties: { customer_name: { type: "string" }, professional_name: { type: "string" }, service_name: { type: "string" }, date: { type: "string" }, time: { type: "string" } } } } };
-  const checkAllAvailabilityTool = { type: "function", function: { name: "check_all_availability", description: "Verifica todos", parameters: { type: "object", properties: { date: { type: "string" } } } } };
-  const registerCustomerTool = { type: "function", function: { name: "register_customer", description: "Cadastra cliente", parameters: { type: "object", properties: { full_name: { type: "string" } } } } };
-  const updateCustomerTool = { type: "function", function: { name: "update_customer", description: "Atualiza cliente", parameters: { type: "object", properties: { new_name: { type: "string" } } } } };
-  const sendCarouselTool = { type: "function", function: { name: "send_professional_carousel", description: "Envia carrossel", parameters: { type: "object", properties: {} } } };
-  const customTools: any[] = [];
-
-  let replyText = "";
-  let carouselAlreadySent = false;
 
   try {
-    console.log("[webhook] Calling AI with", aiMessages.length, "messages");
-    const ctxMain0 = extractContextFromHistory(history);
-    const baseTools = [checkAvailabilityTool, appointmentTool, checkAllAvailabilityTool, registerCustomerTool, updateCustomerTool, ...customTools];
-    const allTools = ctxMain0.detectedProf
-      ? baseTools
-      : [...baseTools, sendCarouselTool];
-    if (ctxMain0.detectedProf) {
-      aiMessages.push({
-        role: "system",
-        content: `O cliente já escolheu o profissional *${ctxMain0.detectedProf}*. NÃO envie carrossel nem peça para escolher de novo. Foque em coletar dia/horário e use check_availability ou create_appointment com professional_name="${ctxMain0.detectedProf}".`,
-      });
-    }
-
-    const aiResponse = await callAI(aiMessages, allTools);
-    const choice = aiResponse.choices?.[0];
-    const message = choice?.message;
-    console.log("[webhook] AI response:", JSON.stringify(message).slice(0, 500));
-
-    if (message?.tool_calls && message.tool_calls.length > 0) {
-      const toolCall = message.tool_calls[0];
-      let args: any;
-      try {
-        args = typeof toolCall.function.arguments === "string" ? JSON.parse(toolCall.function.arguments) : toolCall.function.arguments;
-      } catch {
-        args = {};
-      }
-
-      if (toolCall.function?.name === "check_availability") {
-        const filterDate = args.date;
-        const filterTime = args.time;
-        const recentProfPick = history.find(m => m.text?.startsWith("[Selecionou profissional:")) || history.slice(-15).reverse().find(m => m.text?.includes("[Selecionou profissional:"));
-        
-        if (recentProfPick) {
-          const profName = recentProfPick.text?.replace(/.*\[Selecionou profissional:\s*/, "").replace(/\].*/, "").trim() || "o profissional";
-          const profObj = professionals.find((p: any) => p.name.toLowerCase() === profName.toLowerCase());
-          if (filterDate && filterTime && profObj) {
-            const exact = slots.find((s: any) => s.date === filterDate && s.time === filterTime && s.professional_name.toLowerCase() === profName.toLowerCase());
-            if (exact) {
-              replyText = `Perfeito! *${profName.split(" ")[0]}* tem ${exact.date_label} às *${exact.time}* disponível. Quer que eu confirme? 😊`;
-            } else {
-              replyText = buildUnavailableMessage(slots, filterDate, filterTime, profName);
-            }
-          } else if (profObj) {
-            const profSlots = slots.filter((s: any) => s.professional_name.toLowerCase() === profName.toLowerCase()).slice(0, 6);
-            if (profSlots.length > 0) {
-              const list = profSlots.map((s: any) => `• ${s.date_label} às ${s.time}`).join("\n");
-              replyText = `Com *${profName.split(" ")[0]}* temos esses horários:\n\n${list}\n\nQual prefere? 😊`;
-            } else {
-              replyText = `*${profName.split(" ")[0]}* não tem horário disponível nos próximos dias. Quer tentar outro profissional? 😊`;
-            }
-          } else {
-            replyText = `Você já escolheu *${profName}*. Me diga o dia e horário que prefere! 😊`;
-          }
-        } else {
-          const carouselProfessionals = professionals;
-          const transitionText = filterDate && filterTime ? `Esse horário tem disponibilidade com esses profissionais 👇` : "Vou mandar aqui pra você escolher o profissional! 👇";
-          await fetch(`${apiUrl}/send/text?token=${token}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", token, Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ number: sender, text: transitionText }),
-          });
-          await new Promise(r => setTimeout(r, 1200));
-          const carouselResult = await handleSendCarousel(apiUrl, token, sender, carouselProfessionals, bookingUrl, {});
-          if (carouselResult === "CAROUSEL_SENT") {
-            carouselAlreadySent = true;
-            replyText = "Escolha quem você prefere 😊";
-          } else {
-            replyText = carouselResult;
-          }
-        }
-      } else if (toolCall.function?.name === "create_appointment") {
-        if (!args.customer_phone) args.customer_phone = sender;
-        replyText = await handleToolCall(supabase, userId, args, sender, professionals, services, []);
-      } else if (toolCall.function?.name === "send_professional_carousel" || toolCall.function?.name === "check_all_availability") {
-        const carouselResult = await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl, {});
-        if (carouselResult === "CAROUSEL_SENT") {
-          carouselAlreadySent = true;
-          replyText = "Escolha o profissional que preferir! 👆";
-        } else {
-          replyText = carouselResult;
-        }
-      } else {
-        replyText = message?.content || "Como posso te ajudar? 😊";
-      }
-    } else {
-      const responseText = message?.content || "";
-      const mentionsProfessionals = professionals.length > 0 && professionals.some((p: any) => responseText.toLowerCase().includes(p.name.toLowerCase()));
-      
-      if (mentionsProfessionals && !carouselAlreadySent) {
-        const carouselResult = await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl, {});
-        if (carouselResult === "CAROUSEL_SENT") {
-          carouselAlreadySent = true;
-          replyText = "Vou mandar o carrossel pra você escolher o profissional! 👆";
-        } else {
-          replyText = responseText;
-        }
-      } else {
-        const ctx = extractContextFromHistory(history);
-        if (responseText.match(/verificar|disponibilidade|checar|consultar|vou ver|deixa eu/i) && ctx.resolvedDate && ctx.detectedTime) {
-          const profFromCtx = ctx.detectedProf || (professionals.length === 1 ? professionals[0].name : null);
-          const manualSlot = slots.find((s: any) => s.date === ctx.resolvedDate && s.time === ctx.detectedTime && (!profFromCtx || s.professional_name.toLowerCase() === profFromCtx.toLowerCase()));
-          if (manualSlot) {
-            replyText = `Horário disponível! ${manualSlot.date_label} às ${manualSlot.time} com ${manualSlot.professional_name}. Quer que eu confirme? 😊`;
-          } else {
-            const closestManual = findClosestSlot(slots, ctx.resolvedDate!, ctx.detectedTime!, profFromCtx || undefined);
-            replyText = closestManual
-              ? `Esse horário não está disponível 😕 Mas tem vaga ${closestManual.date_label} às ${closestManual.time} com ${closestManual.professional_name}. Quer esse? 😊`
-              : `Infelizmente não temos horários disponíveis nesse período. Quer tentar outro? 😊`;
-          }
-        } else {
-          replyText = responseText || "Como posso te ajudar? 😊";
-        }
-      }
-    }
-  } catch (aiErr: any) {
-    console.error("[webhook] AI error, using fallback:", aiErr.message);
-    replyText = `Oi! 😊 Estou com um probleminha técnico agora. Mas você pode agendar pelo nosso link:\n${bookingUrl}`;
-  }
-
-  if (replyText) {
-    await supabase.from("whatsapp_messages").insert({
-      user_id: userId,
-      wa_chatid: sender,
-      from_me: true,
-      text: replyText,
-      wa_timestamp: Math.floor(Date.now() / 1000)
-    });
-    await fetch(`${apiUrl}/send/text?token=${token}`, {
+    const res = await fetch(`${apiUrl}/send/carousel?token=${token}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", token, Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ number: sender, text: replyText }),
+      body: JSON.stringify({ number: sender, text: "Escolha o profissional:", carousel, readchat: true }),
     });
+    console.log("[webhook] carousel sent:", res.status);
+    return "CAROUSEL_SENT";
+  } catch (err: any) {
+    console.error("[webhook] carousel error:", err.message);
+    return `Escolha um profissional:\n${professionals.map((p, i) => `${i+1} ${p.name}`).join("\n")}\n\nLink: ${bookingUrl}`;
+  }
+}
+
+async function handleToolCall(supabase: any, userId: string, args: any, senderPhone: string, professionals: any[], services: any[], templateConfigs?: any[]): Promise<string> {
+  const prof = professionals.find(p => p.name.toLowerCase() === (args.professional_name || "").toLowerCase());
+  if (!prof) return "Profissional não encontrado.";
+  const svc = services.find(s => s.name.toLowerCase() === (args.service_name || "").toLowerCase()) || services[0];
+  const customerName = args.customer_name || "Cliente";
+
+  const { data: cust } = await supabase.from("customers").select("id").eq("user_id", userId).eq("phone", senderPhone).maybeSingle();
+  let customerId = cust?.id;
+  if (!customerId) {
+    const { data: nCust } = await supabase.from("customers").insert({ user_id: userId, name: customerName, phone: senderPhone }).select("id").single();
+    customerId = nCust.id;
   }
 
-  return new Response("OK", { status: 200 });
+  const { error } = await supabase.from("appointments").insert({
+    user_id: userId,
+    professional_id: prof.id,
+    service_id: svc.id,
+    customer_id: customerId,
+    date: args.date,
+    start_time: args.time,
+    status: "confirmado",
+  });
+
+  return error ? "Erro ao agendar." : `✅ Confirmado! ${args.date} às ${args.time} com ${prof.name}.`;
+}
+
+const checkAvailabilityTool = { type: "function", function: { name: "check_availability", parameters: { type: "object", properties: { date: { type: "string" }, time: { type: "string" }, professional_name: { type: "string" } }, required: ["date", "time"] } } };
+const appointmentTool = { type: "function", function: { name: "create_appointment", parameters: { type: "object", properties: { date: { type: "string" }, time: { type: "string" }, professional_name: { type: "string" }, service_name: { type: "string" } }, required: ["date", "time", "professional_name"] } } };
+const sendCarouselTool = { type: "function", function: { name: "send_professional_carousel", parameters: { type: "object", properties: {} } } };
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "GET") return new Response("Online");
+  if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
+
+  try {
+    const body = await req.json();
+    const eventType = extractEventType(body);
+    if (eventType && !["messages", "message", "messages.upsert"].includes(eventType)) return new Response(JSON.stringify({ ok: true }));
+
+    if (isFromMe(body) || isGroupMessage(body)) return new Response(JSON.stringify({ ok: true }));
+
+    const text = extractMessageText(body);
+    const sender = extractSender(body);
+    const messageId = extractMessageId(body);
+    const payloadToken = extractPayloadToken(body);
+    const buttonId = extractButtonId(body);
+
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const cfg = await findWhatsappConfig(supabase, payloadToken, req.url);
+    if (!cfg) return new Response(JSON.stringify({ error: "No config" }));
+
+    const [settingsRes, profsRes, servsRes, historyRes] = await Promise.all([
+      supabase.from("settings").select("*").eq("user_id", cfg.user_id).maybeSingle(),
+      supabase.from("professionals").select("*").eq("user_id", cfg.user_id).eq("active", true),
+      supabase.from("services").select("*").eq("user_id", cfg.user_id).eq("active", true),
+      supabase.from("whatsapp_messages").select("*").eq("user_id", cfg.user_id).eq("wa_chatid", `${sender}@s.whatsapp.net`).order("wa_timestamp", { ascending: false }).limit(10),
+    ]);
+
+    const shopName = settingsRes.data?.shop_name || "Barbearia";
+    const professionals = profsRes.data || [];
+    const services = servsRes.data || [];
+    const history = (historyRes.data || []).reverse();
+    const bookingUrl = `https://booking.lovable.app/booking/${cfg.user_id}`;
+    const apiUrl = cfg.api_url.replace(/\/$/, "");
+    const token = cfg.instance_token;
+
+    let replyText = "";
+    let carouselAlreadySent = false;
+
+    if (buttonId.startsWith("PROF_")) {
+      const profName = buttonId.replace("PROF_", "");
+      replyText = `Ótimo! Escolheu ${profName}. Qual dia e horário você prefere? 😊`;
+    } else {
+      const slots = await getAvailableSlots(supabase, cfg.user_id, professionals, 7);
+      const systemPrompt = buildSystemPrompt(shopName, bookingUrl, professionals, services, slots);
+      const aiMessages = [{ role: "system", content: systemPrompt }, ...history.map(m => ({ role: m.from_me ? "assistant" : "user", content: m.text }))];
+      if (!history.some(m => m.text === text)) aiMessages.push({ role: "user", content: text });
+
+      const aiResponse = await callAI(aiMessages, [checkAvailabilityTool, appointmentTool, sendCarouselTool]);
+      const message = aiResponse.choices?.[0]?.message;
+
+      if (message?.tool_calls?.length > 0) {
+        const tc = message.tool_calls[0];
+        const args = JSON.parse(tc.function.arguments);
+        if (tc.function.name === "check_availability") {
+          const exact = slots.find(s => s.date === args.date && s.time === args.time);
+          replyText = exact ? `Horário disponível! Quer confirmar? 😊` : "Horário indisponível. Quer tentar outro? 😊";
+        } else if (tc.function.name === "create_appointment") {
+          replyText = await handleToolCall(supabase, cfg.user_id, args, sender, professionals, services);
+        } else if (tc.function.name === "send_professional_carousel") {
+          await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl);
+          carouselAlreadySent = true;
+          replyText = "Escolha o profissional 👆";
+        }
+      } else {
+        replyText = message?.content || "Como posso ajudar?";
+      }
+    }
+
+    if (replyText) {
+      await fetch(`${apiUrl}/send/text?token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", token, Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ number: sender, text: replyText }),
+      });
+      await supabase.from("whatsapp_messages").insert({ user_id: cfg.user_id, wa_chatid: `${sender}@s.whatsapp.net`, text: replyText, from_me: true, wa_timestamp: Date.now() });
+    }
+
+    return new Response(JSON.stringify({ ok: true }));
+  } catch (err: any) {
+    console.error(err);
+    return new Response(err.message, { status: 500 });
+  }
 });
