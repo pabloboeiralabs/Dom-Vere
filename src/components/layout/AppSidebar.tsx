@@ -11,16 +11,16 @@ import {
 } from "@/components/ui/sidebar";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
-import { Users, Settings, Shield, Scissors, BarChart2, Clock, CreditCard, MessageSquare, Bot, CalendarClock, Megaphone, UserCheck, Kanban, Smartphone, Package } from "lucide-react";
+import { Users, Settings, Shield, Scissors, BarChart2, Clock, CreditCard, MessageSquare, Bot, CalendarClock, Megaphone, UserCheck, Kanban, Smartphone, Package, ShoppingCart } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const mainItems = [
   { title: "Relatórios", url: "/reports", icon: BarChart2 },
+  { title: "Agendas", url: "/scheduling", icon: CalendarClock },
+  { title: "Vendas", url: "/sales", icon: ShoppingCart },
+  { title: "Produtos", url: "/products", icon: Package },
   { title: "Clientes", url: "/clients", icon: Users },
   { title: "Profissionais", url: "/professionals", icon: UserCheck },
-  { title: "Vencimentos", url: "/expirations", icon: Clock },
-  { title: "Produtos", url: "/products", icon: Package },
-  { title: "Assinaturas", url: "/subscriptions", icon: CreditCard },
   { title: "Configurações", url: "/settings", icon: Settings },
   { title: "Página do Cliente", url: "/client-preview", icon: Smartphone },
 ];
