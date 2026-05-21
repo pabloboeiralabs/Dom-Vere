@@ -1,41 +1,48 @@
-## Problema
+## Diagnóstico
 
-O bot disse que 11h de amanhã não tinha vaga, mas a agenda mostra livre. A função `check_availability` no edge function `whatsapp-webhook` falha por 3 motivos combinados:
+Verifiquei o banco e os logs. As fotos dos 3 profissionais estão salvas no Storage como **`.webp`** (Alan, Pablo) e **`.avif`** (João):
 
-1. **System prompt não inclui os horários disponíveis** — a IA não sabe os slots reais e chuta data/hora.
-2. **Match exato de string** — `slots.find(s => s.date === args.date && s.time === args.time)` falha se a IA mandar `"11"`, `"11h"`, `"11:00:00"`, `"22/05"` em vez de `YYYY-MM-DD` + `HH:MM`.
-3. **Slots em buckets fixos de 30min a partir do start_time** — horários "redondos" como 11:00 podem nem ser gerados se o expediente não começa em hora cheia/meia.
-
-## Correção (apenas no edge function `supabase/functions/whatsapp-webhook/index.ts`)
-
-### 1. Normalizar entrada da IA
-Helpers `normalizeDate(args.date)` e `normalizeTime(args.time)`:
-- Data: aceita `YYYY-MM-DD`, `DD/MM/YYYY`, `DD/MM`, `DD-MM`; resolve "amanhã" no fuso de Brasília quando ambíguo.
-- Hora: aceita `11`, `11h`, `11h00`, `11:00`, `11:00:00` → devolve `HH:MM`.
-
-### 2. Verificação real contra o banco (substitui o `slots.find`)
-Nova função `isSlotAvailable(supabase, userId, dateISO, timeHHMM, professionalName?)`:
-- Calcula `day_of_week` da data.
-- Busca `professional_schedules` ativas para esse dia (filtrando por profissional se informado).
-- Retorna `true` se o horário cai dentro de alguma faixa `[start_time, end_time)` E não existe `appointments` (status ≠ cancelado) sobrepondo aquele minuto.
-
-Assim 11:00 é validado contra a faixa real (ex.: 08:00–18:00), independente do bucket de 30min.
-
-### 3. Mostrar slots à IA
-Em `buildSystemPrompt`, listar os próximos ~12 slots agregados (data + horários por profissional) para a IA propor opções coerentes. Ex.:
 ```
-DISPONIBILIDADE (próximos dias):
-- 2026-05-22 (sex) João: 09:00, 09:30, 11:00, 14:00
-- 2026-05-22 (sex) Pedro: 10:00, 10:30
+e8e4759e...webp
+fc25ef0e...webp
+e8d5e8d3...avif
 ```
 
-### 4. Aplicar mesma normalização em `create_appointment`
-`handleToolCall` chama `normalizeDate`/`normalizeTime` antes do `insert` e revalida via `isSlotAvailable` para evitar gravar horário fora do expediente.
+O WhatsApp Carousel da uazapi só renderiza **JPG/PNG** de forma confiável. Quando passamos a URL `.webp`/`.avif` direto:
+- A API uazapi às vezes rejeita o card (carrossel "some")
+- Ou aceita mas o WhatsApp do cliente não consegue baixar/exibir a imagem
 
-### 5. Logs
-Logar `args` recebidos da IA, valor normalizado e resultado de `isSlotAvailable` para diagnóstico futuro.
+Por isso, na versão anterior o carrossel parava de enviar quando havia foto. Hoje o `safeImage()` filtra `.webp`/`.avif` e troca por um avatar PNG do `ui-avatars` — o carrossel volta a sair, mas **as fotos reais nunca aparecem**, só as iniciais.
 
-## Fora de escopo
-- Mudanças de UI no painel `/reports` ou agenda.
-- Alterações em schema do banco.
-- Carrossel WhatsApp (já tratado em mensagem anterior).
+## Causa raiz
+
+Em `src/pages/Professionals.tsx`:
+
+- `handlePhotoSelect` **só comprime/converte** para JPEG quando o arquivo é **maior que 5 MB**.
+- Para arquivos menores (a maioria — celular moderno gera `.webp`/`.heic` pequenos), o arquivo é enviado ao Storage com a extensão original.
+- `uploadPhoto` usa `photoFile.name.split(".").pop()` como extensão do path, então o objeto vai pro Storage como `<id>.webp` ou `<id>.avif`.
+
+## Mudança proposta
+
+Em `src/pages/Professionals.tsx`, normalizar **toda** foto selecionada para JPEG antes de subir, independente do tamanho:
+
+1. Em `handlePhotoSelect`: sempre passar o arquivo por `compressImage` (que já converte via canvas para `image/jpeg`). Isso garante que o arquivo final tenha sempre `type: "image/jpeg"` e nome com `.jpg`.
+2. Em `uploadPhoto`: forçar `const path = '<id>.jpg'` em vez de pegar a extensão do nome (proteção extra).
+3. Manter o limite máximo (1200 px / qualidade inicial 0.8) já existente para arquivos grandes.
+
+Resultado: todas as fotos novas vão pro Storage como `.jpg` e o webhook usa a URL real (cai no regex `safeImage` que aceita `.jpe?g`).
+
+## Sobre as 3 fotos já existentes
+
+Elas continuarão `.webp`/`.avif` no Storage. Duas opções:
+
+- **(A)** Pedir pra você reenviar as fotos dos 3 profissionais pela tela de Profissionais — depois da correção, elas viram `.jpg` automaticamente.
+- **(B)** Eu adiciono um botão "Reprocessar fotos" que baixa cada uma, converte para JPEG e re-sobe (mais trabalho, só vale se houver muitos profissionais).
+
+Recomendo **(A)** — são só 3 fotos.
+
+## Arquivos alterados
+
+- `src/pages/Professionals.tsx` — `handlePhotoSelect` e `uploadPhoto`
+
+Sem mudanças no backend / edge function.
