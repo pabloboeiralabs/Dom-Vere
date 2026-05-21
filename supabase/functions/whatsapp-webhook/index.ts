@@ -659,10 +659,14 @@ async function handleSendCarousel(
 ): Promise<string> {
   const defaultFallback = (name: string) =>
     `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&size=600&length=2&background=333&color=fff&format=png`;
+  const safeImage = (p: any) => {
+    const url = String(p.photo_url || "").trim();
+    return /\.(png|jpe?g)(\?|$)/i.test(url) ? url : defaultFallback(p.name);
+  };
 
   const carousel = professionals.map((p: any) => ({
     text: `💈 *${p.name}*`,
-    image: p.photo_url || defaultFallback(p.name),
+    image: safeImage(p),
     buttons: [
       { id: `PROF_${p.name}`, text: `Escolher ${p.name.split(" ")[0]}`, type: "REPLY" },
     ],
@@ -879,8 +883,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log("[webhook] Sending reply:", { sender, replyText: replyText?.slice(0, 50) });
-    if (replyText) {
+    console.log("[webhook] Sending reply:", { sender, replyText: replyText?.slice(0, 50), carouselAlreadySent });
+    if (replyText && !carouselAlreadySent) {
       // Avoid duplicated AI replies for the same messageId
       const { data: existingReply } = await supabase
         .from("whatsapp_messages")
