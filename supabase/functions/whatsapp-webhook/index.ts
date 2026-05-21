@@ -928,8 +928,19 @@ Deno.serve(async (req) => {
         if ((askingProf || userWantsBooking) && professionals.length > 0 && !carouselAlreadySent) {
           // envia o texto primeiro
           if (replyText) {
-            await sendWhatsAppMessage(apiUrl, token, sender, replyText);
+            await fetch(`${apiUrl}/send/text?token=${token}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", token, Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ number: sender, text: replyText }),
+            });
+            await supabase.from("whatsapp_messages").insert({ user_id: cfg.user_id, wa_chatid: `${sender}@s.whatsapp.net`, text: replyText, from_me: true, wa_timestamp: Date.now() });
           }
+          const carouselResult = await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl);
+          if (carouselResult === "CAROUSEL_SENT") {
+            carouselAlreadySent = true;
+            replyText = "";
+          }
+        }
           const carouselResult = await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl);
           if (carouselResult === "CAROUSEL_SENT") {
             carouselAlreadySent = true;
