@@ -1645,6 +1645,8 @@ Deno.serve(async (req) => {
     // Add conversation history
     for (const msg of history) {
       if (!msg.text) continue;
+      // Skip technical markers in AI context
+      if (msg.text.startsWith("[") && msg.from_me) continue;
       aiMessages.push({
         role: msg.from_me ? "assistant" : "user",
         content: msg.text,
