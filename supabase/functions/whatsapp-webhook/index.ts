@@ -618,12 +618,11 @@ function extractContextFromHistory(history: Array<{ text?: string | null; from_m
   };
 }
 
-function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: any[], services: any[], slots: AvailableSlot[], customerInfo?: any): string {
+function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: any[], services: any[], slots: AvailableSlot[], customerInfo?: any, stages?: Array<{ name: string; instruction: string; skip_if_registered: boolean }>): string {
   const profList = professionals.map((p: any) => `- ${p.name}`).join("\n");
   const svcList = services.map((s: any) => `- ${s.name}: R$ ${Number(s.price || 0).toFixed(2)}`).join("\n");
   const todayStr = formatUtcDate(getBrasiliaTodayUtc());
 
-  // Group slots by date+professional (limit to next ~12 entries)
   const grouped: Record<string, Record<string, string[]>> = {};
   for (const s of slots) {
     if (!grouped[s.date]) grouped[s.date] = {};
@@ -641,6 +640,16 @@ function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: 
     ? `DISPONIBILIDADE (próximos dias):\n${availLines.join("\n")}\n`
     : "";
 
+  const isRegistered = !!customerInfo?.id;
+  const activeStages = (stages || []).filter(s => !(s.skip_if_registered && isRegistered));
+  const stagesBlock = activeStages.length > 0
+    ? `\nETAPAS DA CONVERSA (siga nesta ordem; identifique em qual está pelo histórico e dê o próximo passo):\n${activeStages.map((s, i) => `${i + 1}. [${s.name}] ${s.instruction}`).join("\n")}\n`
+    : "";
+
+  const customerBlock = isRegistered
+    ? `\nCLIENTE JÁ CADASTRADO: ${customerInfo.name}${customerInfo.birth_date ? ` (nasc. ${customerInfo.birth_date})` : ""}. NÃO peça cadastro novamente.\n`
+    : "";
+
   return `Você é a atendente virtual da *${shopName}*. Seu nome é Lia.
 Informal, simpática, natural. Frases curtas.
 DATA ATUAL: ${todayStr}.
@@ -649,8 +658,9 @@ ${svcList}
 PROFISSIONAIS:
 ${profList}
 ${availability}LINK: ${bookingUrl}
-
+${customerBlock}${stagesBlock}
 REGRAS:
+- Siga ESTRITAMENTE as ETAPAS DA CONVERSA acima na ordem definida.
 - Nunca liste profissionais em texto. Use send_professional_carousel.
 - Se já escolheu profissional, não envie carrossel.
 - Use sempre formato de data YYYY-MM-DD e hora HH:MM ao chamar tools.
