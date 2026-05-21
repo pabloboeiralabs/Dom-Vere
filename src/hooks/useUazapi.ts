@@ -243,8 +243,8 @@ export function useUazapi() {
       id: m.id || m.messageid || "",
       wa_chatid: m.wa_chatid || m.chatid || "",
       wa_fromMe: m.wa_fromMe ?? m.fromMe ?? false,
-      wa_text: m.wa_text || m.text || m.content?.text || "",
-      wa_type: m.wa_type || m.messageType || "",
+      wa_text: m.wa_text || m.text || m.content?.text || (m.type === "carousel" ? m.carousel : ""),
+      wa_type: m.wa_type || m.messageType || m.type || "",
       wa_timestamp: m.wa_timestamp || m.messageTimestamp || 0,
       wa_pushName: m.wa_pushName || m.senderName || "",
     }));
