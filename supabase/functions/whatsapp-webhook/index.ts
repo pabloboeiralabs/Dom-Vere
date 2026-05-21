@@ -849,7 +849,7 @@ Deno.serve(async (req) => {
       const carouselResult = await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl);
       if (carouselResult === "CAROUSEL_SENT") {
         carouselAlreadySent = true;
-        replyText = "Escolha o profissional 👆";
+        replyText = ""; // não envia texto por cima do carrossel
       } else {
         replyText = carouselResult;
       }
