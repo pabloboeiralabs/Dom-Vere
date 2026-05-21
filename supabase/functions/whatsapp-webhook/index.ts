@@ -2021,15 +2021,6 @@ Deno.serve(async (req) => {
             replyText = responseText || "Como posso te ajudar? 😊";
           }
 
-                ? `Horário disponível! ${manualSlot.date_label} às ${manualSlot.time} com ${manualSlot.professional_name}. Quer que eu confirme? 😊`
-                : `Infelizmente não encontrei esse horário disponível. Quer tentar outro? 😊`;
-            }
-            // Mark that we already sent the "checking" text
-            carouselAlreadySent = true;
-          } else {
-            replyText = responseText || "Como posso te ajudar? 😊";
-          }
-        }
       }
     } catch (aiErr: any) {
       console.error("[webhook] AI error, using fallback:", aiErr.message);
