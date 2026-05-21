@@ -544,20 +544,48 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const eventType = extractEventType(body);
-    if (eventType && !["messages", "message", "messages.upsert"].includes(eventType)) return new Response(JSON.stringify({ ok: true }));
+    console.log("[webhook] received body:", JSON.stringify(body).slice(0, 500));
 
-    if (isFromMe(body) || isGroupMessage(body)) return new Response(JSON.stringify({ ok: true }));
+    const eventType = extractEventType(body);
+    if (eventType && !["messages", "message", "messages.upsert"].includes(eventType)) return new Response(JSON.stringify({ ok: true, ignored: "event_type" }));
+
+    if (isFromMe(body) || isGroupMessage(body)) return new Response(JSON.stringify({ ok: true, ignored: "self_or_group" }));
 
     const text = extractMessageText(body);
     const sender = extractSender(body);
     const messageId = extractMessageId(body);
+
+    if (!messageId) return new Response(JSON.stringify({ ok: true, ignored: "no_message_id" }));
+
     const payloadToken = extractPayloadToken(body);
     const buttonId = extractButtonId(body);
 
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const cfg = await findWhatsappConfig(supabase, payloadToken, req.url);
     if (!cfg) return new Response(JSON.stringify({ error: "No config" }));
+
+    // Persistent deduplication using DB
+    const { data: existingMsg } = await supabase
+      .from("whatsapp_messages")
+      .select("id")
+      .eq("user_id", cfg.user_id)
+      .eq("wa_message_id", messageId)
+      .maybeSingle();
+
+    if (existingMsg) {
+      console.log("[webhook] Duplicate message detected (DB):", messageId);
+      return new Response(JSON.stringify({ ok: true, ignored: "duplicate" }));
+    }
+
+    // Save inbound message immediately to prevent race conditions
+    await supabase.from("whatsapp_messages").insert({
+      user_id: cfg.user_id,
+      wa_chatid: `${sender}@s.whatsapp.net`,
+      wa_message_id: messageId,
+      text: text || `[Button: ${buttonId}]`,
+      from_me: false,
+      wa_timestamp: Date.now()
+    });
 
     const [settingsRes, profsRes, servsRes, historyRes] = await Promise.all([
       supabase.from("settings").select("*").eq("user_id", cfg.user_id).maybeSingle(),
@@ -584,7 +612,11 @@ Deno.serve(async (req) => {
       const slots = await getAvailableSlots(supabase, cfg.user_id, professionals, 7);
       const systemPrompt = buildSystemPrompt(shopName, bookingUrl, professionals, services, slots);
       const aiMessages = [{ role: "system", content: systemPrompt }, ...history.map(m => ({ role: m.from_me ? "assistant" : "user", content: m.text }))];
-      if (!history.some(m => m.text === text)) aiMessages.push({ role: "user", content: text });
+      
+      // Ensure current message is in context if not in history yet
+      if (!history.some(m => m.wa_message_id === messageId)) {
+        aiMessages.push({ role: "user", content: text || `[Button: ${buttonId}]` });
+      }
 
       const aiResponse = await callAI(aiMessages, [checkAvailabilityTool, appointmentTool, sendCarouselTool]);
       const message = aiResponse.choices?.[0]?.message;
@@ -598,9 +630,13 @@ Deno.serve(async (req) => {
         } else if (tc.function.name === "create_appointment") {
           replyText = await handleToolCall(supabase, cfg.user_id, args, sender, professionals, services);
         } else if (tc.function.name === "send_professional_carousel") {
-          await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl);
-          carouselAlreadySent = true;
-          replyText = "Escolha o profissional 👆";
+          const carouselResult = await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl);
+          if (carouselResult === "CAROUSEL_SENT") {
+            carouselAlreadySent = true;
+            replyText = "Escolha o profissional 👆";
+          } else {
+            replyText = carouselResult;
+          }
         }
       } else {
         replyText = message?.content || "Como posso ajudar?";
@@ -608,6 +644,21 @@ Deno.serve(async (req) => {
     }
 
     if (replyText) {
+      // Avoid duplicated AI replies for the same messageId
+      const { data: existingReply } = await supabase
+        .from("whatsapp_messages")
+        .select("id")
+        .eq("user_id", cfg.user_id)
+        .eq("wa_chatid", `${sender}@s.whatsapp.net`)
+        .eq("text", replyText)
+        .gt("created_at", new Date(Date.now() - 5000).toISOString())
+        .maybeSingle();
+
+      if (existingReply) {
+        console.log("[webhook] Preventing duplicate bot reply");
+        return new Response(JSON.stringify({ ok: true, ignored: "duplicate_reply" }));
+      }
+
       // Auto-create CRM lead
       try {
         const { data: existingLead } = await supabase.from("crm_leads").select("id").eq("user_id", cfg.user_id).eq("wa_chatid", `${sender}@s.whatsapp.net`).maybeSingle();
