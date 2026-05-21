@@ -253,6 +253,113 @@ function formatUtcDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+// Normalize date strings from AI: YYYY-MM-DD, DD/MM/YYYY, DD/MM, DD-MM, "amanha", "hoje"
+function normalizeDate(raw: unknown): string | null {
+  if (!raw) return null;
+  const s = String(raw).trim().toLowerCase();
+  const today = getBrasiliaTodayUtc();
+  if (s === "hoje" || s === "today") return formatUtcDate(today);
+  if (s === "amanha" || s === "amanhã" || s === "tomorrow") return formatUtcDate(addUtcDays(today, 1));
+  // YYYY-MM-DD
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+  // DD/MM/YYYY or DD-MM-YYYY
+  m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (m) {
+    const y = m[3].length === 2 ? `20${m[3]}` : m[3];
+    return `${y}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  }
+  // DD/MM or DD-MM → use current year (or next year if date already passed)
+  m = s.match(/^(\d{1,2})[/-](\d{1,2})$/);
+  if (m) {
+    const y = today.getUTCFullYear();
+    const candidate = `${y}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+    return candidate < formatUtcDate(today) ? `${y + 1}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` : candidate;
+  }
+  return null;
+}
+
+// Normalize time strings: "11", "11h", "11h00", "11:00", "11:00:00", "11.00"
+function normalizeTime(raw: unknown): string | null {
+  if (raw === null || raw === undefined) return null;
+  const s = String(raw).trim().toLowerCase().replace(/\s+/g, "");
+  let m = s.match(/^(\d{1,2})[:h.]?(\d{0,2})(?::\d{1,2})?$/);
+  if (!m) return null;
+  const h = parseInt(m[1], 10);
+  const min = m[2] ? parseInt(m[2], 10) : 0;
+  if (isNaN(h) || h < 0 || h > 23 || isNaN(min) || min < 0 || min > 59) return null;
+  return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+}
+
+// Check availability directly against the DB (schedule range + appointment overlap)
+async function isSlotAvailable(
+  supabase: any,
+  userId: string,
+  dateISO: string,
+  timeHHMM: string,
+  professionalName?: string,
+  professionals?: any[]
+): Promise<{ available: boolean; reason?: string; professional_id?: string }> {
+  const day = new Date(`${dateISO}T12:00:00Z`);
+  const dow = day.getUTCDay();
+  const [hh, mm] = timeHHMM.split(":").map(Number);
+  const minute = hh * 60 + mm;
+
+  // Determine which professionals to check
+  let profsToCheck = professionals || [];
+  if (professionalName) {
+    const filt = profsToCheck.filter((p: any) => p.name.toLowerCase() === professionalName.toLowerCase());
+    if (filt.length > 0) profsToCheck = filt;
+  }
+  if (profsToCheck.length === 0) {
+    const { data } = await supabase.from("professionals").select("id, name").eq("user_id", userId).eq("active", true);
+    profsToCheck = data || [];
+  }
+  const profIds = profsToCheck.map((p: any) => p.id);
+  if (profIds.length === 0) return { available: false, reason: "no_professionals" };
+
+  const { data: schedRows } = await supabase
+    .from("professional_schedules")
+    .select("professional_id, start_time, end_time, active")
+    .in("professional_id", profIds)
+    .eq("day_of_week", dow);
+
+  const candidateProfs = (schedRows || [])
+    .filter((r: any) => r.active !== false)
+    .filter((r: any) => {
+      const [sh, sm] = (r.start_time || "00:00").split(":").map(Number);
+      const [eh, em] = (r.end_time || "00:00").split(":").map(Number);
+      const startM = sh * 60 + (sm || 0);
+      const endM = eh * 60 + (em || 0);
+      return minute >= startM && minute < endM;
+    })
+    .map((r: any) => r.professional_id);
+
+  if (candidateProfs.length === 0) return { available: false, reason: "out_of_schedule" };
+
+  // Check existing appointments overlap
+  const { data: appts } = await supabase
+    .from("appointments")
+    .select("professional_id, start_time, end_time")
+    .eq("user_id", userId)
+    .eq("date", dateISO)
+    .in("professional_id", candidateProfs)
+    .neq("status", "cancelado");
+
+  for (const profId of candidateProfs) {
+    const conflict = (appts || []).some((a: any) => {
+      if (a.professional_id !== profId) return false;
+      const [sh, sm] = (a.start_time || "00:00").split(":").map(Number);
+      const [eh, em] = (a.end_time || "00:00").split(":").map(Number);
+      const startM = sh * 60 + (sm || 0);
+      const endM = eh * 60 + (em || 0);
+      return minute >= startM && minute < endM;
+    });
+    if (!conflict) return { available: true, professional_id: profId };
+  }
+  return { available: false, reason: "occupied" };
+}
+
 async function getAvailableSlots(
   supabase: any,
   userId: string,
@@ -487,11 +594,29 @@ function extractContextFromHistory(history: Array<{ text?: string | null; from_m
   };
 }
 
-function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: any[], services: any[], _slots: AvailableSlot[], customerInfo?: any): string {
+function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: any[], services: any[], slots: AvailableSlot[], customerInfo?: any): string {
   const profList = professionals.map((p: any) => `- ${p.name}`).join("\n");
   const svcList = services.map((s: any) => `- ${s.name}: R$ ${Number(s.price || 0).toFixed(2)}`).join("\n");
   const todayStr = formatUtcDate(getBrasiliaTodayUtc());
-  
+
+  // Group slots by date+professional (limit to next ~12 entries)
+  const grouped: Record<string, Record<string, string[]>> = {};
+  for (const s of slots) {
+    if (!grouped[s.date]) grouped[s.date] = {};
+    if (!grouped[s.date][s.professional_name]) grouped[s.date][s.professional_name] = [];
+    grouped[s.date][s.professional_name].push(s.time);
+  }
+  const availLines: string[] = [];
+  for (const date of Object.keys(grouped).sort().slice(0, 5)) {
+    for (const prof of Object.keys(grouped[date])) {
+      const times = grouped[date][prof].slice(0, 12).join(", ");
+      availLines.push(`- ${date} ${prof}: ${times}`);
+    }
+  }
+  const availability = availLines.length > 0
+    ? `DISPONIBILIDADE (próximos dias):\n${availLines.join("\n")}\n`
+    : "";
+
   return `Você é a atendente virtual da *${shopName}*. Seu nome é Lia.
 Informal, simpática, natural. Frases curtas.
 DATA ATUAL: ${todayStr}.
@@ -499,12 +624,14 @@ SERVIÇOS:
 ${svcList}
 PROFISSIONAIS:
 ${profList}
-LINK: ${bookingUrl}
+${availability}LINK: ${bookingUrl}
 
 REGRAS:
 - Nunca liste profissionais em texto. Use send_professional_carousel.
 - Se já escolheu profissional, não envie carrossel.
-- Quando tiver tudo, use check_availability ou create_appointment.`;
+- Use sempre formato de data YYYY-MM-DD e hora HH:MM ao chamar tools.
+- Quando tiver tudo, use check_availability ou create_appointment.
+- Se o horário pedido pelo cliente estiver dentro do expediente, considere disponível mesmo que não esteja na lista acima.`;
 }
 
 async function handleSendCarousel(apiUrl: string, token: string, sender: string, professionals: any[], bookingUrl: string, _config?: any): Promise<string> {
@@ -570,6 +697,19 @@ async function handleToolCall(supabase: any, userId: string, args: any, senderPh
   const svc = services.find(s => s.name.toLowerCase() === (args.service_name || "").toLowerCase()) || services[0];
   const customerName = args.customer_name || "Cliente";
 
+  const dateISO = normalizeDate(args.date);
+  const timeHHMM = normalizeTime(args.time);
+  console.log("[webhook] create_appointment normalized:", { raw: args, dateISO, timeHHMM });
+  if (!dateISO || !timeHHMM) return "Não consegui entender a data ou horário. Pode repetir? 😊";
+
+  // Validate against schedule + existing appointments
+  const check = await isSlotAvailable(supabase, userId, dateISO, timeHHMM, prof.name, professionals);
+  if (!check.available) {
+    if (check.reason === "out_of_schedule") return "Esse horário está fora do expediente. Quer tentar outro? 😊";
+    if (check.reason === "occupied") return "Esse horário já está ocupado. Quer tentar outro? 😊";
+    return "Não consegui validar esse horário. Quer tentar outro? 😊";
+  }
+
   const { data: cust } = await supabase.from("customers").select("id").eq("user_id", userId).eq("phone", senderPhone).maybeSingle();
   let customerId = cust?.id;
   if (!customerId) {
@@ -577,17 +717,23 @@ async function handleToolCall(supabase: any, userId: string, args: any, senderPh
     customerId = nCust.id;
   }
 
+  // Compute end_time = start + 30min default
+  const [hh, mm] = timeHHMM.split(":").map(Number);
+  const endMin = hh * 60 + mm + 30;
+  const endTime = `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`;
+
   const { error } = await supabase.from("appointments").insert({
     user_id: userId,
     professional_id: prof.id,
-    service_id: svc.id,
+    service_id: svc?.id,
     customer_id: customerId,
-    date: args.date,
-    start_time: args.time,
+    date: dateISO,
+    start_time: timeHHMM,
+    end_time: endTime,
     status: "confirmado",
   });
 
-  return error ? "Erro ao agendar." : `✅ Confirmado! ${args.date} às ${args.time} com ${prof.name}.`;
+  return error ? "Erro ao agendar." : `✅ Confirmado! ${dateISO} às ${timeHHMM} com ${prof.name}.`;
 }
 
 const checkAvailabilityTool = { type: "function", function: { name: "check_availability", parameters: { type: "object", properties: { date: { type: "string" }, time: { type: "string" }, professional_name: { type: "string" } }, required: ["date", "time"] } } };
@@ -697,8 +843,24 @@ Deno.serve(async (req) => {
         const tc = message.tool_calls[0];
         const args = JSON.parse(tc.function.arguments);
         if (tc.function.name === "check_availability") {
-          const exact = slots.find(s => s.date === args.date && s.time === args.time);
-          replyText = exact ? `Horário disponível! Quer confirmar? 😊` : "Horário indisponível. Quer tentar outro? 😊";
+          const dateISO = normalizeDate(args.date);
+          const timeHHMM = normalizeTime(args.time);
+          console.log("[webhook] check_availability normalized:", { raw: args, dateISO, timeHHMM });
+          if (!dateISO || !timeHHMM) {
+            replyText = "Não entendi a data/horário. Pode mandar de novo? 😊";
+          } else {
+            const check = await isSlotAvailable(supabase, cfg.user_id, dateISO, timeHHMM, args.professional_name, professionals);
+            console.log("[webhook] check_availability result:", check);
+            if (check.available) {
+              replyText = `Horário disponível! Quer confirmar ${dateISO} às ${timeHHMM}? 😊`;
+            } else if (check.reason === "out_of_schedule") {
+              replyText = "Esse horário está fora do expediente. Quer tentar outro? 😊";
+            } else if (check.reason === "occupied") {
+              replyText = "Esse horário já está ocupado. Quer tentar outro? 😊";
+            } else {
+              replyText = "Horário indisponível. Quer tentar outro? 😊";
+            }
+          }
         } else if (tc.function.name === "create_appointment") {
           replyText = await handleToolCall(supabase, cfg.user_id, args, sender, professionals, services);
         } else if (tc.function.name === "send_professional_carousel") {

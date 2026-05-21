@@ -1,21 +1,41 @@
-O objetivo é transformar a experiência do usuário final (cliente) em um Aplicativo Progressivo (PWA) fluido, focado em agendamentos intuitivos e acesso rápido a informações relevantes.
+## Problema
 
-### 1. Configuração Técnica do PWA
-*   **Vite PWA Plugin:** Configurar o plugin para gerar automaticamente o `manifest.json` e o `service worker`.
-*   **Manifesto:** Personalizar cores (preto/branco), ícones e nome (Barber Pro).
-*   **Cache Offline:** Configurar estratégias de cache para que a página de agendamento carregue instantaneamente mesmo em conexões lentas.
+O bot disse que 11h de amanhã não tinha vaga, mas a agenda mostra livre. A função `check_availability` no edge function `whatsapp-webhook` falha por 3 motivos combinados:
 
-### 2. Melhorias na Experiência de Agendamento (Página /booking/:userId)
-*   **Modo App:** Remover elementos de navegação desnecessários quando acessado via PWA para parecer um app nativo.
-*   **Persistência de Dados:** Salvar o nome e telefone do cliente localmente após o primeiro agendamento para agilizar os próximos.
-*   **Meus Agendamentos:** Criar uma aba ou seção para o cliente visualizar e gerenciar seus próprios agendamentos futuros (usando o telefone como chave de busca/filtro).
+1. **System prompt não inclui os horários disponíveis** — a IA não sabe os slots reais e chuta data/hora.
+2. **Match exato de string** — `slots.find(s => s.date === args.date && s.time === args.time)` falha se a IA mandar `"11"`, `"11h"`, `"11:00:00"`, `"22/05"` em vez de `YYYY-MM-DD` + `HH:MM`.
+3. **Slots em buckets fixos de 30min a partir do start_time** — horários "redondos" como 11:00 podem nem ser gerados se o expediente não começa em hora cheia/meia.
 
-### 3. Funcionalidades para o Usuário Final
-*   **Histórico de Visitas:** Permitir que o cliente veja seus últimos cortes e serviços.
-*   **Status de Planos:** Se o cliente possui um plano ativo, mostrar quantos créditos restam diretamente no app.
-*   **Notificações (Futuro):** Preparar a estrutura para notificações push de lembrete (requer integração adicional com push API).
+## Correção (apenas no edge function `supabase/functions/whatsapp-webhook/index.ts`)
 
-### Detalhes Técnicos
-*   Utilização do `vite-plugin-pwa` para gerenciamento do Service Worker.
-*   Implementação de `localStorage` para persistência de perfil do cliente.
-*   Criação de novos componentes leves para a interface mobile-first do cliente.
+### 1. Normalizar entrada da IA
+Helpers `normalizeDate(args.date)` e `normalizeTime(args.time)`:
+- Data: aceita `YYYY-MM-DD`, `DD/MM/YYYY`, `DD/MM`, `DD-MM`; resolve "amanhã" no fuso de Brasília quando ambíguo.
+- Hora: aceita `11`, `11h`, `11h00`, `11:00`, `11:00:00` → devolve `HH:MM`.
+
+### 2. Verificação real contra o banco (substitui o `slots.find`)
+Nova função `isSlotAvailable(supabase, userId, dateISO, timeHHMM, professionalName?)`:
+- Calcula `day_of_week` da data.
+- Busca `professional_schedules` ativas para esse dia (filtrando por profissional se informado).
+- Retorna `true` se o horário cai dentro de alguma faixa `[start_time, end_time)` E não existe `appointments` (status ≠ cancelado) sobrepondo aquele minuto.
+
+Assim 11:00 é validado contra a faixa real (ex.: 08:00–18:00), independente do bucket de 30min.
+
+### 3. Mostrar slots à IA
+Em `buildSystemPrompt`, listar os próximos ~12 slots agregados (data + horários por profissional) para a IA propor opções coerentes. Ex.:
+```
+DISPONIBILIDADE (próximos dias):
+- 2026-05-22 (sex) João: 09:00, 09:30, 11:00, 14:00
+- 2026-05-22 (sex) Pedro: 10:00, 10:30
+```
+
+### 4. Aplicar mesma normalização em `create_appointment`
+`handleToolCall` chama `normalizeDate`/`normalizeTime` antes do `insert` e revalida via `isSlotAvailable` para evitar gravar horário fora do expediente.
+
+### 5. Logs
+Logar `args` recebidos da IA, valor normalizado e resultado de `isSlotAvailable` para diagnóstico futuro.
+
+## Fora de escopo
+- Mudanças de UI no painel `/reports` ou agenda.
+- Alterações em schema do banco.
+- Carrossel WhatsApp (já tratado em mensagem anterior).
