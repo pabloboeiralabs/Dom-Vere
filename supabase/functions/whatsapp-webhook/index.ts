@@ -487,23 +487,59 @@ REGRAS:
 }
 
 async function handleSendCarousel(apiUrl: string, token: string, sender: string, professionals: any[], bookingUrl: string, _config?: any): Promise<string> {
-  const carousel = professionals.map((p: any) => ({
-    text: `💈 *${p.name}*`,
+  // Verificamos se profissionais têm os dados necessários
+  const cards = professionals.map((p: any) => ({
+    title: p.name,
+    description: "Profissional",
     image: p.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}`,
-    buttons: [{ id: `PROF_${p.name}`, text: `Escolher ${p.name.split(" ")[0]}`, type: "REPLY" }],
+    buttons: [
+      {
+        type: "reply",
+        text: `Escolher ${p.name.split(" ")[0]}`,
+        id: `PROF_${p.name}`
+      }
+    ]
   }));
 
   try {
+    // Tentativa com o novo formato de carrossel (alguns provedores mudaram para 'cards')
     const res = await fetch(`${apiUrl}/send/carousel?token=${token}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", token, Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ number: sender, text: "Escolha o profissional:", carousel, readchat: true }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        number: sender, 
+        text: "Escolha o profissional:", 
+        cards: cards, // Algumas APIs usam 'cards' em vez de 'carousel'
+        carousel: cards, // Manter fallback
+        readchat: true 
+      }),
     });
-    console.log("[webhook] carousel sent:", res.status);
-    return "CAROUSEL_SENT";
+    console.log("[webhook] carousel attempt:", res.status);
+    
+    if (res.status === 200) return "CAROUSEL_SENT";
+    
+    // Se falhar ou não for 200, fallback para botões simples (limitado a 3)
+    if (professionals.length <= 3) {
+      await fetch(`${apiUrl}/send/buttons?token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          number: sender,
+          text: "Escolha o profissional abaixo:",
+          buttons: professionals.map(p => ({
+            type: "reply",
+            text: p.name,
+            id: `PROF_${p.name}`
+          }))
+        })
+      });
+      return "CAROUSEL_SENT";
+    }
+
+    throw new Error("Carousel failed");
   } catch (err: any) {
     console.error("[webhook] carousel error:", err.message);
-    return `Escolha um profissional:\n${professionals.map((p, i) => `${i+1} ${p.name}`).join("\n")}\n\nLink: ${bookingUrl}`;
+    return `Escolha um profissional:\n${professionals.map((p, i) => `${i+1} ${p.name}`).join("\n")}\n\nOu agende pelo link: ${bookingUrl}`;
   }
 }
 
