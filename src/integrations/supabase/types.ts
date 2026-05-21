@@ -330,6 +330,44 @@ export type Database = {
           },
         ]
       }
+      inventory_transactions: {
+        Row: {
+          created_at: string
+          id: string
+          product_id: string
+          quantity: number
+          reason: string | null
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          product_id: string
+          quantity: number
+          reason?: string | null
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          product_id?: string
+          quantity?: number
+          reason?: string | null
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_transactions_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plan_services: {
         Row: {
           id: string
@@ -477,6 +515,109 @@ export type Database = {
           usage_limit?: number | null
           user_id?: string
           validity_days?: number | null
+        }
+        Relationships: []
+      }
+      product_sales: {
+        Row: {
+          commission_amount: number
+          created_at: string
+          customer_id: string | null
+          id: string
+          product_id: string
+          professional_id: string | null
+          quantity: number
+          total_price: number
+          unit_price: number
+          user_id: string
+        }
+        Insert: {
+          commission_amount?: number
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          product_id: string
+          professional_id?: string | null
+          quantity?: number
+          total_price: number
+          unit_price: number
+          user_id: string
+        }
+        Update: {
+          commission_amount?: number
+          created_at?: string
+          customer_id?: string | null
+          id?: string
+          product_id?: string
+          professional_id?: string | null
+          quantity?: number
+          total_price?: number
+          unit_price?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_sales_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_sales_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_sales_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "professionals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          active: boolean
+          commission_percent: number | null
+          cost_price: number | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          price: number
+          stock_quantity: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          commission_percent?: number | null
+          cost_price?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          price?: number
+          stock_quantity?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          commission_percent?: number | null
+          cost_price?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          price?: number
+          stock_quantity?: number
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
