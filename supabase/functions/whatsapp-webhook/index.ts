@@ -133,7 +133,12 @@ function extractPayloadToken(body: any): string {
 async function findWhatsappConfig(supabase: any, payloadToken: string, requestUrl: string, ownerNumber = "") {
   let urlUserId = "";
   try {
-    urlUserId = new URL(requestUrl).searchParams.get("user_id") || "";
+    const url = new URL(requestUrl);
+    urlUserId = url.searchParams.get("user_id") || "";
+    // Clean up user_id if it contains path segments (some providers might append them)
+    if (urlUserId.includes("/")) {
+      urlUserId = urlUserId.split("/")[0];
+    }
   } catch (e) {
     console.error("[webhook] invalid request URL", requestUrl);
   }
