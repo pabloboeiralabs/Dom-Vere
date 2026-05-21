@@ -28,25 +28,46 @@ function isDuplicateMessage(key: string): boolean {
   return false;
 }
 
-function extractEventType(body: any): string {
-  const raw = body?.EventType || body?.eventType || body?.type || body?.event;
-  if (typeof raw === "string") return raw.toLowerCase();
-  if (typeof body?.event?.Type === "string") return body.event.Type.toLowerCase();
+function extractEventType(body: any, url?: string): string {
+  // If it has a clear EventType, use it
+  let raw = body?.EventType || body?.eventType || body?.type || body?.event;
+  if (typeof raw === "object" && raw?.Type) raw = raw.Type; // Handle nested event object
+  
+  if (typeof raw === "string") {
+    const et = raw.toLowerCase();
+    // Ignore status updates
+    if (["delivered", "read", "sent", "messages_update", "message_update"].includes(et)) return "status_update";
+    if (body?.event?.Type?.toLowerCase() === "delivered") return "status_update";
+    return et;
+  }
+  
+  if (url) {
+    const urlObj = new URL(url);
+    const path = (urlObj.pathname + urlObj.search).toLowerCase();
+    if (path.includes("messages/text")) return "text_message";
+    if (path.includes("messages_update")) return "status_update";
+    if (path.includes("chats")) return "status_update";
+  }
+  
+  // Fallback: if it has message content, it's probably a message
+  if (body?.message || body?.data?.message || body?.wa_text || body?.text) return "message";
+  
   return "";
 }
 
 function extractMessageId(body: any): string {
-  return (
+  const id = (
     body?.data?.key?.id ||
     body?.key?.id ||
     body?.message?.id ||
     body?.message?.messageid ||
     body?.wa_message_id ||
     body?.event?.MessageIDs?.[0] ||
+    body?.event?.id ||
+    body?.id ||
     ""
-  )
-    .toString()
-    .trim();
+  ).toString().trim();
+  return id;
 }
 
 function extractMessageTimestamp(body: any): number {
@@ -574,24 +595,39 @@ const appointmentTool = { type: "function", function: { name: "create_appointmen
 const sendCarouselTool = { type: "function", function: { name: "send_professional_carousel", parameters: { type: "object", properties: {} } } };
 
 Deno.serve(async (req) => {
+  console.log("[webhook] Request received:", req.method, req.url);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method === "GET") return new Response("Online");
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
   try {
     const body = await req.json();
-    console.log("[webhook] received body:", JSON.stringify(body).slice(0, 500));
+    console.log("[webhook] Body keys:", Object.keys(body));
 
-    const eventType = extractEventType(body);
-    if (eventType && !["messages", "message", "messages.upsert"].includes(eventType)) return new Response(JSON.stringify({ ok: true, ignored: "event_type" }));
 
-    if (isFromMe(body) || isGroupMessage(body)) return new Response(JSON.stringify({ ok: true, ignored: "self_or_group" }));
+    const eventType = extractEventType(body, req.url);
+    console.log("[webhook] EventType:", eventType);
+    
+    // Whitelist event types - extended to be more permissive
+    const allowedEvents = ["messages", "message", "messages.upsert", "message.upsert", "text_message", "message.text"];
+    if (eventType === "status_update") return new Response(JSON.stringify({ ok: true, ignored: "status_update" }));
+    
+    if (eventType && !allowedEvents.includes(eventType)) {
+      console.log("[webhook] Ignored event type:", eventType);
+      return new Response(JSON.stringify({ ok: true, ignored: "event_type", type: eventType }));
+    }
 
     const text = extractMessageText(body);
     const sender = extractSender(body);
     const messageId = extractMessageId(body);
+    const isMe = isFromMe(body);
 
-    if (!messageId) return new Response(JSON.stringify({ ok: true, ignored: "no_message_id" }));
+    console.log("[webhook] Parsed:", { messageId, sender, text: text?.slice(0, 20), isMe });
+
+    if (!messageId && !text) {
+      console.log("[webhook] No message ID and no text, ignoring.");
+      return new Response(JSON.stringify({ ok: true, ignored: "no_data" }));
+    }
 
     const payloadToken = extractPayloadToken(body);
     const buttonId = extractButtonId(body);
@@ -679,6 +715,7 @@ Deno.serve(async (req) => {
       }
     }
 
+    console.log("[webhook] Sending reply:", { sender, replyText: replyText?.slice(0, 50) });
     if (replyText) {
       // Avoid duplicated AI replies for the same messageId
       const { data: existingReply } = await supabase
