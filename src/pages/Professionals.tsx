@@ -223,16 +223,13 @@ export default function Professionals() {
       toast.error("Selecione uma imagem válida");
       return;
     }
-    let finalFile = file;
-    if (file.size > 5 * 1024 * 1024) {
-      try {
-        toast.info("Comprimindo imagem...");
-        finalFile = await compressImage(file);
-        toast.success("Imagem comprimida com sucesso");
-      } catch {
-        toast.error("Erro ao comprimir imagem");
-        return;
-      }
+    // Sempre normalizar para JPEG (WhatsApp Carousel só renderiza JPG/PNG)
+    let finalFile: File;
+    try {
+      finalFile = await compressImage(file);
+    } catch {
+      toast.error("Erro ao processar imagem");
+      return;
     }
     setPhotoFile(finalFile);
     setPhotoPreview(URL.createObjectURL(finalFile));
@@ -240,12 +237,12 @@ export default function Professionals() {
 
   const uploadPhoto = async (professionalId: string): Promise<string | null> => {
     if (!photoFile) return null;
-    const ext = photoFile.name.split(".").pop() || "jpg";
-    const path = `${professionalId}.${ext}`;
+    // Forçar .jpg para compatibilidade com WhatsApp Carousel
+    const path = `${professionalId}.jpg`;
     
     const { error } = await supabase.storage
       .from("professionals")
-      .upload(path, photoFile, { upsert: true });
+      .upload(path, photoFile, { upsert: true, contentType: "image/jpeg" });
     
     if (error) {
       console.error("Upload error:", error);
