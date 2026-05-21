@@ -751,7 +751,11 @@ async function handleToolCall(supabase: any, userId: string, args: any, senderPh
     status: "confirmado",
   });
 
-  return error ? "Erro ao agendar." : `✅ Confirmado! ${dateISO} às ${timeHHMM} com ${prof.name}.`;
+  if (error) {
+    console.error("[webhook] appointment insert error:", JSON.stringify(error));
+    return "Erro ao agendar.";
+  }
+  return `✅ Confirmado! ${dateISO} às ${timeHHMM} com ${prof.name}.`;
 }
 
 const checkAvailabilityTool = { type: "function", function: { name: "check_availability", parameters: { type: "object", properties: { date: { type: "string" }, time: { type: "string" }, professional_name: { type: "string" } }, required: ["date", "time"] } } };
