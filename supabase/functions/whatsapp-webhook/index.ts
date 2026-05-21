@@ -608,6 +608,25 @@ Deno.serve(async (req) => {
     }
 
     if (replyText) {
+      // Auto-create CRM lead
+      try {
+        const { data: existingLead } = await supabase.from("crm_leads").select("id").eq("user_id", cfg.user_id).eq("wa_chatid", `${sender}@s.whatsapp.net`).maybeSingle();
+        if (!existingLead) {
+          await supabase.from("crm_leads").insert({
+            user_id: cfg.user_id,
+            wa_chatid: `${sender}@s.whatsapp.net`,
+            phone: sender,
+            name: "Novo Lead",
+            stage: "novo",
+            last_interaction_at: new Date().toISOString(),
+          });
+        } else {
+          await supabase.from("crm_leads").update({ last_interaction_at: new Date().toISOString() }).eq("id", existingLead.id);
+        }
+      } catch (e) {
+        console.warn("[webhook] CRM lead error:", e);
+      }
+
       await fetch(`${apiUrl}/send/text?token=${token}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", token, Authorization: `Bearer ${token}` },
