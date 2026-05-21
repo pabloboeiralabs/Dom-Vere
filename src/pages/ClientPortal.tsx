@@ -87,7 +87,7 @@ export default function ClientPortal() {
       return;
     }
     setLoading(true);
-    const { data, error } = await supabase.rpc("client_portal_login", {
+    const { data, error } = await (supabase as any).rpc("client_portal_login", {
       p_phone: phone,
       p_birth_date: birthDate,
     });
@@ -96,11 +96,11 @@ export default function ClientPortal() {
       toast.error("Erro ao buscar seus dados");
       return;
     }
-    if (!data || data.length === 0) {
+    if (!data || (data as any[]).length === 0) {
       toast.error("Não encontramos seu cadastro. Verifique os dados.");
       return;
     }
-    const s = data[0] as Session;
+    const s = (data as any[])[0] as Session;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
     setSession(s);
     toast.success(`Olá, ${s.name}!`);
