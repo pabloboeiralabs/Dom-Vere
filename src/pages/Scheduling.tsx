@@ -502,9 +502,11 @@ interface DailyViewProps {
   updateStatus: (id: string, status: string) => void;
 }
 
-function DailyView({ professionals, selectedDate, getDayScheduleForProf, getAppointmentAtSlot, isSlotOccupied, isWithinSchedule, openNewAppointment, updateStatus }: DailyViewProps) {
+function DailyView({ professionals, selectedDate, appointments, getDayScheduleForProf, getAppointmentAtSlot, isSlotOccupied, isWithinSchedule, openNewAppointment, updateStatus }: DailyViewProps) {
   const allSchedules = professionals.map((p) => getDayScheduleForProf(p.id, selectedDate)).filter(Boolean) as Schedule[];
-  if (allSchedules.length === 0) {
+  const dayAppointments = appointments.filter((a) => isSameDay(parseLocalDate(a.date), selectedDate));
+
+  if (allSchedules.length === 0 && dayAppointments.length === 0) {
     return (
       <Card>
         <CardContent className="py-12 text-center">
@@ -514,9 +516,13 @@ function DailyView({ professionals, selectedDate, getDayScheduleForProf, getAppo
     );
   }
 
-  const earliestStart = allSchedules.reduce((min, s) => (s.start_time < min ? s.start_time : min), "23:59");
-  const latestEnd = allSchedules.reduce((max, s) => (s.end_time > max ? s.end_time : max), "00:00");
-  const timeSlots = generateTimeSlots(earliestStart.substring(0, 5), latestEnd.substring(0, 5), 30);
+  const scheduleStarts = allSchedules.map((s) => s.start_time.substring(0, 5));
+  const scheduleEnds = allSchedules.map((s) => s.end_time.substring(0, 5));
+  const appointmentStarts = dayAppointments.map((a) => a.start_time?.substring(0, 5)).filter(Boolean) as string[];
+  const appointmentEnds = dayAppointments.map((a) => a.end_time?.substring(0, 5)).filter(Boolean) as string[];
+  const earliestStart = [...scheduleStarts, ...appointmentStarts].reduce((min, time) => (time < min ? time : min), "23:59");
+  const latestEnd = [...scheduleEnds, ...appointmentEnds].reduce((max, time) => (time > max ? time : max), "00:00");
+  const timeSlots = generateTimeSlots(earliestStart, latestEnd, 30);
 
   return (
     <div className="overflow-x-auto">
