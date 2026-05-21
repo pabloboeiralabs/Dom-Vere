@@ -527,6 +527,7 @@ export type Database = {
           product_id: string
           professional_id: string | null
           quantity: number
+          sale_type: string
           total_price: number
           unit_price: number
           user_id: string
@@ -539,6 +540,7 @@ export type Database = {
           product_id: string
           professional_id?: string | null
           quantity?: number
+          sale_type?: string
           total_price: number
           unit_price: number
           user_id: string
@@ -551,6 +553,7 @@ export type Database = {
           product_id?: string
           professional_id?: string | null
           quantity?: number
+          sale_type?: string
           total_price?: number
           unit_price?: number
           user_id?: string
