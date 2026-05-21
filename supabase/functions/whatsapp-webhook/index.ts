@@ -36,17 +36,18 @@ function extractEventType(body: any): string {
 }
 
 function extractMessageId(body: any): string {
-  return (
+  const id = (
     body?.data?.key?.id ||
     body?.key?.id ||
     body?.message?.id ||
     body?.message?.messageid ||
     body?.wa_message_id ||
     body?.event?.MessageIDs?.[0] ||
+    body?.event?.id ||
+    body?.id ||
     ""
-  )
-    .toString()
-    .trim();
+  ).toString().trim();
+  return id;
 }
 
 function extractMessageTimestamp(body: any): number {
@@ -580,18 +581,30 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    console.log("[webhook] received body:", JSON.stringify(body).slice(0, 500));
+    console.log("[webhook] Body keys:", Object.keys(body));
+    console.log("[webhook] Full Body:", JSON.stringify(body));
 
     const eventType = extractEventType(body);
-    if (eventType && !["messages", "message", "messages.upsert"].includes(eventType)) return new Response(JSON.stringify({ ok: true, ignored: "event_type" }));
-
-    if (isFromMe(body) || isGroupMessage(body)) return new Response(JSON.stringify({ ok: true, ignored: "self_or_group" }));
+    console.log("[webhook] EventType:", eventType);
+    
+    // Whitelist event types - extended to be more permissive
+    const allowedEvents = ["messages", "message", "messages.upsert", "message.upsert", "text_message"];
+    if (eventType && !allowedEvents.includes(eventType)) {
+      console.log("[webhook] Ignored event type:", eventType);
+      return new Response(JSON.stringify({ ok: true, ignored: "event_type", type: eventType }));
+    }
 
     const text = extractMessageText(body);
     const sender = extractSender(body);
     const messageId = extractMessageId(body);
+    const isMe = isFromMe(body);
 
-    if (!messageId) return new Response(JSON.stringify({ ok: true, ignored: "no_message_id" }));
+    console.log("[webhook] Parsed:", { messageId, sender, text: text?.slice(0, 20), isMe });
+
+    if (!messageId && !text) {
+      console.log("[webhook] No message ID and no text, ignoring.");
+      return new Response(JSON.stringify({ ok: true, ignored: "no_data" }));
+    }
 
     const payloadToken = extractPayloadToken(body);
     const buttonId = extractButtonId(body);
