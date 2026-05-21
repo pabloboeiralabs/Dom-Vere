@@ -29,17 +29,29 @@ function isDuplicateMessage(key: string): boolean {
 }
 
 function extractEventType(body: any, url?: string): string {
-  const raw = body?.EventType || body?.eventType || body?.type || body?.event;
-  if (typeof raw === "string") return raw.toLowerCase();
-  if (typeof body?.event?.Type === "string") return body.event.Type.toLowerCase();
+  // If it has a clear EventType, use it
+  let raw = body?.EventType || body?.eventType || body?.type || body?.event;
+  if (typeof raw === "object" && raw?.Type) raw = raw.Type; // Handle nested event object
+  
+  if (typeof raw === "string") {
+    const et = raw.toLowerCase();
+    // Ignore status updates
+    if (["delivered", "read", "sent", "messages_update", "message_update"].includes(et)) return "status_update";
+    if (body?.event?.Type?.toLowerCase() === "delivered") return "status_update";
+    return et;
+  }
   
   if (url) {
     const urlObj = new URL(url);
-    const path = urlObj.pathname + urlObj.search;
+    const path = (urlObj.pathname + urlObj.search).toLowerCase();
     if (path.includes("messages/text")) return "text_message";
-    if (path.includes("messages_update")) return "messages_update";
-    if (path.includes("chats")) return "chats_update";
+    if (path.includes("messages_update")) return "status_update";
+    if (path.includes("chats")) return "status_update";
   }
+  
+  // Fallback: if it has message content, it's probably a message
+  if (body?.message || body?.data?.message || body?.wa_text || body?.text) return "message";
+  
   return "";
 }
 
@@ -597,8 +609,8 @@ Deno.serve(async (req) => {
     console.log("[webhook] EventType:", eventType);
     
     // Whitelist event types - extended to be more permissive
-    const allowedEvents = ["messages", "message", "messages.upsert", "message.upsert", "text_message"];
-    if (eventType && !allowedEvents.includes(eventType)) {
+    const allowedEvents = ["messages", "message", "messages.upsert", "message.upsert", "text_message", "message.text"];
+    if (eventType === "status_update") return new Response(JSON.stringify({ ok: true, ignored: "status_update" }));
       console.log("[webhook] Ignored event type:", eventType);
       return new Response(JSON.stringify({ ok: true, ignored: "event_type", type: eventType }));
     }
