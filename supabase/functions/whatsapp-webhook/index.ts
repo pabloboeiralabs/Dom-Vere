@@ -611,6 +611,8 @@ Deno.serve(async (req) => {
     // Whitelist event types - extended to be more permissive
     const allowedEvents = ["messages", "message", "messages.upsert", "message.upsert", "text_message", "message.text"];
     if (eventType === "status_update") return new Response(JSON.stringify({ ok: true, ignored: "status_update" }));
+    
+    if (eventType && !allowedEvents.includes(eventType)) {
       console.log("[webhook] Ignored event type:", eventType);
       return new Response(JSON.stringify({ ok: true, ignored: "event_type", type: eventType }));
     }
