@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CreditCard, Package, ShoppingCart, Plus, User, Search } from "lucide-react";
+import { CreditCard, Package, ShoppingCart, Plus, User, Search, UserCircle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 interface Transaction {
   id: string;
@@ -30,6 +31,7 @@ interface ProductSale {
   quantity: number;
   total_price: number;
   commission_amount: number;
+  sale_type: 'venda' | 'consumo_colaborador';
   created_at: string;
 }
 
@@ -52,6 +54,7 @@ export default function Sales() {
   const [selectedProf, setSelectedProf] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState("");
   const [quantity, setQuantity] = useState("1");
+  const [saleType, setSaleType] = useState<'venda' | 'consumo_colaborador'>('venda');
   const [loading, setLoading] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -69,6 +72,7 @@ export default function Sales() {
           quantity,
           total_price,
           commission_amount,
+          sale_type,
           created_at,
           products(name),
           professionals(name),
@@ -83,6 +87,7 @@ export default function Sales() {
           quantity: s.quantity,
           total_price: s.total_price,
           commission_amount: s.commission_amount,
+          sale_type: s.sale_type,
           created_at: s.created_at,
           product_name: s.products?.name || "Produto removido",
           professional_name: s.professionals?.name || null,
@@ -124,12 +129,14 @@ export default function Sales() {
       }
 
       const qty = parseInt(quantity);
-      const totalPrice = product.price * qty;
+      const totalPrice = saleType === 'venda' ? (product.price * qty) : 0; // Consumption might be free for the barber, or charged differently. Defaulting to 0 for tracking usage.
       
-      // Calculate commission
-      // Use product specific commission if available, otherwise professional's default, or 0
-      const commPercent = product.commission_percent !== null ? product.commission_percent : (professional?.commission_percent || 0);
-      const commissionAmount = (totalPrice * commPercent) / 100;
+      // Calculate commission (only for actual sales)
+      let commissionAmount = 0;
+      if (saleType === 'venda') {
+        const commPercent = product.commission_percent !== null ? product.commission_percent : (professional?.commission_percent || 0);
+        commissionAmount = (totalPrice * commPercent) / 100;
+      }
 
       const { error } = await supabase.from("product_sales").insert({
         user_id: user.id,
@@ -139,12 +146,13 @@ export default function Sales() {
         quantity: qty,
         unit_price: product.price,
         total_price: totalPrice,
-        commission_amount: commissionAmount
+        commission_amount: commissionAmount,
+        sale_type: saleType
       });
 
       if (error) throw error;
       
-      toast.success("Venda registrada com sucesso!");
+      toast.success(saleType === 'venda' ? "Venda registrada!" : "Consumo registrado!");
       setSaleDialogOpen(false);
       loadData();
       
@@ -153,6 +161,7 @@ export default function Sales() {
       setSelectedProf("");
       setSelectedCustomer("");
       setQuantity("1");
+      setSaleType('venda');
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -167,14 +176,14 @@ export default function Sales() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-foreground">Vendas e Créditos</h1>
         <Button onClick={handleOpenSale} className="gap-2">
-          <ShoppingCart className="h-4 w-4" /> Vender Produto
+          <ShoppingCart className="h-4 w-4" /> Registrar Saída
         </Button>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-2 max-w-md">
           <TabsTrigger value="creditos">Créditos / Planos</TabsTrigger>
-          <TabsTrigger value="produtos">Produtos</TabsTrigger>
+          <TabsTrigger value="produtos">Produtos / Consumo</TabsTrigger>
         </TabsList>
 
         <TabsContent value="creditos">
@@ -220,12 +229,12 @@ export default function Sales() {
 
         <TabsContent value="produtos">
           <Card className="border-border/50">
-            <CardHeader><CardTitle className="text-foreground">Vendas de Produtos</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-foreground">Saídas de Produtos</CardTitle></CardHeader>
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Produto</TableHead>
+                    <TableHead>Produto / Tipo</TableHead>
                     <TableHead className="hidden md:table-cell">Profissional / Cliente</TableHead>
                     <TableHead className="text-center">Qtd</TableHead>
                     <TableHead className="text-right">Total</TableHead>
@@ -236,10 +245,15 @@ export default function Sales() {
                 <TableBody>
                   {productSales.map((s) => (
                     <TableRow key={s.id}>
-                      <TableCell className="font-medium text-foreground">{s.product_name}</TableCell>
+                      <TableCell>
+                        <div className="font-medium text-foreground">{s.product_name}</div>
+                        <Badge variant={s.sale_type === 'venda' ? "default" : "outline"} className="text-[10px] px-1 py-0">
+                          {s.sale_type === 'venda' ? 'Venda' : 'Consumo'}
+                        </Badge>
+                      </TableCell>
                       <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
                         <div className="flex flex-col">
-                          {s.professional_name && <span className="flex items-center gap-1"><User className="h-3 w-3" /> {s.professional_name}</span>}
+                          {s.professional_name && <span className="flex items-center gap-1"><UserCircle className="h-3 w-3" /> {s.professional_name}</span>}
                           {s.customer_name && <span className="text-xs">Cli: {s.customer_name}</span>}
                         </div>
                       </TableCell>
@@ -252,7 +266,7 @@ export default function Sales() {
                     </TableRow>
                   ))}
                   {productSales.length === 0 && (
-                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhuma venda de produto registrada</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Nenhuma saída registrada</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
@@ -261,11 +275,25 @@ export default function Sales() {
         </TabsContent>
       </Tabs>
 
-      {/* Dialog Nova Venda */}
+      {/* Dialog Nova Venda/Consumo */}
       <Dialog open={saleDialogOpen} onOpenChange={setSaleDialogOpen}>
         <DialogContent className="sm:max-w-[450px]">
-          <DialogHeader><DialogTitle>Registrar Venda de Produto</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Registrar Saída de Produto</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label>Tipo de Saída</Label>
+              <RadioGroup value={saleType} onValueChange={(v: any) => setSaleType(v)} className="flex gap-4">
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="venda" id="venda" />
+                  <Label htmlFor="venda" className="cursor-pointer">Venda</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="consumo_colaborador" id="consumo" />
+                  <Label htmlFor="consumo" className="cursor-pointer">Consumo Colaborador</Label>
+                </div>
+              </RadioGroup>
+            </div>
+
             <div className="grid gap-2">
               <Label>Produto</Label>
               <Select value={selectedProduct} onValueChange={setSelectedProduct}>
@@ -288,13 +316,12 @@ export default function Sales() {
                 <Input type="number" min="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
               </div>
               <div className="grid gap-2">
-                <Label>Vendedor (Barbeiro)</Label>
+                <Label>{saleType === 'venda' ? 'Vendedor (Barbeiro)' : 'Colaborador'}</Label>
                 <Select value={selectedProf} onValueChange={setSelectedProf}>
                   <SelectTrigger>
                     <SelectValue placeholder="Opcional" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none_selection">Nenhum</SelectItem>
                     {professionals.map(p => (
                       <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                     ))}
@@ -303,25 +330,26 @@ export default function Sales() {
               </div>
             </div>
 
-            <div className="grid gap-2">
-              <Label>Cliente</Label>
-              <Select value={selectedCustomer} onValueChange={setSelectedCustomer}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Opcional" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none_customer">Nenhum</SelectItem>
-                  {customers.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {saleType === 'venda' && (
+              <div className="grid gap-2">
+                <Label>Cliente</Label>
+                <Select value={selectedCustomer} onValueChange={setSelectedCustomer}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Opcional" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {customers.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSaleDialogOpen(false)}>Cancelar</Button>
             <Button onClick={handleCreateSale} disabled={loading || !selectedProduct}>
-              {loading ? "Processando..." : "Confirmar Venda"}
+              {loading ? "Processando..." : "Confirmar"}
             </Button>
           </DialogFooter>
         </DialogContent>
