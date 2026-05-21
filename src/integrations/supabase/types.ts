@@ -1089,6 +1089,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      client_portal_history: {
+        Args: { p_customer_id: string }
+        Returns: {
+          amount: number
+          description: string
+          record_date: string
+          record_type: string
+        }[]
+      }
       exec_sql: { Args: { sql_query: string }; Returns: Json }
       get_admin_stats: {
         Args: never

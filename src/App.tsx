@@ -33,6 +33,7 @@ const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
 const ChangePassword = lazy(() => import("@/pages/ChangePassword"));
 const AdminCredentials = lazy(() => import("@/pages/AdminCredentials"));
 const ClientLayoutPreview = lazy(() => import("@/pages/ClientLayoutPreview"));
+const ClientPortal = lazy(() => import("@/pages/ClientPortal"));
 
 const SuspenseWrap = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<div className="flex-1 flex items-center justify-center p-8"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>}>
@@ -54,6 +55,7 @@ const App = () => (
             <Route path="/change-password" element={<SuspenseWrap><ChangePassword /></SuspenseWrap>} />
             <Route path="/reset-password" element={<SuspenseWrap><ResetPassword /></SuspenseWrap>} />
             <Route path="/booking/:userId" element={<SuspenseWrap><Booking /></SuspenseWrap>} />
+            <Route path="/cliente" element={<SuspenseWrap><ClientPortal /></SuspenseWrap>} />
             <Route path="/professional-panel" element={<ProtectedRoute requiredRole="profissional"><SuspenseWrap><ProfessionalDashboard /></SuspenseWrap></ProtectedRoute>} />
             <Route path="/" element={<Navigate to="/reports" replace />} />
             <Route path="/home" element={<Navigate to="/reports" replace />} />
