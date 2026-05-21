@@ -33,6 +33,7 @@ const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
 const ChangePassword = lazy(() => import("@/pages/ChangePassword"));
 const AdminCredentials = lazy(() => import("@/pages/AdminCredentials"));
 const ClientLayoutPreview = lazy(() => import("@/pages/ClientLayoutPreview"));
+const ClientPortal = lazy(() => import("@/pages/ClientPortal"));
 
 const SuspenseWrap = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<div className="flex-1 flex items-center justify-center p-8"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>}>
