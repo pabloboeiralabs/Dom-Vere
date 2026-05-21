@@ -14,21 +14,31 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Users, Settings, Shield, Scissors, BarChart2, Clock, CreditCard, MessageSquare, Bot, CalendarClock, Megaphone, UserCheck, Kanban, Smartphone, Package, ShoppingCart } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-const mainItems = [
+const generalItems = [
   { title: "Relatórios", url: "/reports", icon: BarChart2 },
   { title: "Agendas", url: "/scheduling", icon: CalendarClock },
+];
+
+const salesItems = [
   { title: "Vendas", url: "/sales", icon: ShoppingCart },
   { title: "Produtos", url: "/products", icon: Package },
+];
+
+const managementItems = [
   { title: "Clientes", url: "/clients", icon: Users },
   { title: "Profissionais", url: "/professionals", icon: UserCheck },
-  { title: "Configurações", url: "/settings", icon: Settings },
-  { title: "Página do Cliente", url: "/client-preview", icon: Smartphone },
+  { title: "Assinaturas", url: "/subscriptions", icon: CreditCard },
 ];
 
 const automationItems = [
   { title: "WhatsApp", url: "/whatsapp", icon: MessageSquare },
   { title: "CRM", url: "/crm", icon: Kanban },
   { title: "Campanhas", url: "/campaigns", icon: Megaphone },
+];
+
+const settingsItems = [
+  { title: "Configurações", url: "/settings", icon: Settings },
+  { title: "Página do Cliente", url: "/client-preview", icon: Smartphone },
 ];
 
 const adminItems = [
@@ -68,19 +78,33 @@ export function AppSidebar() {
         <SidebarContent>
           <SidebarGroup>
             <SidebarGroupLabel>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-2">
-                    <Scissors className="h-4 w-4" />
-                    {!collapsed && <span>Barber Credits</span>}
-                  </div>
-                </TooltipTrigger>
-                {collapsed && <TooltipContent side="right">Barber Credits</TooltipContent>}
-              </Tooltip>
+              {!collapsed && "Geral"}
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {mainItems.map(renderItem)}
+                {generalItems.map(renderItem)}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+
+          <SidebarGroup>
+            <SidebarGroupLabel>
+              {!collapsed && "Vendas & Estoque"}
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {salesItems.map(renderItem)}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+
+          <SidebarGroup>
+            <SidebarGroupLabel>
+              {!collapsed && "Gestão"}
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {managementItems.map(renderItem)}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -105,6 +129,17 @@ export function AppSidebar() {
               </SidebarGroupContent>
             </SidebarGroup>
           )}
+
+          <SidebarGroup>
+            <SidebarGroupLabel>
+              {!collapsed && "Configurações"}
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {settingsItems.map(renderItem)}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
 
           {user?.role === "admin" && (
             <SidebarGroup>
