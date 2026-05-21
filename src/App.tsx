@@ -55,6 +55,7 @@ const App = () => (
             <Route path="/change-password" element={<SuspenseWrap><ChangePassword /></SuspenseWrap>} />
             <Route path="/reset-password" element={<SuspenseWrap><ResetPassword /></SuspenseWrap>} />
             <Route path="/booking/:userId" element={<SuspenseWrap><Booking /></SuspenseWrap>} />
+            <Route path="/cliente" element={<SuspenseWrap><ClientPortal /></SuspenseWrap>} />
             <Route path="/professional-panel" element={<ProtectedRoute requiredRole="profissional"><SuspenseWrap><ProfessionalDashboard /></SuspenseWrap></ProtectedRoute>} />
             <Route path="/" element={<Navigate to="/reports" replace />} />
             <Route path="/home" element={<Navigate to="/reports" replace />} />
