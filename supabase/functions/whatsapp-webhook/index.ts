@@ -843,8 +843,24 @@ Deno.serve(async (req) => {
         const tc = message.tool_calls[0];
         const args = JSON.parse(tc.function.arguments);
         if (tc.function.name === "check_availability") {
-          const exact = slots.find(s => s.date === args.date && s.time === args.time);
-          replyText = exact ? `Horário disponível! Quer confirmar? 😊` : "Horário indisponível. Quer tentar outro? 😊";
+          const dateISO = normalizeDate(args.date);
+          const timeHHMM = normalizeTime(args.time);
+          console.log("[webhook] check_availability normalized:", { raw: args, dateISO, timeHHMM });
+          if (!dateISO || !timeHHMM) {
+            replyText = "Não entendi a data/horário. Pode mandar de novo? 😊";
+          } else {
+            const check = await isSlotAvailable(supabase, cfg.user_id, dateISO, timeHHMM, args.professional_name, professionals);
+            console.log("[webhook] check_availability result:", check);
+            if (check.available) {
+              replyText = `Horário disponível! Quer confirmar ${dateISO} às ${timeHHMM}? 😊`;
+            } else if (check.reason === "out_of_schedule") {
+              replyText = "Esse horário está fora do expediente. Quer tentar outro? 😊";
+            } else if (check.reason === "occupied") {
+              replyText = "Esse horário já está ocupado. Quer tentar outro? 😊";
+            } else {
+              replyText = "Horário indisponível. Quer tentar outro? 😊";
+            }
+          }
         } else if (tc.function.name === "create_appointment") {
           replyText = await handleToolCall(supabase, cfg.user_id, args, sender, professionals, services);
         } else if (tc.function.name === "send_professional_carousel") {
