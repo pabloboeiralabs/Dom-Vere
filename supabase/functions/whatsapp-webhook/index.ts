@@ -108,6 +108,15 @@ function extractButtonId(body: any): string {
   return (msg?.buttonOrListid || msg?.content?.buttonOrListid || "").trim();
 }
 
+function wantsProfessionalCarousel(text: string): boolean {
+  const normalized = text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  return /\b(profissionais?|barbeir[oa]s?|equipe|quem corta|com quem|qual profissional)\b/i.test(normalized);
+}
+
 function extractSender(body: any): string {
   const key = body?.data?.key || body?.key || {};
   const remoteJid =
@@ -834,6 +843,15 @@ Deno.serve(async (req) => {
     if (buttonId.startsWith("PROF_")) {
       const profName = buttonId.replace("PROF_", "");
       replyText = `Ótimo! Escolheu ${profName}. Qual dia e horário você prefere? 😊`;
+    } else if (wantsProfessionalCarousel(text || "")) {
+      console.log("[webhook] direct carousel intent detected");
+      const carouselResult = await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl);
+      if (carouselResult === "CAROUSEL_SENT") {
+        carouselAlreadySent = true;
+        replyText = "Escolha o profissional 👆";
+      } else {
+        replyText = carouselResult;
+      }
     } else {
       const slots = await getAvailableSlots(supabase, cfg.user_id, professionals, 7);
       const systemPrompt = buildSystemPrompt(shopName, bookingUrl, professionals, services, slots);
