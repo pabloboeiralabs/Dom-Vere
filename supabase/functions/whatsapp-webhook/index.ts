@@ -1672,6 +1672,7 @@ Deno.serve(async (req) => {
       const aiResponse = await callAI(aiMessages, allTools);
       const choice = aiResponse.choices?.[0];
       const message = choice?.message;
+      console.log("[webhook] AI response:", JSON.stringify(message).slice(0, 500));
 
       if (message?.tool_calls && message.tool_calls.length > 0) {
         const toolCall = message.tool_calls[0];
