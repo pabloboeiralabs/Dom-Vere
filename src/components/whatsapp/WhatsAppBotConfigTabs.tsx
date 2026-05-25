@@ -60,7 +60,7 @@ export function WhatsAppBotConfigTabs({ onBack }: { onBack?: () => void }) {
   const { config, instanceStatus, getStatus, saveBotConfig, getWebhook, setWebhook, apiCall } = useUazapi();
 
   const bookingUrl = user ? `${window.location.origin}/booking/${user.id}` : "";
-  const webhookFnUrl = `https://cjkzhxlmtwzbscqiiqin.supabase.co/functions/v1/whatsapp-webhook`;
+  const webhookFnUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-webhook`;
 
   // ---- Geral
   const [botEnabled, setBotEnabled] = useState(false);

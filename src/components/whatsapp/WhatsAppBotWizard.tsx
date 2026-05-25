@@ -267,7 +267,7 @@ Direcione sempre para o link: ${bookingUrl}
   const [diagOpen, setDiagOpen] = useState(false);
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagResult, setDiagResult] = useState<DiagResult | null>(null);
-  const webhookFnUrl = `https://cjkzhxlmtwzbscqiiqin.supabase.co/functions/v1/whatsapp-webhook`;
+  const webhookFnUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-webhook`;
 
   const handleTest = async () => {
     setDiagnosing(true);

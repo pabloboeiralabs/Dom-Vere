@@ -20,6 +20,31 @@ function parseLocalDate(dateStr: string): Date {
   return new Date(y, m - 1, d);
 }
 
+function formatDateForInput(dateStr: string): string {
+  if (!dateStr) return "";
+  const [y, m, d] = dateStr.split("-");
+  return [d, m, y].filter(Boolean).join("/");
+}
+
+function maskDateInput(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+function dateInputToIso(value: string): string | null {
+  const [d, m, y] = value.split("/");
+  if (d?.length !== 2 || m?.length !== 2 || y?.length !== 4) return null;
+  return `${y}-${m}-${d}`;
+}
+
+function maskTimeInput(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 4);
+  if (digits.length <= 2) return digits;
+  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+}
+
 interface Professional { id: string; name: string; }
 interface Customer { id: string; name: string; }
 interface Service { id: string; name: string; price: number; }
@@ -87,6 +112,7 @@ export default function Scheduling() {
     customer_id: "",
     service_id: "",
     date: format(new Date(), "yyyy-MM-dd"),
+    date_input: formatDateForInput(format(new Date(), "yyyy-MM-dd")),
     start_time: "09:00",
     end_time: "09:30",
     notes: "",
@@ -189,11 +215,13 @@ export default function Scheduling() {
     const endTime = time
       ? `${String(Math.floor((parseInt(time.split(":")[0]) * 60 + parseInt(time.split(":")[1]) + 30) / 60)).padStart(2, "0")}:${String((parseInt(time.split(":")[0]) * 60 + parseInt(time.split(":")[1]) + 30) % 60).padStart(2, "0")}`
       : "09:30";
+    const date = day ? format(day, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd");
     setForm({
       professional_id: profId || "",
       customer_id: "",
       service_id: "",
-      date: day ? format(day, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd"),
+      date,
+      date_input: formatDateForInput(date),
       start_time: time || "09:00",
       end_time: endTime,
       notes: "",
@@ -396,18 +424,42 @@ export default function Scheduling() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <div>
                 <Label>Data *</Label>
-                <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder="dd/mm/aaaa"
+                  value={form.date_input}
+                  onChange={(e) => {
+                    const date_input = maskDateInput(e.target.value);
+                    setForm({ ...form, date_input, date: dateInputToIso(date_input) || form.date });
+                  }}
+                />
               </div>
               <div>
                 <Label>Início *</Label>
-                <Input type="time" value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} />
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder="hh:mm"
+                  value={form.start_time}
+                  onChange={(e) => setForm({ ...form, start_time: maskTimeInput(e.target.value) })}
+                />
               </div>
               <div>
                 <Label>Fim</Label>
-                <Input type="time" value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} />
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder="hh:mm"
+                  value={form.end_time}
+                  onChange={(e) => setForm({ ...form, end_time: maskTimeInput(e.target.value) })}
+                />
               </div>
             </div>
             <div>

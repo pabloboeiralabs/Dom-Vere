@@ -57,6 +57,7 @@ function extractEventType(body: any, url?: string): string {
 
 function extractMessageId(body: any): string {
   const id = (
+    body?.data?.Info?.ID ||
     body?.data?.key?.id ||
     body?.key?.id ||
     body?.message?.id ||
@@ -72,11 +73,17 @@ function extractMessageId(body: any): string {
 
 function extractMessageTimestamp(body: any): number {
   const raw =
+    body?.data?.Info?.Timestamp ||
     body?.message?.messageTimestamp ||
     body?.message?.wa_timestamp ||
     body?.data?.messageTimestamp ||
     body?.event?.Timestamp ||
     Date.now();
+
+  if (typeof raw === "string") {
+    const parsed = Date.parse(raw);
+    if (!isNaN(parsed)) return parsed;
+  }
 
   const ts = Number(raw);
   if (!Number.isFinite(ts)) return Date.now();
@@ -84,17 +91,17 @@ function extractMessageTimestamp(body: any): number {
 }
 
 function extractMessageText(body: any): string {
-  const msg = body?.data?.message || body?.message || body;
+  const msg = body?.data?.Message || body?.data?.message || body?.message || body;
   const text =
-    msg?.content?.text ||
-    msg?.conversation ||
     msg?.extendedTextMessage?.text ||
+    msg?.conversation ||
+    msg?.content?.text ||
     body?.data?.message?.conversation ||
     body?.data?.message?.extendedTextMessage?.text ||
     body?.wa_text ||
     msg?.wa_text ||
     msg?.text ||
-    body?.text ||
+    msg?.text ||
     // Fallback for button/carousel clicks (TemplateButtonReplyMessage)
     msg?.content?.selectedDisplayText ||
     msg?.selectedDisplayText ||
@@ -104,8 +111,18 @@ function extractMessageText(body: any): string {
 }
 
 function extractButtonId(body: any): string {
-  const msg = body?.data?.message || body?.message || body;
+  const msg = body?.data?.Message || body?.data?.message || body?.message || body;
   return (msg?.buttonOrListid || msg?.content?.buttonOrListid || "").trim();
+}
+
+function extractPushName(body: any): string {
+  return (
+    body?.data?.Info?.PushName ||
+    body?.data?.pushName ||
+    body?.pushName ||
+    body?.message?.pushName ||
+    ""
+  ).toString().trim();
 }
 
 function wantsProfessionalCarousel(text: string): boolean {
@@ -120,6 +137,8 @@ function wantsProfessionalCarousel(text: string): boolean {
 function extractSender(body: any): string {
   const key = body?.data?.key || body?.key || {};
   const remoteJid =
+    body?.data?.Info?.Chat ||
+    body?.data?.Info?.Sender ||
     key.remoteJid ||
     body?.message?.chatid ||
     body?.chat?.wa_chatid ||
@@ -149,15 +168,13 @@ function extractOwnerNumber(body: any): string {
 }
 
 function extractPayloadToken(body: any): string {
-  return String(
-    body?.token ||
-      body?.Token ||
-      body?.instance?.token ||
-      body?.instance?.Token ||
-      body?.data?.token ||
-      body?.data?.Token ||
-      ""
-  ).trim();
+  const t = body?.token || body?.Token || body?.data?.token || body?.data?.Token;
+  if (t) return String(t).trim();
+
+  if (body?.instance && typeof body.instance === "string") return body.instance.trim();
+  if (body?.instance?.token) return String(body.instance.token).trim();
+  if (body?.instanceId) return String(body.instanceId).trim();
+  return "";
 }
 
 async function findWhatsappConfig(supabase: any, payloadToken: string, requestUrl: string, _ownerNumber = "") {
@@ -204,6 +221,7 @@ async function findWhatsappConfig(supabase: any, payloadToken: string, requestUr
 function isFromMe(body: any): boolean {
   const key = body?.data?.key || body?.key || {};
   return !!(
+    body?.data?.Info?.IsFromMe ||
     key.fromMe ||
     body?.fromMe ||
     body?.wa_fromMe ||
@@ -217,6 +235,8 @@ function isFromMe(body: any): boolean {
 function isGroupMessage(body: any): boolean {
   const key = body?.data?.key || body?.key || {};
   const remoteJid =
+    body?.data?.Info?.Chat ||
+    body?.data?.Info?.Sender ||
     key.remoteJid ||
     body?.message?.chatid ||
     body?.chat?.wa_chatid ||
@@ -226,6 +246,7 @@ function isGroupMessage(body: any): boolean {
     body?.event?.Chat ||
     "";
   return (
+    body?.data?.Info?.IsGroup ||
     String(remoteJid).endsWith("@g.us") ||
     !!body?.chat?.wa_isGroup ||
     !!body?.event?.IsGroup
@@ -495,17 +516,17 @@ async function callAI(
   messages: Array<{ role: string; content: string }>,
   tools: any[]
 ): Promise<any> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+  const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+  if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY not configured");
 
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      Authorization: `Bearer ${GROQ_API_KEY}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model: "llama-3.3-70b-versatile",
       messages,
       tools,
       max_tokens: 300,
@@ -678,6 +699,9 @@ async function handleSendCarousel(
   bookingUrl: string,
   _config?: any
 ): Promise<string> {
+  if (apiUrl.includes("evolution")) {
+    return `Escolha um profissional:\n\n${professionals.map((p, i) => `${i + 1}️⃣ ${p.name}`).join("\n")}\n\nOu agende pelo link: ${bookingUrl}`;
+  }
   const defaultFallback = (name: string) =>
     `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&size=600&length=2&background=333&color=fff&format=png`;
   const safeImage = (p: any) => {
@@ -770,6 +794,58 @@ async function handleToolCall(supabase: any, userId: string, args: any, senderPh
   return `✅ Confirmado! ${dateISO} às ${timeHHMM} com ${prof.name}.`;
 }
 
+async function sendWhatsappMessage(apiUrl: string, token: string, number: string, text: string) {
+  const isEvolution = apiUrl.includes("evolution");
+
+  let url: string;
+  let headers: Record<string, string>;
+  let body: any;
+
+  if (isEvolution) {
+    let instanceName = token;
+    let apikey = token;
+    if (token.includes(":")) {
+      const parts = token.split(":");
+      instanceName = parts[0];
+      apikey = parts[1];
+    }
+    url = `${apiUrl}/message/sendText/${instanceName}`;
+    headers = {
+      "Content-Type": "application/json",
+      "apikey": apikey
+    };
+    body = {
+      number: number,
+      text: text
+    };
+  } else {
+    url = `${apiUrl}/send/text?token=${token}`;
+    headers = {
+      "Content-Type": "application/json",
+      token: token,
+      Authorization: `Bearer ${token}`
+    };
+    body = {
+      number: number,
+      text: text
+    };
+  }
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error(`[sendWhatsappMessage] Failed to send message. Status: ${res.status}, Response: ${errText}`);
+    throw new Error(`WhatsApp API error: ${res.status}`);
+  }
+
+  return await res.json().catch(() => ({}));
+}
+
 const checkAvailabilityTool = { type: "function", function: { name: "check_availability", parameters: { type: "object", properties: { date: { type: "string" }, time: { type: "string" }, professional_name: { type: "string" } }, required: ["date", "time"] } } };
 const appointmentTool = { type: "function", function: { name: "create_appointment", parameters: { type: "object", properties: { date: { type: "string" }, time: { type: "string" }, professional_name: { type: "string" }, service_name: { type: "string" } }, required: ["date", "time", "professional_name"] } } };
 const sendCarouselTool = { type: "function", function: { name: "send_professional_carousel", parameters: { type: "object", properties: {} } } };
@@ -783,6 +859,7 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     console.log("[webhook] Body keys:", Object.keys(body));
+    console.log("[webhook] Full body:", JSON.stringify(body));
 
 
     const eventType = extractEventType(body, req.url);
@@ -829,14 +906,19 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: true, ignored: "duplicate" }));
     }
 
-    // Save inbound message immediately to prevent race conditions
+    const isGroup = isGroupMessage(body);
+    const suffix = isGroup ? "@g.us" : "@s.whatsapp.net";
+    const pushName = extractPushName(body);
+
+    // Save inbound/outbound message immediately to prevent race conditions
     await supabase.from("whatsapp_messages").insert({
       user_id: cfg.user_id,
-      wa_chatid: `${sender}@s.whatsapp.net`,
+      wa_chatid: `${sender}${suffix}`,
       wa_message_id: messageId,
       text: text || `[Button: ${buttonId}]`,
-      from_me: false,
-      wa_timestamp: Date.now()
+      from_me: isMe,
+      wa_timestamp: Date.now(),
+      push_name: isMe ? "Você" : pushName || null
     });
 
     const phoneDigits = sender.replace(/\D/g, "");
@@ -844,7 +926,7 @@ Deno.serve(async (req) => {
       supabase.from("settings").select("*").eq("user_id", cfg.user_id).maybeSingle(),
       supabase.from("professionals").select("*").eq("user_id", cfg.user_id).eq("active", true),
       supabase.from("services").select("*").eq("user_id", cfg.user_id).eq("active", true),
-      supabase.from("whatsapp_messages").select("*").eq("user_id", cfg.user_id).eq("wa_chatid", `${sender}@s.whatsapp.net`).order("wa_timestamp", { ascending: false }).limit(10),
+      supabase.from("whatsapp_messages").select("*").eq("user_id", cfg.user_id).eq("wa_chatid", `${sender}${suffix}`).order("wa_timestamp", { ascending: false }).limit(10),
       supabase.from("bot_conversation_stages").select("name, instruction, stage_order, skip_if_registered").eq("user_id", cfg.user_id).eq("active", true).order("stage_order"),
       supabase.from("customers").select("id, name, birth_date, phone").eq("user_id", cfg.user_id).ilike("phone", `%${phoneDigits.slice(-8)}%`).maybeSingle(),
     ]);
@@ -855,7 +937,23 @@ Deno.serve(async (req) => {
     const history = (historyRes.data || []).reverse();
     const stages = stagesRes.data || [];
     const customerInfo = customerRes.data || null;
-    const bookingUrl = `https://booking.lovable.app/booking/${cfg.user_id}`;
+
+    if (isMe) {
+      console.log("[webhook] Message is from me, saving but skipping AI reply.");
+      return new Response(JSON.stringify({ ok: true, message: "Outbound message stored." }));
+    }
+
+    if (isGroup) {
+      console.log("[webhook] Message is in a group, saving but skipping AI reply.");
+      return new Response(JSON.stringify({ ok: true, message: "Group message stored." }));
+    }
+
+    const isBotEnabled = !!(settingsRes.data?.bot_enabled);
+    if (!isBotEnabled) {
+      console.log("[webhook] Bot is disabled for user, saving message but skipping AI reply.");
+      return new Response(JSON.stringify({ ok: true, message: "Bot disabled, message stored." }));
+    }
+    const bookingUrl = `https://domvere.zlabs.com.br/booking/${cfg.user_id}`;
     const apiUrl = cfg.api_url.replace(/\/$/, "");
     const token = cfg.instance_token;
 
@@ -928,12 +1026,8 @@ Deno.serve(async (req) => {
         if ((askingProf || userWantsBooking) && professionals.length > 0 && !carouselAlreadySent) {
           // envia o texto primeiro
           if (replyText) {
-            await fetch(`${apiUrl}/send/text?token=${token}`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", token, Authorization: `Bearer ${token}` },
-              body: JSON.stringify({ number: sender, text: replyText }),
-            });
-            await supabase.from("whatsapp_messages").insert({ user_id: cfg.user_id, wa_chatid: `${sender}@s.whatsapp.net`, text: replyText, from_me: true, wa_timestamp: Date.now() });
+            await sendWhatsappMessage(apiUrl, token, sender, replyText);
+            await supabase.from("whatsapp_messages").insert({ user_id: cfg.user_id, wa_chatid: `${sender}${suffix}`, text: replyText, from_me: true, wa_timestamp: Date.now() });
           }
           const carouselResult = await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl);
           if (carouselResult === "CAROUSEL_SENT") {
@@ -951,7 +1045,7 @@ Deno.serve(async (req) => {
         .from("whatsapp_messages")
         .select("id")
         .eq("user_id", cfg.user_id)
-        .eq("wa_chatid", `${sender}@s.whatsapp.net`)
+        .eq("wa_chatid", `${sender}${suffix}`)
         .eq("text", replyText)
         .gt("created_at", new Date(Date.now() - 5000).toISOString())
         .maybeSingle();
@@ -963,11 +1057,11 @@ Deno.serve(async (req) => {
 
       // Auto-create CRM lead
       try {
-        const { data: existingLead } = await supabase.from("crm_leads").select("id").eq("user_id", cfg.user_id).eq("wa_chatid", `${sender}@s.whatsapp.net`).maybeSingle();
+        const { data: existingLead } = await supabase.from("crm_leads").select("id").eq("user_id", cfg.user_id).eq("wa_chatid", `${sender}${suffix}`).maybeSingle();
         if (!existingLead) {
           await supabase.from("crm_leads").insert({
             user_id: cfg.user_id,
-            wa_chatid: `${sender}@s.whatsapp.net`,
+            wa_chatid: `${sender}${suffix}`,
             phone: sender,
             name: "Novo Lead",
             stage: "novo",
@@ -980,12 +1074,8 @@ Deno.serve(async (req) => {
         console.warn("[webhook] CRM lead error:", e);
       }
 
-      await fetch(`${apiUrl}/send/text?token=${token}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", token, Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ number: sender, text: replyText }),
-      });
-      await supabase.from("whatsapp_messages").insert({ user_id: cfg.user_id, wa_chatid: `${sender}@s.whatsapp.net`, text: replyText, from_me: true, wa_timestamp: Date.now() });
+      await sendWhatsappMessage(apiUrl, token, sender, replyText);
+      await supabase.from("whatsapp_messages").insert({ user_id: cfg.user_id, wa_chatid: `${sender}${suffix}`, text: replyText, from_me: true, wa_timestamp: Date.now() });
     }
 
     return new Response(JSON.stringify({ ok: true }));

@@ -131,6 +131,13 @@ Deno.serve(async (req) => {
       });
     }
 
+    const { error: normalizeError } = await adminClient.rpc("normalize_auth_user_tokens", { p_user_id: created.user.id });
+    if (normalizeError) {
+      return new Response(JSON.stringify({ error: `Migração de autenticação pendente: ${normalizeError.message}` }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Update profile with professional_id, owner_id and must_change_password
     const { error: profileError } = await adminClient
       .from("profiles")

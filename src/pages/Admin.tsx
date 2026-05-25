@@ -176,10 +176,13 @@ export default function Admin() { // refreshed
 
         if (error) {
           let backendMessage = error.message || "Erro ao criar usuário";
-          const response = (error as { context?: Response }).context;
-          if (response instanceof Response) {
-            const payload = await response.clone().json().catch(() => null) as { error?: string } | null;
+          const response = (error as { context?: { clone?: () => Response; json?: () => Promise<unknown>; text?: () => Promise<string> } }).context;
+          const readableResponse = response?.clone?.() ?? response;
+          if (readableResponse?.json) {
+            const payload = await readableResponse.json().catch(() => null) as { error?: string } | null;
             backendMessage = payload?.error || backendMessage;
+          } else if (readableResponse?.text) {
+            backendMessage = await readableResponse.text().catch(() => backendMessage);
           }
           throw new Error(normalizeCreateError(backendMessage));
         }

@@ -97,13 +97,27 @@ export function useUazapi() {
 
     const apiUrl = normalizeUazapiUrl(c.api_url);
     const isDev = import.meta.env.DEV;
+    const isEvolution = apiUrl.includes("evolution");
 
     let url: string;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      token: c.instance_token,
-      "Authorization": `Bearer ${c.instance_token}`,
     };
+
+    let instanceName = c.instance_token;
+    let apikey = c.instance_token;
+    if (c.instance_token.includes(":")) {
+      const parts = c.instance_token.split(":");
+      instanceName = parts[0];
+      apikey = parts[1];
+    }
+
+    if (isEvolution) {
+      headers["apikey"] = apikey;
+    } else {
+      headers["token"] = c.instance_token;
+      headers["Authorization"] = `Bearer ${c.instance_token}`;
+    }
 
     if (isDev) {
       const proxyUrl = new URL(`/api/uazapi${path}`, window.location.origin);
@@ -111,13 +125,15 @@ export function useUazapi() {
       headers["X-Target-Api-Url"] = apiUrl;
       url = proxyUrl.toString();
     } else {
-      const directUrl = new URL(path, apiUrl + "/");
+      const directUrl = new URL(path.replace(/^\//, ""), apiUrl + "/");
       directUrl.searchParams.set("token", c.instance_token);
       url = directUrl.toString();
     }
 
     const opts: RequestInit = { method, headers };
-    if (body) opts.body = JSON.stringify(body);
+    if (body) {
+      opts.body = JSON.stringify(body);
+    }
 
     const res = await fetch(url, opts);
     const payload = await res.json().catch(() => null);
@@ -160,7 +176,35 @@ export function useUazapi() {
   }, [user]);
 
   const getStatus = useCallback(async (): Promise<UazapiStatus> => {
+    const isEvolution = configRef.current?.api_url.includes("evolution");
     const data = await apiCall("GET", "/instance/status");
+
+    if (isEvolution) {
+      const isConnected = data?.data?.LoggedIn === true;
+      let qrcodeBase64 = undefined;
+      let paircode = undefined;
+
+      if (!isConnected) {
+        try {
+          const qrData = await apiCall("GET", "/instance/qr");
+          qrcodeBase64 = qrData?.data?.Qrcode || qrData?.data?.Code || undefined;
+          paircode = qrData?.data?.Paircode || undefined;
+        } catch (e) {
+          console.warn("Falha ao buscar QR code secundário da Evolution", e);
+        }
+      }
+
+      const normalized: UazapiStatus = {
+        status: isConnected ? "connected" : "disconnected",
+        qrcode: qrcodeBase64,
+        paircode: paircode,
+        profileName: data?.data?.Name || undefined,
+        profilePicUrl: undefined,
+      };
+      setInstanceStatus(normalized);
+      return normalized;
+    }
+
     const normalized: UazapiStatus = {
       status: data?.instance?.status || (data?.status?.connected ? "connected" : "disconnected"),
       qrcode: pickFirstString(data?.instance?.qrcode, data?.instance?.qrCode, data?.instance?.qr, data?.instance?.code, data?.qrcode, data?.qrCode, data?.qr, data?.code),
@@ -197,60 +241,142 @@ export function useUazapi() {
 
   const deleteInstance = useCallback(async () => {
     if (!user) throw new Error("Usuário não autenticado");
-    // Best-effort: desconecta e deleta a instância no provedor para parar de cobrar
-    try { await apiCall("POST", "/instance/disconnect"); } catch (e) { console.warn("[deleteInstance] disconnect falhou", e); }
-    const endpoints: Array<{ method: string; path: string }> = [
-      { method: "DELETE", path: "/instance" },
-      { method: "POST", path: "/instance/delete" },
-      { method: "DELETE", path: "/instance/delete" },
-];
-    let providerDeleted = false;
-    for (const ep of endpoints) {
-      try {
-        await apiCall(ep.method, ep.path);
-        providerDeleted = true;
-        break;
-      } catch (e: any) {
-        const msg = String(e?.message || "");
-        if (!/404|not.?found/i.test(msg)) {
-          console.warn("[deleteInstance] endpoint falhou", ep, e);
+    const isEvolution = configRef.current?.api_url.includes("evolution");
+
+    if (isEvolution) {
+      const { data, error } = await supabase.functions.invoke("whatsapp-provision", {
+        body: { action: "delete" },
+      });
+      if (error) throw new Error(error.message || "Falha ao deletar instância no provedor");
+      if (data?.error) throw new Error(data.error);
+    } else {
+      // Best-effort: desconecta e deleta a instância no provedor para parar de cobrar
+      try { await apiCall("POST", "/instance/disconnect"); } catch (e) { console.warn("[deleteInstance] disconnect falhou", e); }
+      const endpoints: Array<{ method: string; path: string }> = [
+        { method: "DELETE", path: "/instance" },
+        { method: "POST", path: "/instance/delete" },
+        { method: "DELETE", path: "/instance/delete" },
+      ];
+      for (const ep of endpoints) {
+        try {
+          await apiCall(ep.method, ep.path);
+          break;
+        } catch (e: any) {
+          const msg = String(e?.message || "");
+          if (!/404|not.?found/i.test(msg)) {
+            console.warn("[deleteInstance] endpoint falhou", ep, e);
+          }
         }
       }
     }
+
     await supabase.from("whatsapp_config").delete().eq("user_id", user.id);
     setConfig(null);
     configRef.current = null;
     setInstanceStatus(null);
-    return { providerDeleted };
+    return { providerDeleted: isEvolution };
   }, [apiCall, user]);
 
   const getChats = useCallback(async (): Promise<UazapiChat[]> => {
-    const data = await apiCall("POST", "/chat/find", {});
+    const isEvolution = configRef.current?.api_url.includes("evolution");
+    if (isEvolution) {
+      if (!user) return [];
+      const { data: msgs, error } = await supabase
+        .from("whatsapp_messages")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("wa_timestamp", { ascending: false });
+
+      if (error) {
+        console.error("Falha ao buscar chats da tabela whatsapp_messages", error);
+        return [];
+      }
+
+      const chatsMap = new Map<string, UazapiChat>();
+      for (const m of msgs || []) {
+        if (!m.wa_chatid) continue;
+        if (!chatsMap.has(m.wa_chatid)) {
+          const phone = m.wa_chatid.split("@")[0] || "";
+          chatsMap.set(m.wa_chatid, {
+            wa_chatid: m.wa_chatid,
+            name: m.push_name || phone,
+            wa_contactName: m.push_name || phone,
+            wa_name: m.push_name || phone,
+            image: "",
+            imagePreview: "",
+            wa_lastMessageTextVote: m.text || "",
+            wa_lastMsgTimestamp: Number(m.wa_timestamp) || 0,
+            wa_unreadCount: 0,
+            wa_isGroup: m.wa_chatid.endsWith("@g.us"),
+            phone: phone,
+          });
+        }
+      }
+      return Array.from(chatsMap.values());
+    }
+
+    const method = isEvolution ? "GET" : "POST";
+    const data = await apiCall(method, "/chat/find", {});
     const arr = Array.isArray(data) ? data : (data?.chats || []);
-    return arr.filter((c: any) => {
+
+    return arr.map((c: any) => {
+      return c;
+    }).filter((c: any) => {
       const chatId = c.wa_chatid;
       if (!chatId) return false;
       const isValidType = chatId.endsWith("@s.whatsapp.net") || chatId.endsWith("@g.us");
       const baseId = chatId.replace("@s.whatsapp.net", "").replace("@g.us", "").trim();
       return isValidType && !!baseId && baseId !== "0";
     });
-  }, [apiCall]);
+  }, [apiCall, user]);
 
   const getMessages = useCallback(async (chatid: string, limit = 50): Promise<UazapiMessage[]> => {
+    const isEvolution = configRef.current?.api_url.includes("evolution");
+    if (isEvolution) {
+      if (!user) return [];
+      const { data: msgs, error } = await supabase
+        .from("whatsapp_messages")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("wa_chatid", chatid)
+        .order("wa_timestamp", { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        console.error("Falha ao buscar mensagens da tabela whatsapp_messages", error);
+        return [];
+      }
+
+      const normalized = (msgs || []).map((m: any) => ({
+        id: m.id || m.wa_message_id || "",
+        wa_chatid: m.wa_chatid,
+        wa_fromMe: m.from_me ?? false,
+        wa_text: m.text || "",
+        wa_type: m.msg_type || "text",
+        wa_timestamp: Number(m.wa_timestamp) || 0,
+        wa_pushName: m.push_name || "",
+      }));
+      normalized.sort((a: any, b: any) => a.wa_timestamp - b.wa_timestamp);
+      return normalized;
+    }
+
     const data = await apiCall("POST", "/message/find", { chatid, limit });
     const arr = Array.isArray(data) ? data : (data?.messages || []);
-    const normalized = arr.map((m: any) => ({
-      id: m.id || m.messageid || "",
-      wa_chatid: m.wa_chatid || m.chatid || "",
-      wa_fromMe: m.wa_fromMe ?? m.fromMe ?? false,
-      wa_text: m.wa_text || m.text || m.content?.text || (m.type === "carousel" ? m.carousel : ""),
-      wa_type: m.wa_type || m.messageType || m.type || "",
-      wa_timestamp: m.wa_timestamp || m.messageTimestamp || 0,
-      wa_pushName: m.wa_pushName || m.senderName || "",
-    }));
+
+    const normalized = arr.map((m: any) => {
+      return {
+        id: m.id || m.messageid || "",
+        wa_chatid: m.wa_chatid || m.chatid || "",
+        wa_fromMe: m.wa_fromMe ?? m.fromMe ?? false,
+        wa_text: m.wa_text || m.text || m.content?.text || (m.type === "carousel" ? m.carousel : ""),
+        wa_type: m.wa_type || m.messageType || m.type || "",
+        wa_timestamp: m.wa_timestamp || m.messageTimestamp || 0,
+        wa_pushName: m.wa_pushName || m.senderName || "",
+      };
+    });
     normalized.sort((a: any, b: any) => a.wa_timestamp - b.wa_timestamp);
     return normalized;
-  }, [apiCall]);
+  }, [apiCall, user]);
 
   const sendText = useCallback(async (number: string, text: string) => {
     return apiCall("POST", "/send/text", { number, text });
@@ -353,6 +479,15 @@ export function useUazapi() {
   }, []);
 
   const setWebhook = useCallback(async (url: string, enabled = true) => {
+    const isEvolution = configRef.current?.api_url.includes("evolution");
+    if (isEvolution) {
+      return apiCall("POST", "/instance/connect", {
+        webhookUrl: url,
+        immediate: true,
+        subscribe: ["MESSAGE", "CONNECTION"]
+      });
+    }
+
     // Send both field formats for uazapi compatibility
     return apiCall("POST", "/webhook", {
       url,
