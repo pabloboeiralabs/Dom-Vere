@@ -6,8 +6,8 @@
   "background_color": "#ffffff",
   "display": "standalone",
   "orientation": "portrait",
-  "scope": "/",
-  "start_url": "/",
+  "scope": "/cliente",
+  "start_url": "/cliente",
   "icons": [
     {
       "src": "/placeholder.svg",

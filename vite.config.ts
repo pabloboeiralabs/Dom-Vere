@@ -76,8 +76,8 @@ export default defineConfig(({ mode }) => ({
         theme_color: '#000000',
         background_color: '#ffffff',
         display: 'standalone',
-        scope: '/',
-        start_url: '/',
+        scope: '/cliente',
+        start_url: '/cliente',
         icons: [
           {
             src: 'placeholder.svg',
