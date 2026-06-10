@@ -17,6 +17,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 const generalItems = [
   { title: "Relatórios", url: "/reports", icon: BarChart2 },
   { title: "Agendas", url: "/scheduling", icon: CalendarClock },
+  { title: "Vencimentos", url: "/expirations", icon: Clock },
 ];
 
 const salesItems = [
