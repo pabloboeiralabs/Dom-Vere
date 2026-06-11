@@ -22,7 +22,6 @@ const dashboardItems = [
 
 const clientItems = [
   { title: "Clientes", url: "/clients", icon: Users },
-  { title: "Assinaturas", url: "/subscriptions", icon: CreditCard },
   { title: "CRM", url: "/crm", icon: Kanban },
 ];
 
