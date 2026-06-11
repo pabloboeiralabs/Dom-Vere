@@ -34,7 +34,7 @@ const STAGES = [
   { key: "agendado", label: "Agendado", color: "bg-cyan-500", cardBg: "bg-cyan-50 dark:bg-cyan-900/50", borderColor: "border-cyan-300 dark:border-cyan-600", dotColor: "bg-cyan-500" },
   { key: "confirmado", label: "Confirmado", color: "bg-teal-500", cardBg: "bg-teal-50 dark:bg-teal-900/50", borderColor: "border-teal-300 dark:border-teal-600", dotColor: "bg-teal-500" },
   { key: "compareceu", label: "Compareceu", color: "bg-green-500", cardBg: "bg-green-50 dark:bg-green-900/50", borderColor: "border-green-300 dark:border-green-600", dotColor: "bg-green-500" },
-  { key: "nao_compareceu", label: "Não Compareceu", color: "bg-orange-500", cardBg: "bg-orange-50 dark:bg-orange-900/50", borderColor: "border-orange-300 dark:border-orange-600", dotColor: "bg-orange-500" },
+  { key: "nao_compareceu", label: "Não Compareceu", color: "bg-orange-500", cardBg: "bg-orange-50 dark:bg-orange-950/80 dark:border-orange-500/50", borderColor: "border-orange-300 dark:border-orange-500", dotColor: "bg-orange-500" },
   { key: "perdido", label: "Perdido", color: "bg-red-500", cardBg: "bg-red-50 dark:bg-red-900/50", borderColor: "border-red-300 dark:border-red-600", dotColor: "bg-red-500" },
   { key: "pos_venda", label: "Pós Venda", color: "bg-emerald-500", cardBg: "bg-emerald-50 dark:bg-emerald-900/50", borderColor: "border-emerald-300 dark:border-emerald-600", dotColor: "bg-emerald-500" },
 ];
