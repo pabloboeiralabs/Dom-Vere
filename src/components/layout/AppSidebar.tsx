@@ -11,13 +11,19 @@ import {
 } from "@/components/ui/sidebar";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
-import { Users, Settings, Shield, Scissors, BarChart2, Clock, CreditCard, MessageSquare, Bot, CalendarClock, Megaphone, UserCheck, Kanban, Smartphone, Package, ShoppingCart } from "lucide-react";
+import { Users, Settings, Shield, BarChart2, Clock, CreditCard, MessageSquare, Bot, CalendarClock, Megaphone, UserCheck, Kanban, Smartphone, Package, ShoppingCart } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-const generalItems = [
+const dashboardItems = [
   { title: "Relatórios", url: "/reports", icon: BarChart2 },
   { title: "Agendas", url: "/scheduling", icon: CalendarClock },
   { title: "Vencimentos", url: "/expirations", icon: Clock },
+];
+
+const clientItems = [
+  { title: "Clientes", url: "/clients", icon: Users },
+  { title: "Assinaturas", url: "/subscriptions", icon: CreditCard },
+  { title: "CRM", url: "/crm", icon: Kanban },
 ];
 
 const salesItems = [
@@ -25,15 +31,12 @@ const salesItems = [
   { title: "Produtos", url: "/products", icon: Package },
 ];
 
-const managementItems = [
-  { title: "Clientes", url: "/clients", icon: Users },
+const professionalItems = [
   { title: "Profissionais", url: "/professionals", icon: UserCheck },
-  { title: "Assinaturas", url: "/subscriptions", icon: CreditCard },
 ];
 
-const automationItems = [
+const communicationItems = [
   { title: "WhatsApp", url: "/whatsapp", icon: MessageSquare },
-  { title: "CRM", url: "/crm", icon: Kanban },
   { title: "Campanhas", url: "/campaigns", icon: Megaphone },
 ];
 
@@ -79,33 +82,44 @@ export function AppSidebar() {
         <SidebarContent>
           <SidebarGroup>
             <SidebarGroupLabel>
-              {!collapsed && "Geral"}
+              {!collapsed && "Dashboard"}
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {generalItems.map(renderItem)}
+                {dashboardItems.map(renderItem)}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
 
           <SidebarGroup>
             <SidebarGroupLabel>
-              {!collapsed && "Vendas & Estoque"}
+              {!collapsed && "Clientes"}
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {clientItems.map(renderItem)}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+
+          <SidebarGroup>
+            <SidebarGroupLabel>
+              {!collapsed && "Profissionais"}
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {professionalItems.map(renderItem)}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+
+          <SidebarGroup>
+            <SidebarGroupLabel>
+              {!collapsed && "Vendas"}
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {salesItems.map(renderItem)}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-
-          <SidebarGroup>
-            <SidebarGroupLabel>
-              {!collapsed && "Gestão"}
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {managementItems.map(renderItem)}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -117,15 +131,15 @@ export function AppSidebar() {
                   <TooltipTrigger asChild>
                     <div className="flex items-center gap-2">
                       <Bot className="h-4 w-4" />
-                      {!collapsed && <span>Automação</span>}
+                      {!collapsed && <span>Comunicação</span>}
                     </div>
                   </TooltipTrigger>
-                  {collapsed && <TooltipContent side="right">Automação</TooltipContent>}
+                  {collapsed && <TooltipContent side="right">Comunicação</TooltipContent>}
                 </Tooltip>
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {automationItems.map(renderItem)}
+                  {communicationItems.map(renderItem)}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
