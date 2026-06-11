@@ -34,9 +34,9 @@ const STAGES = [
   { key: "agendado", label: "Agendado", color: "bg-cyan-500", cardBg: "bg-cyan-50 dark:bg-cyan-900/50", borderColor: "border-cyan-300 dark:border-cyan-600", dotColor: "bg-cyan-500" },
   { key: "confirmado", label: "Confirmado", color: "bg-teal-500", cardBg: "bg-teal-50 dark:bg-teal-900/50", borderColor: "border-teal-300 dark:border-teal-600", dotColor: "bg-teal-500" },
   { key: "compareceu", label: "Compareceu", color: "bg-green-500", cardBg: "bg-green-50 dark:bg-green-900/50", borderColor: "border-green-300 dark:border-green-600", dotColor: "bg-green-500" },
-  { key: "nao_compareceu", label: "Não Compareceu", color: "bg-orange-500", cardBg: "bg-orange-50 dark:bg-orange-950/80 dark:border-orange-500/50", borderColor: "border-orange-300 dark:border-orange-500", dotColor: "bg-orange-500" },
+  { key: "nao_compareceu", label: "Não Compareceu", color: "bg-orange-500", cardBg: "bg-orange-50 dark:bg-orange-950/70", borderColor: "border-orange-300 dark:border-orange-500/70", dotColor: "bg-orange-500" },
   { key: "perdido", label: "Perdido", color: "bg-red-500", cardBg: "bg-red-50 dark:bg-red-900/50", borderColor: "border-red-300 dark:border-red-600", dotColor: "bg-red-500" },
-  { key: "pos_venda", label: "Pós Venda", color: "bg-emerald-500", cardBg: "bg-emerald-50 dark:bg-emerald-900/50", borderColor: "border-emerald-300 dark:border-emerald-600", dotColor: "bg-emerald-500" },
+  { key: "pos_venda", label: "Pós Venda", color: "bg-emerald-500", cardBg: "bg-emerald-50 dark:bg-emerald-950/70", borderColor: "border-emerald-300 dark:border-emerald-500/70", dotColor: "bg-emerald-500" },
 ];
 
 export default function CrmKanban() {
@@ -197,7 +197,7 @@ export default function CrmKanban() {
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, stage.key)}
               >
-                <div className={`flex items-center gap-2 mb-2 px-1 py-1.5 rounded-lg ${stage.cardBg.replace('50', '100').replace('/50', '/70').replace('/60', '/80')}`}>
+                <div className={`flex items-center gap-2 mb-2 px-1 py-1.5 rounded-lg ${stage.cardBg.replace('50', '100').replace('950/70', '900/80').replace('950/80', '900/80')}`}>
                   <div className={`h-3 w-3 rounded-full ${stage.dotColor} ring-2 ring-white dark:ring-gray-900`} />
                   <span className="text-xs font-semibold text-foreground truncate">{stage.label}</span>
                   <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${stage.cardBg.replace('/40', '/60')}`}>{stageLeads.length}</Badge>
