@@ -1,3 +1,4 @@
+import ReminderPreference from "@/components/ReminderPreference";
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -550,6 +551,9 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
               <Clock className="h-5 w-5 text-primary flex-shrink-0" />
               <span className="font-medium">{selSlot}h</span>
             </div>
+          </div>
+          <div className="space-y-3 pt-2">
+            <ReminderPreference customerId={lastCustomerId} onSave={() => {}} />
           </div>
           <Button
             onClick={() => { setDone(false); setStep(0); setSelProf(""); setSelSvc(""); setSelSlot(""); setSelDate(new Date()); }}
