@@ -1176,9 +1176,18 @@ export default function ClientPortal() {
               <p className="text-xs font-semibold leading-tight">Cliente</p>
             </div>
           </div>
-          <Badge variant="outline" className="text-[10px] gap-1">
-            <CreditCard className="h-3 w-3" /> {session.credit_balance}
-          </Badge>
+          <div className="flex items-center gap-1">
+            <Badge variant="outline" className="text-[10px] gap-1">
+              <CreditCard className="h-3 w-3" /> {session.credit_balance}
+            </Badge>
+            <button
+              onClick={handleLogout}
+              className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+              title="Sair"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </header>
 
