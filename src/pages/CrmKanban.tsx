@@ -28,15 +28,15 @@ interface Lead {
 }
 
 const STAGES = [
-  { key: "novo", label: "Novo", color: "bg-slate-500", cardBg: "bg-slate-50 dark:bg-slate-950/40", borderColor: "border-slate-300 dark:border-slate-700", dotColor: "bg-slate-500" },
-  { key: "em_andamento", label: "Em Andamento", color: "bg-blue-500", cardBg: "bg-blue-50 dark:bg-blue-950/40", borderColor: "border-blue-300 dark:border-blue-700", dotColor: "bg-blue-500" },
-  { key: "qualificado", label: "Qualificado", color: "bg-purple-500", cardBg: "bg-purple-50 dark:bg-purple-950/40", borderColor: "border-purple-300 dark:border-purple-700", dotColor: "bg-purple-500" },
-  { key: "agendado", label: "Agendado", color: "bg-cyan-500", cardBg: "bg-cyan-50 dark:bg-cyan-950/40", borderColor: "border-cyan-300 dark:border-cyan-700", dotColor: "bg-cyan-500" },
-  { key: "confirmado", label: "Confirmado", color: "bg-teal-500", cardBg: "bg-teal-50 dark:bg-teal-950/40", borderColor: "border-teal-300 dark:border-teal-700", dotColor: "bg-teal-500" },
-  { key: "compareceu", label: "Compareceu", color: "bg-green-500", cardBg: "bg-green-50 dark:bg-green-950/40", borderColor: "border-green-300 dark:border-green-700", dotColor: "bg-green-500" },
-  { key: "nao_compareceu", label: "Não Compareceu", color: "bg-orange-500", cardBg: "bg-orange-50 dark:bg-orange-950/40", borderColor: "border-orange-300 dark:border-orange-700", dotColor: "bg-orange-500" },
-  { key: "perdido", label: "Perdido", color: "bg-red-500", cardBg: "bg-red-50 dark:bg-red-950/40", borderColor: "border-red-300 dark:border-red-700", dotColor: "bg-red-500" },
-  { key: "pos_venda", label: "Pós Venda", color: "bg-emerald-500", cardBg: "bg-emerald-50 dark:bg-emerald-950/40", borderColor: "border-emerald-300 dark:border-emerald-700", dotColor: "bg-emerald-500" },
+  { key: "novo", label: "Novo", color: "bg-slate-500", cardBg: "bg-slate-50 dark:bg-slate-800/60", borderColor: "border-slate-300 dark:border-slate-600", dotColor: "bg-slate-500" },
+  { key: "em_andamento", label: "Em Andamento", color: "bg-blue-500", cardBg: "bg-blue-50 dark:bg-blue-900/50", borderColor: "border-blue-300 dark:border-blue-600", dotColor: "bg-blue-500" },
+  { key: "qualificado", label: "Qualificado", color: "bg-purple-500", cardBg: "bg-purple-50 dark:bg-purple-900/50", borderColor: "border-purple-300 dark:border-purple-600", dotColor: "bg-purple-500" },
+  { key: "agendado", label: "Agendado", color: "bg-cyan-500", cardBg: "bg-cyan-50 dark:bg-cyan-900/50", borderColor: "border-cyan-300 dark:border-cyan-600", dotColor: "bg-cyan-500" },
+  { key: "confirmado", label: "Confirmado", color: "bg-teal-500", cardBg: "bg-teal-50 dark:bg-teal-900/50", borderColor: "border-teal-300 dark:border-teal-600", dotColor: "bg-teal-500" },
+  { key: "compareceu", label: "Compareceu", color: "bg-green-500", cardBg: "bg-green-50 dark:bg-green-900/50", borderColor: "border-green-300 dark:border-green-600", dotColor: "bg-green-500" },
+  { key: "nao_compareceu", label: "Não Compareceu", color: "bg-orange-500", cardBg: "bg-orange-50 dark:bg-orange-900/50", borderColor: "border-orange-300 dark:border-orange-600", dotColor: "bg-orange-500" },
+  { key: "perdido", label: "Perdido", color: "bg-red-500", cardBg: "bg-red-50 dark:bg-red-900/50", borderColor: "border-red-300 dark:border-red-600", dotColor: "bg-red-500" },
+  { key: "pos_venda", label: "Pós Venda", color: "bg-emerald-500", cardBg: "bg-emerald-50 dark:bg-emerald-900/50", borderColor: "border-emerald-300 dark:border-emerald-600", dotColor: "bg-emerald-500" },
 ];
 
 export default function CrmKanban() {
@@ -197,12 +197,12 @@ export default function CrmKanban() {
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, stage.key)}
               >
-                <div className={`flex items-center gap-2 mb-2 px-1 py-1.5 rounded-lg ${stage.cardBg.replace('50', '100').replace('950/40', '950/60')}`}>
+                <div className={`flex items-center gap-2 mb-2 px-1 py-1.5 rounded-lg ${stage.cardBg.replace('50', '100').replace('/50', '/70').replace('/60', '/80')}`}>
                   <div className={`h-3 w-3 rounded-full ${stage.dotColor} ring-2 ring-white dark:ring-gray-900`} />
                   <span className="text-xs font-semibold text-foreground truncate">{stage.label}</span>
                   <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${stage.cardBg.replace('/40', '/60')}`}>{stageLeads.length}</Badge>
                 </div>
-                <div className={`space-y-2 min-h-[100px] rounded-lg p-2 ${stage.cardBg} border ${stage.borderColor} border-dashed`}>
+                <div className={`space-y-2 min-h-[120px] rounded-lg p-2 ${stage.cardBg} border ${stage.borderColor} border-dashed transition-colors`}>
                   {stageLeads.map(lead => (
                     <Card
                       key={lead.id}
