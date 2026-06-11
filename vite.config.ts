@@ -70,9 +70,9 @@ export default defineConfig(({ mode }) => ({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'placeholder.svg'],
       manifest: {
-        name: 'Barber Pro',
-        short_name: 'BarberPro',
-        description: 'Plataforma de Agendamentos Online',
+        name: 'Dom Vere',
+        short_name: 'DomVere',
+        description: 'App do Cliente - Dom Vere Barbearia',
         theme_color: '#000000',
         background_color: '#ffffff',
         display: 'standalone',
