@@ -46,11 +46,7 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowYmd = ymd(tomorrow);
+  const now = new Date();
 
   const summary: any = { processed: 0, sent: 0, skipped: 0, errors: [] as string[] };
 
@@ -58,7 +54,7 @@ Deno.serve(async (req) => {
     // Get all users with auto_reminder_enabled and a connected whatsapp_config
     const { data: settingsRows, error: setErr } = await supabase
       .from("settings")
-      .select("user_id, shop_name, auto_reminder_enabled, auto_reminder_return_template, auto_reminder_expiry_template")
+      .select("user_id, shop_name, auto_reminder_enabled, auto_reminder_return_template, auto_reminder_expiry_template, reminder_hours")
       .eq("auto_reminder_enabled", true);
     if (setErr) throw setErr;
 
@@ -67,6 +63,8 @@ Deno.serve(async (req) => {
       const shopName = (s as any).shop_name || "nossa barbearia";
       const returnTpl = (s as any).auto_reminder_return_template || "";
       const expiryTpl = (s as any).auto_reminder_expiry_template || "";
+      const reminderHours = Number((s as any).reminder_hours) || 24;
+      const reminderMs = reminderHours * 60 * 60 * 1000;
 
       const { data: cfg } = await supabase
         .from("whatsapp_config")
@@ -121,10 +119,12 @@ Deno.serve(async (req) => {
         expiresAt.setHours(0, 0, 0, 0);
 
         const reminders: { type: string; tpl: string; eventDate: Date }[] = [];
-        if (returnTpl && ymd(returnDate) === tomorrowYmd) {
+        const timeToReturn = returnDate.getTime() - now.getTime();
+        const timeToExpiry = expiresAt.getTime() - now.getTime();
+        if (returnTpl && timeToReturn > 0 && timeToReturn <= reminderMs) {
           reminders.push({ type: "return", tpl: returnTpl, eventDate: returnDate });
         }
-        if (expiryTpl && ymd(expiresAt) === tomorrowYmd) {
+        if (expiryTpl && timeToExpiry > 0 && timeToExpiry <= reminderMs) {
           reminders.push({ type: "expiry", tpl: expiryTpl, eventDate: expiresAt });
         }
 
