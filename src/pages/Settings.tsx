@@ -5,13 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
-import { Plus, Trash2, Pencil } from "lucide-react";
+import { Plus, Trash2, Pencil, Bell, Clock } from "lucide-react";
 import WhatsAppTemplatesTab from "@/components/settings/WhatsAppTemplatesTab";
 
 interface Service { id: string; name: string; price: number; active: boolean; }
@@ -44,153 +45,163 @@ export default function Settings() {
   const [newPlanUsageLimit, setNewPlanUsageLimit] = useState("4");
   const [newPlanValidityDays, setNewPlanValidityDays] = useState("30");
 
+  // Reminder state
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderHours, setReminderHours] = useState("24");
+  const [reminderLoaded, setReminderLoaded] = useState(false);
+
   const seedAndLoadServices = useCallback(async () => {
     if (!user || servicesLoaded) return;
     try {
       const { count } = await supabase.from("services").select("*", { count: "exact", head: true }).eq("user_id", user.id);
       if (count === 0) {
-        const defaults = [
-          { name: "Corte equipe", price: 46.99 }, { name: "Barba equipe", price: 43.99 },
-          { name: "Barba express", price: 25.00 }, { name: "Pezinho", price: 12.99 },
-          { name: "Sobrancelha na navalha", price: 12.99 }, { name: "Sobrancelha pinça", price: 35.00 },
-          { name: "Esfoliação", price: 25.00 }, { name: "Depilação nariz", price: 23.99 },
-          { name: "Depilação orelha", price: 23.99 }, { name: "Hidratação", price: 24.75 },
-          { name: "Relaxamento", price: 55.00 },
-        ];
-        for (const s of defaults) {
-          await supabase.from("services").insert({ user_id: user.id, name: s.name, price: s.price });
-        }
+        await supabase.from("services").insert([
+          { user_id: user.id, name: "Corte", price: 0 },
+          { user_id: user.id, name: "Barba", price: 0 },
+          { user_id: user.id, name: "Corte + Barba", price: 0 },
+          { user_id: user.id, name: "Hidratação", price: 0 },
+          { user_id: user.id, name: "Sobrancelha", price: 0 },
+        ]);
       }
-      const { data } = await supabase.from("services").select("*").eq("user_id", user.id).order("name");
-      setServices((data || []) as Service[]);
       setServicesLoaded(true);
-    } catch (e) { console.error(e); }
+    } catch (e) { /* silent */ }
   }, [user, servicesLoaded]);
+
+  const loadServices = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase.from("services").select("*").eq("user_id", user.id).order("name");
+    if (data) setServices(data as Service[]);
+  }, [user]);
 
   const loadPlans = useCallback(async () => {
     if (!user) return;
-    try {
-      const { data: rows } = await supabase.from("plans").select("*").eq("user_id", user.id).order("name");
-      if (!rows || rows.length === 0) { setPlans([]); setPlansLoaded(true); return; }
-      const planIds = rows.map(p => p.id);
-      const { data: allServices } = await supabase.rpc("get_plan_services_with_names", { p_plan_ids: planIds });
-      const servicesByPlan: Record<string, PlanService[]> = {};
-      for (const s of (allServices || []) as any[]) {
-        if (!servicesByPlan[s.plan_id]) servicesByPlan[s.plan_id] = [];
-        servicesByPlan[s.plan_id].push({ service_id: s.service_id, service_name: s.service_name, quantity: s.quantity });
-      }
-      setPlans(rows.map(p => ({ ...p, services: servicesByPlan[p.id] || [] })) as Plan[]);
-      setPlansLoaded(true);
-    } catch (e) { console.error(e); }
-  }, [user]);
-
-  useEffect(() => {
-    if (activeTab === "servicos" && !servicesLoaded) seedAndLoadServices();
-    else if (activeTab === "planos") {
-      if (!servicesLoaded) seedAndLoadServices();
-      if (!plansLoaded) loadPlans();
+    const { data: plansData } = await supabase.from("plans").select("*").eq("user_id", user.id).order("name");
+    const data = (plansData || []) as Plan[];
+    const planIds = data.map(p => p.id);
+    let planSvcs: any[] = [];
+    if (planIds.length) {
+      const { data: pss } = await supabase.rpc("get_plan_services_with_names", { p_plan_ids: planIds });
+      planSvcs = pss || [];
     }
-  }, [activeTab, servicesLoaded, plansLoaded, seedAndLoadServices, loadPlans]);
-
-  const reloadServices = useCallback(async () => {
-    if (!user) return;
-    const { data } = await supabase.from("services").select("*").eq("user_id", user.id).order("name");
-    setServices((data || []) as Service[]);
+    for (const p of data) p.services = planSvcs.filter((ps: any) => ps.plan_id === p.id);
+    setPlans(data);
+    setPlansLoaded(true);
   }, [user]);
+
+  useEffect(() => { if (user) { seedAndLoadServices(); loadServices(); loadPlans(); } }, [user, seedAndLoadServices, loadServices, loadPlans]);
+
+  // Load reminder settings
+  useEffect(() => {
+    if (!user || reminderLoaded) return;
+    (async () => {
+      const { data } = await supabase.from("settings").select("auto_reminder_enabled, reminder_hours").eq("user_id", user.id).single();
+      if (data) {
+        setReminderEnabled(data.auto_reminder_enabled ?? false);
+        setReminderHours(String(data.reminder_hours ?? 24));
+      }
+      setReminderLoaded(true);
+    })();
+  }, [user, reminderLoaded]);
+
+  const saveReminder = async () => {
+    if (!user) return;
+    setLoading(true);
+    const hours = parseInt(reminderHours) || 24;
+    const { error } = await supabase.from("settings").update({
+      auto_reminder_enabled: reminderEnabled,
+      reminder_hours: Math.max(1, Math.min(168, hours)),
+    }).eq("user_id", user.id);
+    if (error) toast.error(error.message);
+    else toast.success("Configurações de lembretes salvas!");
+    setLoading(false);
+  };
 
   const handleAddService = async () => {
     if (!user || !newServiceName.trim()) return;
     setLoading(true);
-    try {
-      const { data: created, error } = await supabase.from("services")
-        .insert({ user_id: user.id, name: newServiceName.trim(), price: parseFloat(newServicePrice) || 0 })
-        .select().single();
-      if (error) throw error;
-      toast.success("Serviço adicionado!");
-      setNewServiceName(""); setNewServicePrice("0");
-      if (created) setServices(prev => [...prev, created as Service].sort((a, b) => a.name.localeCompare(b.name)));
-      else reloadServices();
-    } catch (err: any) { toast.error(err.message); } finally { setLoading(false); }
+    const price = parseFloat(newServicePrice) || 0;
+    const { error } = await supabase.from("services").insert({ user_id: user.id, name: newServiceName.trim(), price });
+    setLoading(false);
+    if (error) { toast.error(error.message); return; }
+    setNewServiceName(""); setNewServicePrice("0");
+    loadServices();
+    toast.success("Serviço adicionado!");
+  };
+
+  const handleToggleService = async (service: Service) => {
+    await supabase.from("services").update({ active: !service.active }).eq("id", service.id);
+    loadServices();
   };
 
   const handleDeleteService = async (id: string) => {
-    if (!user) return;
-    const { error } = await supabase.from("services").delete().eq("id", id).eq("user_id", user.id);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Serviço removido!");
-    setServices(prev => prev.filter(s => s.id !== id));
+    await supabase.from("services").delete().eq("id", id);
+    loadServices();
   };
 
-  const openEditService = (s: Service) => { setEditingService(s); setEditServiceName(s.name); setEditServicePrice(String(s.price)); };
+  const startEditService = (s: Service) => {
+    setEditingService(s); setEditServiceName(s.name); setEditServicePrice(String(s.price));
+  };
 
-  const handleEditService = async () => {
-    if (!user || !editingService || !editServiceName.trim()) return;
+  const saveEditService = async () => {
+    if (!editingService) return;
+    const price = parseFloat(editServicePrice) || 0;
+    await supabase.from("services").update({ name: editServiceName.trim(), price }).eq("id", editingService.id);
+    setEditingService(null); loadServices();
+    toast.success("Serviço atualizado!");
+  };
+
+  const openPlanDialog = (plan?: Plan) => {
+    if (plan) {
+      setEditingPlan(plan);
+      setNewPlanName(plan.name); setNewPlanPrice(String(plan.price));
+      setNewPlanPeriod(plan.period); setNewPlanUsageLimit(String(plan.usage_limit));
+      setNewPlanValidityDays(String(plan.validity_days));
+      const svcs: Record<string, number> = {};
+      for (const ps of (plan.services || [])) svcs[ps.service_id] = ps.quantity;
+      setSelectedServices(svcs);
+    } else {
+      setEditingPlan(null); setNewPlanName(""); setNewPlanPrice("");
+      setNewPlanPeriod("mensal"); setNewPlanUsageLimit("4"); setNewPlanValidityDays("30");
+      setSelectedServices({});
+    }
+    setPlanDialogOpen(true);
+  };
+
+  const savePlan = async () => {
+    if (!user || !newPlanName.trim()) return;
     setLoading(true);
-    try {
-      const { error } = await supabase.from("services").update({ name: editServiceName.trim(), price: parseFloat(editServicePrice) || 0 }).eq("id", editingService.id).eq("user_id", user.id);
-      if (error) throw error;
-      toast.success("Serviço atualizado!");
-      setEditingService(null);
-      reloadServices();
-    } catch (err: any) { toast.error(err.message); } finally { setLoading(false); }
+    const planData = {
+      user_id: user.id, name: newPlanName.trim(), price: parseFloat(newPlanPrice) || 0,
+      period: newPlanPeriod, usage_limit: parseInt(newPlanUsageLimit) || 1,
+      validity_days: parseInt(newPlanValidityDays) || 30,
+    };
+    let planId: string;
+    if (editingPlan) {
+      const { error } = await supabase.from("plans").update(planData).eq("id", editingPlan.id);
+      if (error) { toast.error(error.message); setLoading(false); return; }
+      planId = editingPlan.id;
+      await supabase.from("plan_services").delete().eq("plan_id", planId);
+    } else {
+      const { data, error } = await supabase.from("plans").insert(planData).select("id").single();
+      if (error || !data) { toast.error(error?.message || "Erro"); setLoading(false); return; }
+      planId = data.id;
+    }
+    const svcEntries = Object.entries(selectedServices).filter(([_, qty]) => qty > 0);
+    if (svcEntries.length) {
+      await supabase.from("plan_services").insert(svcEntries.map(([service_id, quantity]) => ({ plan_id: planId, service_id, quantity })));
+    }
+    setLoading(false); setPlanDialogOpen(false); loadPlans();
+    toast.success(editingPlan ? "Plano atualizado!" : "Plano criado!");
   };
 
-  const resetPlanForm = () => {
-    setNewPlanName(""); setNewPlanPrice(""); setSelectedServices({});
-    setNewPlanPeriod("mensal"); setNewPlanUsageLimit("4"); setNewPlanValidityDays("30");
-    setEditingPlan(null);
+  const togglePlanActive = async (plan: Plan) => {
+    await supabase.from("plans").update({ active: !plan.active }).eq("id", plan.id);
+    loadPlans();
   };
 
-  const openEditPlan = (p: Plan) => {
-    setEditingPlan(p); setNewPlanName(p.name); setNewPlanPrice(String(p.price));
-    setNewPlanPeriod(p.period || "mensal"); setNewPlanUsageLimit(String(p.usage_limit || 4));
-    setNewPlanValidityDays(String(p.validity_days || 30));
-    const svcMap: Record<string, number> = {};
-    if (p.services) for (const s of p.services) svcMap[s.service_id] = s.quantity;
-    setSelectedServices(svcMap); setPlanDialogOpen(true);
-  };
-
-  const handleCreateOrUpdatePlan = async () => {
-    if (!user || !newPlanName.trim() || !newPlanPrice) return;
-    setLoading(true);
-    try {
-      if (editingPlan) {
-        await supabase.from("plans").update({
-          name: newPlanName.trim(), price: parseFloat(newPlanPrice), period: newPlanPeriod,
-          usage_limit: parseInt(newPlanUsageLimit), validity_days: parseInt(newPlanValidityDays),
-        }).eq("id", editingPlan.id).eq("user_id", user.id);
-        await supabase.from("plan_services").delete().eq("plan_id", editingPlan.id);
-        for (const [serviceId, qty] of Object.entries(selectedServices)) {
-          if (qty > 0) await supabase.from("plan_services").insert({ plan_id: editingPlan.id, service_id: serviceId, quantity: qty });
-        }
-        toast.success("Plano atualizado!");
-      } else {
-        const { data: plan, error } = await supabase.from("plans")
-          .insert({ user_id: user.id, name: newPlanName.trim(), price: parseFloat(newPlanPrice), period: newPlanPeriod, usage_limit: parseInt(newPlanUsageLimit), validity_days: parseInt(newPlanValidityDays) })
-          .select("id").single();
-        if (error) throw error;
-        for (const [serviceId, qty] of Object.entries(selectedServices)) {
-          if (qty > 0) await supabase.from("plan_services").insert({ plan_id: plan.id, service_id: serviceId, quantity: qty });
-        }
-        toast.success("Plano criado!");
-      }
-      setPlanDialogOpen(false); resetPlanForm(); setPlansLoaded(false);
-    } catch (err: any) { toast.error(err.message); } finally { setLoading(false); }
-  };
-
-  const handleDeletePlan = async (id: string) => {
-    if (!user) return;
-    const { error } = await supabase.from("plans").delete().eq("id", id).eq("user_id", user.id);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Plano removido!");
-    setPlans(prev => prev.filter(p => p.id !== id));
-  };
-
-  const toggleService = (serviceId: string, checked: boolean) => {
-    setSelectedServices(prev => {
-      if (checked) return { ...prev, [serviceId]: prev[serviceId] || 1 };
-      const copy = { ...prev }; delete copy[serviceId]; return copy;
-    });
+  const deletePlan = async (id: string) => {
+    await supabase.from("plans").delete().eq("id", id);
+    loadPlans();
   };
 
   return (
@@ -198,13 +209,17 @@ export default function Settings() {
       <h1 className="text-2xl font-bold text-foreground">Configurações</h1>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="servicos" className="flex-1 sm:flex-none">Serviços</TabsTrigger>
-          <TabsTrigger value="planos" className="flex-1 sm:flex-none">Planos</TabsTrigger>
-          <TabsTrigger value="whatsapp" className="flex-1 sm:flex-none">WhatsApp</TabsTrigger>
+        <TabsList className="w-full sm:w-auto flex-wrap">
+          <TabsTrigger value="servicos">Serviços</TabsTrigger>
+          <TabsTrigger value="planos">Planos</TabsTrigger>
+          <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
+          <TabsTrigger value="lembretes">
+            <Bell className="h-4 w-4 mr-1" /> Lembretes
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="servicos">
+          {/* ... existing services tab ... */}
           <Card className="border-border/50">
             <CardHeader><CardTitle className="text-foreground">Serviços</CardTitle></CardHeader>
             <CardContent className="space-y-4">
@@ -223,25 +238,47 @@ export default function Settings() {
               </div>
 
               <Table>
-                <TableHeader><TableRow><TableHead>Serviço</TableHead><TableHead className="text-right">Preço</TableHead><TableHead className="w-24" /></TableRow></TableHeader>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Serviço</TableHead>
+                    <TableHead className="text-right">Preço</TableHead>
+                    <TableHead className="text-center w-20">Ativo</TableHead>
+                    <TableHead className="text-right w-24">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
-                  {services.map((s) => (
+                  {services.map(s => (
                     <TableRow key={s.id}>
-                      <TableCell className="font-medium text-foreground">{s.name}</TableCell>
-                      <TableCell className="text-right text-foreground">R$ {Number(s.price).toFixed(2)}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => openEditService(s)}><Pencil className="h-4 w-4 text-muted-foreground" /></Button>
+                      <TableCell className="font-medium">{s.name}</TableCell>
+                      <TableCell className="text-right">R$ {Number(s.price).toFixed(2)}</TableCell>
+                      <TableCell className="text-center">
+                        <Checkbox checked={s.active} onCheckedChange={() => handleToggleService(s)} />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => startEditService(s)}><Pencil className="h-4 w-4" /></Button>
                           <Button variant="ghost" size="icon" onClick={() => handleDeleteService(s.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                         </div>
                       </TableCell>
                     </TableRow>
                   ))}
-                  {services.length === 0 && (
-                    <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground py-8">Nenhum serviço cadastrado</TableCell></TableRow>
-                  )}
                 </TableBody>
               </Table>
+
+              {/* Edit Service Dialog */}
+              <Dialog open={!!editingService} onOpenChange={(o) => !o && setEditingService(null)}>
+                <DialogContent>
+                  <DialogHeader><DialogTitle>Editar Serviço</DialogTitle></DialogHeader>
+                  <div className="space-y-4">
+                    <div><Label>Nome</Label><Input value={editServiceName} onChange={(e) => setEditServiceName(e.target.value)} /></div>
+                    <div><Label>Preço (R$)</Label><Input type="number" step="0.01" value={editServicePrice} onChange={(e) => setEditServicePrice(e.target.value)} /></div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setEditingService(null)}>Cancelar</Button>
+                    <Button onClick={saveEditService}>Salvar</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </CardContent>
           </Card>
         </TabsContent>
@@ -250,112 +287,138 @@ export default function Settings() {
           <Card className="border-border/50">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-foreground">Planos</CardTitle>
-              <Button onClick={() => { resetPlanForm(); setPlanDialogOpen(true); }} disabled={services.length === 0}>
-                <Plus className="mr-1 h-4 w-4" /> Novo Plano
-              </Button>
+              <Button size="sm" onClick={() => openPlanDialog()}><Plus className="h-4 w-4 mr-1" /> Novo Plano</Button>
             </CardHeader>
             <CardContent>
-              {services.length === 0 && <p className="text-sm text-muted-foreground mb-4">Cadastre serviços primeiro para criar planos.</p>}
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Plano</TableHead>
-                    <TableHead className="hidden md:table-cell">Periodicidade</TableHead>
-                    <TableHead className="hidden md:table-cell">Serviços inclusos</TableHead>
+                    <TableHead>Nome</TableHead>
                     <TableHead className="text-right">Preço</TableHead>
-                    <TableHead className="w-24" />
+                    <TableHead className="text-center">Período</TableHead>
+                    <TableHead className="text-center">Usos</TableHead>
+                    <TableHead className="text-center">Ativo</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {plans.map((p) => (
+                  {plans.map(p => (
                     <TableRow key={p.id}>
-                      <TableCell className="font-medium text-foreground">{p.name}</TableCell>
-                      <TableCell className="hidden md:table-cell text-muted-foreground text-sm capitalize">
-                        {p.period || "mensal"} · {p.usage_limit || 4}x · {p.validity_days || 30} dias
+                      <TableCell className="font-medium">{p.name}</TableCell>
+                      <TableCell className="text-right">R$ {Number(p.price).toFixed(2)}</TableCell>
+                      <TableCell className="text-center">{p.period}</TableCell>
+                      <TableCell className="text-center">{p.usage_limit}</TableCell>
+                      <TableCell className="text-center">
+                        <Checkbox checked={p.active} onCheckedChange={() => togglePlanActive(p)} />
                       </TableCell>
-                      <TableCell className="hidden md:table-cell text-muted-foreground text-sm">
-                        {p.services?.map(s => `${s.quantity}x ${s.service_name}`).join(", ") || "—"}
-                      </TableCell>
-                      <TableCell className="text-right text-foreground">R$ {Number(p.price).toFixed(2)}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => openEditPlan(p)}><Pencil className="h-4 w-4 text-muted-foreground" /></Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleDeletePlan(p.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => openPlanDialog(p)}><Pencil className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" onClick={() => deletePlan(p.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                         </div>
                       </TableCell>
                     </TableRow>
                   ))}
-                  {plans.length === 0 && (
-                    <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">Nenhum plano cadastrado</TableCell></TableRow>
-                  )}
                 </TableBody>
               </Table>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="whatsapp"><WhatsAppTemplatesTab /></TabsContent>
+        <TabsContent value="whatsapp">
+          <WhatsAppTemplatesTab />
+        </TabsContent>
+
+        <TabsContent value="lembretes">
+          <Card className="border-border/50">
+            <CardHeader><CardTitle className="text-foreground flex items-center gap-2"><Bell className="h-5 w-5" /> Lembretes Automáticos</CardTitle></CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label className="text-base">Lembretes automáticos</Label>
+                  <p className="text-sm text-muted-foreground">Enviar notificações para clientes sobre agendamentos</p>
+                </div>
+                <Switch checked={reminderEnabled} onCheckedChange={setReminderEnabled} />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  Enviar lembrete quanto tempo antes?
+                </Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={168}
+                    value={reminderHours}
+                    onChange={(e) => setReminderHours(e.target.value)}
+                    className="w-24 text-center"
+                  />
+                  <span className="text-sm text-muted-foreground">horas antes do agendamento</span>
+                </div>
+                <p className="text-xs text-muted-foreground">Mínimo 1 hora, máximo 168 horas (7 dias)</p>
+              </div>
+
+              <Button onClick={saveReminder} disabled={loading}>
+                {loading ? "Salvando..." : "Salvar configurações"}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
-      {/* Dialog Editar Serviço */}
-      <Dialog open={!!editingService} onOpenChange={(open) => !open && setEditingService(null)}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Editar Serviço</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2"><Label>Nome</Label><Input value={editServiceName} onChange={(e) => setEditServiceName(e.target.value)} /></div>
-            <div className="space-y-2"><Label>Preço (R$)</Label><Input type="number" step="0.01" value={editServicePrice} onChange={(e) => setEditServicePrice(e.target.value)} /></div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingService(null)}>Cancelar</Button>
-            <Button onClick={handleEditService} disabled={loading || !editServiceName.trim()}>Salvar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog Novo/Editar Plano */}
-      <Dialog open={planDialogOpen} onOpenChange={(open) => { if (!open) { setPlanDialogOpen(false); resetPlanForm(); } }}>
-        <DialogContent>
+      {/* Plan Dialog */}
+      <Dialog open={planDialogOpen} onOpenChange={setPlanDialogOpen}>
+        <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>{editingPlan ? "Editar Plano" : "Novo Plano"}</DialogTitle></DialogHeader>
-          <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
-            <div className="space-y-2"><Label>Nome do plano</Label><Input value={newPlanName} onChange={(e) => setNewPlanName(e.target.value)} placeholder="Ex: Plano Básico" /></div>
-            <div className="space-y-2">
-              <Label>Periodicidade</Label>
-              <RadioGroup value={newPlanPeriod} onValueChange={setNewPlanPeriod} className="flex gap-4">
-                <div className="flex items-center space-x-2"><RadioGroupItem value="mensal" id="mensal" /><Label htmlFor="mensal" className="cursor-pointer">Mensal</Label></div>
-                <div className="flex items-center space-x-2"><RadioGroupItem value="quinzenal" id="quinzenal" /><Label htmlFor="quinzenal" className="cursor-pointer">Quinzenal</Label></div>
-              </RadioGroup>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2"><Label className="text-xs">Limite de uso</Label><Input type="number" min="1" value={newPlanUsageLimit} onChange={(e) => setNewPlanUsageLimit(e.target.value)} /><p className="text-[10px] text-muted-foreground">{newPlanPeriod === "mensal" ? "por mês" : "por quinzena"}</p></div>
-              <div className="space-y-2"><Label className="text-xs">Vencimento (dias)</Label><Input type="number" min="1" value={newPlanValidityDays} onChange={(e) => setNewPlanValidityDays(e.target.value)} /></div>
-            </div>
-            <div className="space-y-2">
-              <Label>Serviços inclusos</Label>
-              <div className="space-y-3 max-h-48 overflow-y-auto border rounded-md p-3">
-                {services.map((s) => (
-                  <div key={s.id} className="flex items-center gap-3">
-                    <Checkbox checked={s.id in selectedServices} onCheckedChange={(checked) => toggleService(s.id, !!checked)} />
-                    <span className="flex-1 text-sm text-foreground">{s.name} <span className="text-muted-foreground">(R$ {Number(s.price).toFixed(2)})</span></span>
-                    {s.id in selectedServices && (
-                      <Input type="number" min="1" className="w-20 h-8" value={selectedServices[s.id]} onChange={(e) => setSelectedServices(prev => ({ ...prev, [s.id]: parseInt(e.target.value) || 1 }))} />
-                    )}
-                  </div>
-                ))}
+          <div className="space-y-4">
+            <div><Label>Nome do plano</Label><Input value={newPlanName} onChange={(e) => setNewPlanName(e.target.value)} placeholder="Ex: Corte e Barba 4x" /></div>
+            <div><Label>Preço (R$)</Label><Input type="number" step="0.01" value={newPlanPrice} onChange={(e) => setNewPlanPrice(e.target.value)} /></div>
+            <div className="grid grid-cols-3 gap-3">
+              <div><Label>Período</Label>
+                <select value={newPlanPeriod} onChange={(e) => setNewPlanPeriod(e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                  <option value="mensal">Mensal</option>
+                  <option value="semanal">Semanal</option>
+                  <option value="trimestral">Trimestral</option>
+                </select>
               </div>
-              {Object.keys(selectedServices).length > 0 && (
-                <p className="text-sm text-muted-foreground mt-1">
-                  Valor dos serviços ({newPlanUsageLimit}x uso): <span className="font-semibold text-foreground">R$ {(services.reduce((sum, s) => {
-                    const qty = selectedServices[s.id];
-                    return qty ? sum + Number(s.price) * qty : sum;
-                  }, 0) * (parseInt(newPlanUsageLimit) || 1)).toFixed(2)}</span>
-                </p>
-              )}
+              <div><Label>Limite de usos</Label><Input type="number" value={newPlanUsageLimit} onChange={(e) => setNewPlanUsageLimit(e.target.value)} /></div>
+              <div><Label>Validade (dias)</Label><Input type="number" value={newPlanValidityDays} onChange={(e) => setNewPlanValidityDays(e.target.value)} /></div>
             </div>
-            <div className="space-y-2"><Label>Preço do plano (R$)</Label><Input type="number" step="0.01" value={newPlanPrice} onChange={(e) => setNewPlanPrice(e.target.value)} placeholder="Preço do combo" /></div>
+            {services.length > 0 && (
+              <div>
+                <Label>Serviços inclusos</Label>
+                <div className="space-y-2 mt-1">
+                  {services.filter(s => s.active).map(s => (
+                    <div key={s.id} className="flex items-center gap-2">
+                      <Checkbox
+                        checked={!!selectedServices[s.id]}
+                        onCheckedChange={(checked) => setSelectedServices(prev => {
+                          const next = { ...prev };
+                          if (checked) next[s.id] = 1;
+                          else delete next[s.id];
+                          return next;
+                        })}
+                      />
+                      <span className="text-sm flex-1">{s.name}</span>
+                      {selectedServices[s.id] && (
+                        <Input
+                          type="number" min={1}
+                          className="w-16 h-8 text-center text-xs"
+                          value={selectedServices[s.id]}
+                          onChange={(e) => setSelectedServices(prev => ({ ...prev, [s.id]: parseInt(e.target.value) || 1 }))}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setPlanDialogOpen(false); resetPlanForm(); }}>Cancelar</Button>
-            <Button onClick={handleCreateOrUpdatePlan} disabled={loading || !newPlanName.trim() || !newPlanPrice}>{editingPlan ? "Salvar" : "Criar Plano"}</Button>
+            <Button variant="outline" onClick={() => setPlanDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={savePlan} disabled={loading || !newPlanName.trim()}>{loading ? "Salvando..." : "Salvar"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
