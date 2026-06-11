@@ -28,15 +28,15 @@ interface Lead {
 }
 
 const STAGES = [
-  { key: "novo", label: "Novo", color: "bg-slate-500" },
-  { key: "em_andamento", label: "Em Andamento", color: "bg-blue-500" },
-  { key: "qualificado", label: "Qualificado", color: "bg-purple-500" },
-  { key: "agendado", label: "Agendado", color: "bg-cyan-500" },
-  { key: "confirmado", label: "Confirmado", color: "bg-teal-500" },
-  { key: "compareceu", label: "Compareceu", color: "bg-green-500" },
-  { key: "nao_compareceu", label: "Não Compareceu", color: "bg-orange-500" },
-  { key: "perdido", label: "Perdido", color: "bg-red-500" },
-  { key: "pos_venda", label: "Pós Venda", color: "bg-emerald-500" },
+  { key: "novo", label: "Novo", color: "bg-slate-500", cardBg: "bg-slate-50 dark:bg-slate-950/40", borderColor: "border-slate-300 dark:border-slate-700", dotColor: "bg-slate-500" },
+  { key: "em_andamento", label: "Em Andamento", color: "bg-blue-500", cardBg: "bg-blue-50 dark:bg-blue-950/40", borderColor: "border-blue-300 dark:border-blue-700", dotColor: "bg-blue-500" },
+  { key: "qualificado", label: "Qualificado", color: "bg-purple-500", cardBg: "bg-purple-50 dark:bg-purple-950/40", borderColor: "border-purple-300 dark:border-purple-700", dotColor: "bg-purple-500" },
+  { key: "agendado", label: "Agendado", color: "bg-cyan-500", cardBg: "bg-cyan-50 dark:bg-cyan-950/40", borderColor: "border-cyan-300 dark:border-cyan-700", dotColor: "bg-cyan-500" },
+  { key: "confirmado", label: "Confirmado", color: "bg-teal-500", cardBg: "bg-teal-50 dark:bg-teal-950/40", borderColor: "border-teal-300 dark:border-teal-700", dotColor: "bg-teal-500" },
+  { key: "compareceu", label: "Compareceu", color: "bg-green-500", cardBg: "bg-green-50 dark:bg-green-950/40", borderColor: "border-green-300 dark:border-green-700", dotColor: "bg-green-500" },
+  { key: "nao_compareceu", label: "Não Compareceu", color: "bg-orange-500", cardBg: "bg-orange-50 dark:bg-orange-950/40", borderColor: "border-orange-300 dark:border-orange-700", dotColor: "bg-orange-500" },
+  { key: "perdido", label: "Perdido", color: "bg-red-500", cardBg: "bg-red-50 dark:bg-red-950/40", borderColor: "border-red-300 dark:border-red-700", dotColor: "bg-red-500" },
+  { key: "pos_venda", label: "Pós Venda", color: "bg-emerald-500", cardBg: "bg-emerald-50 dark:bg-emerald-950/40", borderColor: "border-emerald-300 dark:border-emerald-700", dotColor: "bg-emerald-500" },
 ];
 
 export default function CrmKanban() {
@@ -197,50 +197,52 @@ export default function CrmKanban() {
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, stage.key)}
               >
-                <div className="flex items-center gap-2 mb-2 px-1">
-                  <div className={`h-2.5 w-2.5 rounded-full ${stage.color}`} />
-                  <span className="text-xs font-medium text-foreground truncate">{stage.label}</span>
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{stageLeads.length}</Badge>
+                <div className={`flex items-center gap-2 mb-2 px-1 py-1.5 rounded-lg ${stage.cardBg.replace('50', '100').replace('950/40', '950/60')}`}>
+                  <div className={`h-3 w-3 rounded-full ${stage.dotColor} ring-2 ring-white dark:ring-gray-900`} />
+                  <span className="text-xs font-semibold text-foreground truncate">{stage.label}</span>
+                  <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${stage.cardBg.replace('/40', '/60')}`}>{stageLeads.length}</Badge>
                 </div>
-                <div className="space-y-2 min-h-[100px] bg-muted/30 rounded-lg p-2">
+                <div className={`space-y-2 min-h-[100px] rounded-lg p-2 ${stage.cardBg} border ${stage.borderColor} border-dashed`}>
                   {stageLeads.map(lead => (
                     <Card
                       key={lead.id}
                       draggable
                       onDragStart={(e) => handleDragStart(e, lead.id)}
-                      className="cursor-grab active:cursor-grabbing hover:border-primary/50 transition-colors"
+                      className={`cursor-grab active:cursor-grabbing transition-all duration-200 ${stage.cardBg} border-l-4 ${stage.borderColor} hover:shadow-md hover:scale-[1.02]`}
                     >
                       <CardContent className="p-3 space-y-2">
                         <div className="flex items-start justify-between">
-                          <p className="text-sm font-medium text-foreground truncate flex-1">{lead.name}</p>
+                          <p className="text-sm font-semibold text-foreground truncate flex-1">{lead.name}</p>
                           {lead.bot_paused && <Badge variant="destructive" className="text-[9px] px-1">Pausado</Badge>}
                         </div>
-                        {lead.phone && (
-                          <p className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Phone className="h-3 w-3" /> {lead.phone}
-                          </p>
-                        )}
-                        {lead.last_interaction_at && (
-                          <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {formatDistanceToNow(new Date(lead.last_interaction_at), { locale: ptBR, addSuffix: true })}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-1 pt-1">
+                        <div className="space-y-1">
+                          {lead.phone && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Phone className="h-3 w-3 text-blue-500" /> {lead.phone}
+                            </p>
+                          )}
+                          {lead.last_interaction_at && (
+                            <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                              <Clock className="h-3 w-3 text-blue-400" />
+                              {formatDistanceToNow(new Date(lead.last_interaction_at), { locale: ptBR, addSuffix: true })}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 pt-1.5 border-t border-border/30">
                           {lead.wa_chatid && (
-                            <Button variant="ghost" size="icon" className="h-6 w-6" title="Abrir WhatsApp"
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-100 dark:hover:bg-green-950/30" title="Abrir WhatsApp"
                               onClick={() => window.open(`/whatsapp`, "_self")}>
-                              <MessageSquare className="h-3 w-3" />
+                              <MessageSquare className="h-3.5 w-3.5" />
                             </Button>
                           )}
-                          <Button variant="ghost" size="icon" className="h-6 w-6" title={lead.bot_paused ? "Retomar bot" : "Pausar bot"}
+                          <Button variant="ghost" size="icon" className={`h-7 w-7 ${lead.bot_paused ? 'text-amber-500 hover:text-amber-600 hover:bg-amber-100' : 'text-blue-500 hover:text-blue-600 hover:bg-blue-100'} dark:hover:bg-opacity-20`} title={lead.bot_paused ? "Retomar bot" : "Pausar bot"}
                             onClick={() => togglePause(lead)}>
-                            {lead.bot_paused ? <PlayCircle className="h-3 w-3" /> : <PauseCircle className="h-3 w-3" />}
+                            {lead.bot_paused ? <PlayCircle className="h-3.5 w-3.5" /> : <PauseCircle className="h-3.5 w-3.5" />}
                           </Button>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive">
-                                <Trash2 className="h-3 w-3" />
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600 hover:bg-red-100 dark:hover:bg-red-950/30">
+                                <Trash2 className="h-3.5 w-3.5" />
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
