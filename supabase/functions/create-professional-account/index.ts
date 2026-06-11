@@ -34,10 +34,10 @@ Deno.serve(async (req) => {
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-    // Valida apenas a assinatura do JWT (não depende de sessão ativa no banco)
-    const { data: claimsData, error: claimsError } = await adminClient.auth.getClaims(token);
-    const ownerId = claimsData?.claims?.sub;
-    if (claimsError || !ownerId) {
+    // Valida o token e extrai o user ID
+    const { data: userData, error: userError } = await adminClient.auth.getUser(token);
+    const ownerId = userData?.user?.id;
+    if (userError || !ownerId) {
       return new Response(JSON.stringify({ error: "Sessão inválida" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
