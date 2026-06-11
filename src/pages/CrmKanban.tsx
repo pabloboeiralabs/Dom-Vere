@@ -193,7 +193,7 @@ export default function CrmKanban() {
               <div
                 key={stage.key}
                 data-kanban-col
-                className="flex-1 min-w-[200px] max-w-[280px]"
+                className="w-[220px] shrink-0"
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, stage.key)}
               >
