@@ -561,8 +561,8 @@ Bot: "Olá! 😊 Que ótimo! Acesse ${bookingUrl} para escolher profissional e h
                 onClick={() => setBotMode("ai")}
               >
                 <span className="text-base">🧠 Humanizado</span>
-                <span className="text-[10px] font-normal opacity-80 text-left leading-tight">
-                  IA com etapas e instruções personalizadas. Conversa natural e contexto completo.
+                <span className="w-full text-[10px] font-normal opacity-80 text-left leading-tight break-words">
+                  IA com etapas e instruções. Conversa natural e contexto completo.
                 </span>
               </Button>
               <Button
@@ -572,8 +572,8 @@ Bot: "Olá! 😊 Que ótimo! Acesse ${bookingUrl} para escolher profissional e h
                 onClick={() => setBotMode("menu")}
               >
                 <span className="text-base">📋 Mensagens Prontas</span>
-                <span className="text-[10px] font-normal opacity-80 text-left leading-tight">
-                  Respostas fixas por palavra-chave. Simples e direto, sem IA.
+                <span className="w-full text-[10px] font-normal opacity-80 text-left leading-tight break-words">
+                  Respostas fixas por palavra-chave. Simples e direto.
                 </span>
               </Button>
             </div>
