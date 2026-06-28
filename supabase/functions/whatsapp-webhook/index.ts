@@ -184,7 +184,7 @@ async function findWhatsappConfig(supabase: any, payloadToken: string, requestUr
     urlUserId = url.searchParams.get("user_id") || "";
     if (urlUserId.includes("/")) {
       urlUserId = urlUserId.split("/")[0];
-    }
+	    }
   } catch (e) {
     console.error("[webhook] invalid request URL", requestUrl);
   }
@@ -377,7 +377,7 @@ async function isSlotAvailable(
       if (isWorkDayDefault && minute >= DEFAULT_START && minute < DEFAULT_END) {
         candidateProfs.push(profId);
       }
-    }
+	    }
   }
 
   if (candidateProfs.length === 0) return { available: false, reason: "out_of_schedule" };
@@ -453,7 +453,7 @@ async function getAvailableSlots(
     while (c < end) {
       occupied.add(occupiedKey(a.professional_id, a.date, c));
       c += 30;
-    }
+	    }
   }
 
   const dayNames = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
@@ -507,7 +507,7 @@ async function getAvailableSlots(
           current += 30;
         }
       }
-    }
+	    }
   }
   return slots;
 }
@@ -597,7 +597,7 @@ function extractContextFromHistory(history: Array<{ text?: string | null; from_m
       for (const svc of servicePatterns) {
         if (t.includes(svc)) { detectedService = svc; break; }
       }
-    }
+	    }
     if (!detectedTime) {
       const tm = t.match(timeRegex) || t.match(timeAsRegex);
       if (tm) {
@@ -606,11 +606,11 @@ function extractContextFromHistory(history: Array<{ text?: string | null; from_m
           detectedTime = `${String(hNum).padStart(2, "0")}:${(tm[2] || "00").padStart(2, "0")}`;
         }
       }
-    }
+	    }
     if (!detectedDate) {
       for (const dk of dateKeywords) { if (t.includes(dk)) { detectedDate = dk; break; } }
       if (!detectedDate) { const dm = t.match(dateRegex); if (dm) detectedDate = `${dm[1]}/${dm[2]}`; }
-    }
+	    }
   };
 
   for (let i = history.length - 1; i >= 0; i--) {
@@ -623,7 +623,7 @@ function extractContextFromHistory(history: Array<{ text?: string | null; from_m
   for (const msg of history) {
     if (msg.text?.startsWith("[Selecionou profissional:")) {
       detectedProf = msg.text.replace("[Selecionou profissional:", "").replace("]", "").trim();
-    }
+	    }
   }
 
   if (detectedService) found.push(`serviço=${detectedService}`);
@@ -655,7 +655,7 @@ function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: 
     for (const prof of Object.keys(grouped[date])) {
       const times = grouped[date][prof].slice(0, 12).join(", ");
       availLines.push(`- ${date} ${prof}: ${times}`);
-    }
+	    }
   }
   const availability = availLines.length > 0
     ? `DISPONIBILIDADE (próximos dias):\n${availLines.join("\n")}\n`
@@ -841,7 +841,7 @@ Deno.serve(async (req) => {
     if (eventType && !allowedEvents.includes(eventType)) {
       console.log("[webhook] Ignored event type:", eventType);
       return new Response(JSON.stringify({ ok: true, ignored: "event_type", type: eventType }));
-    }
+	    }
 
     const text = extractMessageText(body);
     const sender = extractSender(body);
@@ -853,7 +853,7 @@ Deno.serve(async (req) => {
     if (!messageId && !text) {
       console.log("[webhook] No message ID and no text, ignoring.");
       return new Response(JSON.stringify({ ok: true, ignored: "no_data" }));
-    }
+	    }
 
     const payloadToken = extractPayloadToken(body);
     const buttonId = extractButtonId(body);
@@ -873,7 +873,7 @@ Deno.serve(async (req) => {
     if (existingMsg) {
       console.log("[webhook] Duplicate message detected (DB):", messageId);
       return new Response(JSON.stringify({ ok: true, ignored: "duplicate" }));
-    }
+	    }
 
     const isGroup = isGroupMessage(body);
     const suffix = isGroup ? "@g.us" : "@s.whatsapp.net";
@@ -891,7 +891,7 @@ Deno.serve(async (req) => {
     });
 
     const phoneDigits = sender.replace(/\D/g, "");
-    const [settingsRes, profsRes, servsRes, historyRes, stagesRes, customerRes, leadRes] = await Promise.all([
+    const [settingsRes, profsRes, servsRes, historyRes, stagesRes, customerRes, leadRes, responsesRes] = await Promise.all([
       supabase.from("settings").select("*").eq("user_id", cfg.user_id).maybeSingle(),
       supabase.from("professionals").select("*").eq("user_id", cfg.user_id).eq("active", true),
       supabase.from("services").select("*").eq("user_id", cfg.user_id).eq("active", true),
@@ -899,6 +899,7 @@ Deno.serve(async (req) => {
       supabase.from("bot_conversation_stages").select("name, instruction, stage_order, skip_if_registered").eq("user_id", cfg.user_id).eq("active", true).order("stage_order"),
       supabase.from("customers").select("id, name, birth_date, phone").eq("user_id", cfg.user_id).ilike("phone", `%${phoneDigits.slice(-8)}%`).maybeSingle(),
       supabase.from("crm_leads").select("id, current_stage").eq("user_id", cfg.user_id).eq("wa_chatid", `${sender}${suffix}`).maybeSingle(),
+      supabase.from("bot_trigger_responses").select("trigger_word, response_text, active").eq("user_id", cfg.user_id).eq("active", true),
     ]);
 
     const shopName = settingsRes.data?.shop_name || "Barbearia";
@@ -908,6 +909,8 @@ Deno.serve(async (req) => {
     const stages = stagesRes.data || [];
     const customerInfo = customerRes.data || null;
     let lead = leadRes.data || null;
+    const triggerResponses = (responsesRes?.data || []) as Array<{ trigger_word: string; response_text: string; active: boolean }>;
+    const botMode = (settingsRes.data as any)?.bot_mode || "ai";
 
     // Ensure lead exists with current_stage tracking
     if (!lead) {
@@ -923,24 +926,24 @@ Deno.serve(async (req) => {
       lead = newLead || { id: null, current_stage: 0 };
     } else {
       await supabase.from("crm_leads").update({ last_interaction_at: new Date().toISOString() }).eq("id", lead.id);
-    }
+	    }
     const currentStage = (lead?.current_stage ?? 0) as number;
 
     if (isMe) {
       console.log("[webhook] Message is from me, saving but skipping AI reply.");
       return new Response(JSON.stringify({ ok: true, message: "Outbound message stored." }));
-    }
+	    }
 
     if (isGroup) {
       console.log("[webhook] Message is in a group, saving but skipping AI reply.");
       return new Response(JSON.stringify({ ok: true, message: "Group message stored." }));
-    }
+	    }
 
     const isBotEnabled = !!(settingsRes.data?.bot_enabled);
     if (!isBotEnabled) {
       console.log("[webhook] Bot is disabled for user, saving message but skipping AI reply.");
       return new Response(JSON.stringify({ ok: true, message: "Bot disabled, message stored." }));
-    }
+	    }
     const bookingUrl = `https://domvere.zlabs.com.br/booking/${cfg.user_id}`;
     const apiUrl = cfg.api_url.replace(/\/$/, "");
     const token = cfg.instance_token;
@@ -961,6 +964,21 @@ Deno.serve(async (req) => {
         replyText = carouselResult;
       }
     } else {
+      // Check trigger responses first (Mensagens Prontas mode)
+      if (triggerResponses.length > 0 && text) {
+        const lowerText = text.toLowerCase().trim();
+        const matched = triggerResponses.find(r => {
+          const words = r.trigger_word.toLowerCase().split(",").map(w => w.trim());
+          return words.some(w => lowerText === w || lowerText.includes(w));
+        });
+        if (matched) {
+          replyText = matched.response_text;
+          console.log("[webhook] Trigger response matched:", matched.trigger_word);
+        }
+      }
+
+      // If no trigger matched, use AI
+      if (!replyText) {
       const slots = await getAvailableSlots(supabase, cfg.user_id, professionals, 7);
       const systemPrompt = buildSystemPrompt(shopName, bookingUrl, professionals, services, slots, customerInfo, stages, currentStage);
       const aiMessages = [{ role: "system", content: systemPrompt }, ...history.map(m => ({ role: m.from_me ? "assistant" : "user", content: m.text }))];
@@ -1040,7 +1058,8 @@ Deno.serve(async (req) => {
           }
         }
       }
-    }
+	    }
+      }
 
     console.log("[webhook] Sending reply:", { sender, replyText: replyText?.slice(0, 50), carouselAlreadySent });
     if (replyText && !carouselAlreadySent) {
@@ -1062,7 +1081,7 @@ Deno.serve(async (req) => {
 
       await sendWhatsappMessage(apiUrl, token, sender, replyText);
       await supabase.from("whatsapp_messages").insert({ user_id: cfg.user_id, wa_chatid: `${sender}${suffix}`, text: replyText, from_me: true, msg_type: 'bot', wa_timestamp: Date.now() });
-    }
+	    }
 
     return new Response(JSON.stringify({ ok: true }));
   } catch (err: any) {
