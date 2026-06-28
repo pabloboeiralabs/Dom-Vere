@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
-import { MessageSquare, Settings2, Wifi, WifiOff, Loader2, LayoutDashboard, Trash2, CheckSquare, X, Users, Clock } from "lucide-react";
+import { MessageSquare, Settings2, Wifi, WifiOff, Loader2, LayoutDashboard, Trash2, CheckSquare, X, Users, Clock, GitBranch } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -312,6 +312,10 @@ export default function WhatsApp() {
                 <>
                   {/* 1. Regras do Bot */}
                   <WhatsAppBotResponses />
+                  {/* 2. Editor de Fluxo */}
+                  <Button variant="ghost" size="icon" onClick={() => window.location.href = "/whatsapp/flow"} title="Editor de Fluxo (n8n)">
+                    <GitBranch className="h-5 w-5" />
+                  </Button>
                   {/* 3. Configurações */}
                   <Sheet>
                     <SheetTrigger asChild>
