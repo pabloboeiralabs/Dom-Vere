@@ -1,7 +1,13 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Send, ArrowLeft } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Send, ArrowLeft, Pencil } from "lucide-react";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { UazapiChat, UazapiMessage } from "@/hooks/useUazapi";
 
 interface Props {
@@ -14,22 +20,60 @@ interface Props {
 
 function formatMsgTime(ts: number) {
   if (!ts) return "";
-  // Handle both seconds and milliseconds timestamps
   const ms = ts > 9999999999 ? ts : ts * 1000;
   return new Date(ms).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
 
 export function WhatsAppConversation({ chat, messages, onSendMessage, onBack, sending }: Props) {
+  const { user } = useAuth();
   const [text, setText] = useState("");
-  
-
-  // With flex-col-reverse, scroll is naturally at the bottom
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingResponse, setEditingResponse] = useState<{ id: string; trigger_word: string; response_text: string } | null>(null);
+  const [editText, setEditText] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const handleSend = async () => {
     if (!text.trim()) return;
     const msg = text;
     setText("");
     await onSendMessage(msg);
+  };
+
+  const handleEditBotMsg = async (msgText: string) => {
+    if (!user) return;
+    // Busca a trigger_response que tem esse texto
+    const { data } = await supabase
+      .from("bot_trigger_responses")
+      .select("id, trigger_word, response_text")
+      .eq("user_id", user.id)
+      .eq("response_text", msgText)
+      .limit(1);
+
+    if (data && data.length > 0) {
+      setEditingResponse(data[0]);
+      setEditText(data[0].response_text);
+      setEditDialogOpen(true);
+    } else {
+      toast.error("Resposta não encontrada nas regras cadastradas");
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingResponse || !editText.trim()) return;
+    setSavingEdit(true);
+    try {
+      await supabase
+        .from("bot_trigger_responses")
+        .update({ response_text: editText.trim() })
+        .eq("id", editingResponse.id);
+      toast.success("Resposta atualizada!");
+      setEditDialogOpen(false);
+      setEditingResponse(null);
+    } catch (e: any) {
+      toast.error("Erro ao atualizar: " + (e?.message || ""));
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
   const name = chat.name || chat.wa_contactName || chat.wa_name || chat.phone || chat.wa_chatid;
@@ -63,7 +107,7 @@ export function WhatsAppConversation({ chat, messages, onSendMessage, onBack, se
         {[...messages].reverse().map((msg, i) => (
           <div key={msg.id || i} className={`flex ${msg.wa_fromMe ? "justify-end" : "justify-start"}`}>
             <div
-              className={`max-w-[85%] rounded-lg px-3 py-2 text-sm shadow-sm ${
+              className={`max-w-[85%] rounded-lg px-3 py-2 text-sm shadow-sm relative group ${
                 msg.wa_fromMe
                   ? "bg-[#dcf8c6] dark:bg-green-900/50 text-foreground"
                   : "bg-card text-foreground"
@@ -87,10 +131,10 @@ export function WhatsAppConversation({ chat, messages, onSendMessage, onBack, se
                               <p className="text-[10px] text-muted-foreground line-clamp-2 leading-tight">{card.description}</p>
                               <div className="pt-1 flex flex-col gap-1">
                                 {(card.buttons || []).map((btn: any, bIdx: number) => (
-                                  <Button 
-                                    key={bIdx} 
-                                    variant="outline" 
-                                    size="sm" 
+                                  <Button
+                                    key={bIdx}
+                                    variant="outline"
+                                    size="sm"
                                     className="h-7 text-[10px] w-full py-0"
                                     onClick={() => onSendMessage(btn.text || btn.title)}
                                   >
@@ -110,6 +154,18 @@ export function WhatsAppConversation({ chat, messages, onSendMessage, onBack, se
               ) : (
                 <p className="whitespace-pre-wrap break-words">{msg.wa_text || `[${msg.wa_type}]`}</p>
               )}
+
+              {/* Bot edit button - aparece ao passar mouse */}
+              {msg.msg_type === "bot" && msg.wa_text && (
+                <button
+                  onClick={() => handleEditBotMsg(msg.wa_text)}
+                  className="absolute -top-2 -right-2 h-5 w-5 bg-green-600 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm hover:bg-green-700"
+                  title="Editar resposta do bot"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+              )}
+
               <div className="flex items-center justify-end gap-1 mt-1">
                 {msg.msg_type === "bot" && (
                   <span className="text-[9px] bg-green-600/20 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded-sm font-medium">Bot</span>
@@ -121,7 +177,6 @@ export function WhatsAppConversation({ chat, messages, onSendMessage, onBack, se
             </div>
           </div>
         ))}
-        
       </div>
 
       {/* Input */}
@@ -143,6 +198,39 @@ export function WhatsAppConversation({ chat, messages, onSendMessage, onBack, se
           <Send className="h-4 w-4" />
         </Button>
       </div>
+
+      {/* Edit dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={(o) => { setEditDialogOpen(o); if (!o) setEditingResponse(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar resposta automática</DialogTitle>
+          </DialogHeader>
+          {editingResponse && (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Palavra-chave</Label>
+                <p className="text-sm font-medium">{editingResponse.trigger_word}</p>
+              </div>
+              <div className="space-y-1">
+                <Label>Resposta</Label>
+                <Textarea
+                  rows={4}
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setEditDialogOpen(false); setEditingResponse(null); }}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={savingEdit || !editText.trim()}>
+              {savingEdit ? "Salvando..." : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
