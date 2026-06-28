@@ -16,7 +16,7 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { useUazapi } from "@/hooks/useUazapi";
+import { useEvolution } from "@/hooks/useEvolution";
 
 type Stage = {
   id?: string;
@@ -57,13 +57,14 @@ const TOOLS_JSON = [
 
 export function WhatsAppBotConfigTabs({ onBack }: { onBack?: () => void }) {
   const { user } = useAuth();
-  const { config, instanceStatus, getStatus, saveBotConfig, getWebhook, setWebhook, apiCall } = useUazapi();
+  const { config, instanceStatus, getStatus, saveBotConfig, getWebhook, setWebhook, apiCall } = useEvolution();
 
   const bookingUrl = user ? `${window.location.origin}/booking/${user.id}` : "";
   const webhookFnUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-webhook`;
 
   // ---- Geral
   const [botEnabled, setBotEnabled] = useState(false);
+  const [botMode, setBotMode] = useState<"ai" | "menu">("ai");
   const [ignoreGroups, setIgnoreGroups] = useState(true);
   const [stopWord, setStopWord] = useState("parar");
   const [stopMinutes, setStopMinutes] = useState(60);
@@ -116,6 +117,7 @@ export function WhatsAppBotConfigTabs({ onBack }: { onBack?: () => void }) {
         const { data: s } = await supabase.from("settings").select("*").eq("user_id", user.id).maybeSingle();
         if (s) {
           setBotEnabled(!!(s as any).bot_enabled);
+          setBotMode((s as any).bot_mode === "menu" ? "menu" : "ai");
           setPrompt((s as any).bot_prompt || "");
           setMsgLimit((s as any).bot_msg_limit ?? 10);
           setTransferMsg((s as any).bot_human_transfer_msg || "Vou te transferir para um atendente humano! Aguarde um momento 👋");
@@ -322,6 +324,7 @@ Bot: "Olá! 😊 Que ótimo! Acesse ${bookingUrl} para escolher profissional e h
       // 1. Save settings (DB)
       await supabase.from("settings").update({
         bot_enabled: botEnabled,
+        bot_mode: botMode,
         bot_prompt: prompt,
         bot_msg_limit: msgLimit,
         bot_human_transfer_msg: transferMsg,
@@ -331,7 +334,7 @@ Bot: "Olá! 😊 Que ótimo! Acesse ${bookingUrl} para escolher profissional e h
         auto_reminder_expiry_template: expiryTpl,
       } as any).eq("user_id", user.id);
 
-      // 2. Save provider config (uazapi) — only if connected
+      // 2. Save provider config — only if connected
       if (config && conn) {
         try {
           await saveBotConfig({
@@ -485,30 +488,51 @@ Bot: "Olá! 😊 Que ótimo! Acesse ${bookingUrl} para escolher profissional e h
       {/* Status badges */}
       <div className="flex flex-wrap gap-2">
         <Badge variant={botEnabled ? "default" : "secondary"}>{botEnabled ? "Bot Ativo" : "Bot Inativo"}</Badge>
-        <Badge variant={promptOk ? "default" : "outline"} className={promptOk ? "" : "text-amber-500 border-amber-500/30"}>
-          {promptOk ? "Prompt OK" : "Sem Prompt"}
-        </Badge>
+        {botMode === "ai" && (
+          <Badge variant={promptOk ? "default" : "outline"} className={promptOk ? "" : "text-amber-500 border-amber-500/30"}>
+            {promptOk ? "Prompt OK" : "Sem Prompt"}
+          </Badge>
+        )}
+        {botMode === "ai" && <Badge variant="outline" className="text-[10px]">🧠 Humanizado</Badge>}
+        {botMode === "menu" && <Badge variant="outline" className="text-[10px]">📋 Mensagens Prontas</Badge>}
+        {botMode === "menu" && (
+          <Badge variant={responses.length > 0 ? "default" : "outline"} className={responses.length > 0 ? "" : "text-amber-500 border-amber-500/30"}>
+            {responses.length > 0 ? `${responses.length} regra(s)` : "Sem regras"}
+          </Badge>
+        )}
         <Badge variant={webhookEnabled === "on" ? "default" : webhookEnabled === "loading" ? "secondary" : "outline"}>
           {webhookEnabled === "on" ? "Webhook Ativo" : webhookEnabled === "loading" ? "Verificando" : "Webhook Inativo"}
         </Badge>
         {dirty && <Badge variant="destructive">Não Salvo</Badge>}
       </div>
 
-      {botEnabled && !promptOk && (
+      {botEnabled && botMode === "ai" && !promptOk && (
         <Alert variant="destructive">
           <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>O bot está ativado mas falta o Prompt/Instruções.</AlertDescription>
+          <AlertDescription>O bot está ativado no modo Humanizado mas falta o Prompt/Instruções.</AlertDescription>
+        </Alert>
+      )}
+      {botEnabled && botMode === "menu" && responses.length === 0 && (
+        <Alert variant="default" className="border-amber-500/50 bg-amber-500/10">
+          <AlertTriangle className="h-4 w-4 text-amber-500" />
+          <AlertDescription>O bot está ativado no modo Mensagens Prontas mas nenhuma regra de resposta foi cadastrada.</AlertDescription>
         </Alert>
       )}
 
       {/* Tabs */}
       <Tabs defaultValue="geral" className="w-full">
-        <TabsList className="grid grid-cols-3 sm:grid-cols-7 w-full h-auto">
+        <TabsList className={`grid w-full h-auto ${botMode === "ai" ? "grid-cols-3 sm:grid-cols-6" : "grid-cols-3 sm:grid-cols-5"}`}>
           <TabsTrigger value="geral" className="text-xs">Geral</TabsTrigger>
-          <TabsTrigger value="etapas" className="text-xs">Etapas</TabsTrigger>
-          <TabsTrigger value="instrucoes" className="text-xs">Instruções</TabsTrigger>
+          {botMode === "ai" && (
+            <>
+              <TabsTrigger value="etapas" className="text-xs">Etapas</TabsTrigger>
+              <TabsTrigger value="instrucoes" className="text-xs">Instruções</TabsTrigger>
+            </>
+          )}
           <TabsTrigger value="controles" className="text-xs">Controles</TabsTrigger>
-          <TabsTrigger value="respostas" className="text-xs">Respostas</TabsTrigger>
+          {botMode === "menu" && (
+            <TabsTrigger value="respostas" className="text-xs">Respostas</TabsTrigger>
+          )}
           <TabsTrigger value="lembretes" className="text-xs">Lembretes</TabsTrigger>
           <TabsTrigger value="avancado" className="text-xs">Avançado</TabsTrigger>
         </TabsList>
@@ -521,6 +545,38 @@ Bot: "Olá! 😊 Que ótimo! Acesse ${bookingUrl} para escolher profissional e h
               <p className="text-xs text-muted-foreground">Controla se o bot responde mensagens automaticamente.</p>
             </div>
             <Switch checked={botEnabled} onCheckedChange={(v) => { setBotEnabled(v); markDirty(); }} />
+          </div>
+          <div className="rounded-md border border-border overflow-hidden">
+            <div className="flex items-center justify-between p-3 pb-2">
+              <div className="space-y-0.5">
+                <Label>Modo de Atendimento</Label>
+                <p className="text-xs text-muted-foreground">Escolha como o bot deve responder seus clientes</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 px-3 pb-3">
+              <Button
+                type="button"
+                variant={botMode === "ai" ? "default" : "outline"}
+                className={`h-auto py-4 flex-col items-start gap-1 ${botMode === "ai" ? "" : "hover:bg-accent"}`}
+                onClick={() => setBotMode("ai")}
+              >
+                <span className="text-base">🧠 Humanizado</span>
+                <span className="text-[10px] font-normal opacity-80 text-left leading-tight">
+                  IA com etapas e instruções personalizadas. Conversa natural e contexto completo.
+                </span>
+              </Button>
+              <Button
+                type="button"
+                variant={botMode === "menu" ? "default" : "outline"}
+                className={`h-auto py-4 flex-col items-start gap-1 ${botMode === "menu" ? "" : "hover:bg-accent"}`}
+                onClick={() => setBotMode("menu")}
+              >
+                <span className="text-base">📋 Mensagens Prontas</span>
+                <span className="text-[10px] font-normal opacity-80 text-left leading-tight">
+                  Respostas fixas por palavra-chave. Simples e direto, sem IA.
+                </span>
+              </Button>
+            </div>
           </div>
           <div className="flex items-center justify-between rounded-md border border-border p-3">
             <div className="space-y-0.5">
@@ -561,7 +617,10 @@ Bot: "Olá! 😊 Que ótimo! Acesse ${bookingUrl} para escolher profissional e h
 
         {/* ETAPAS */}
         <TabsContent value="etapas" className="space-y-3 pt-4">
-          <p className="text-xs text-muted-foreground">Etapas que o bot segue na conversa (funil). Reordene com as setas.</p>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">🧠 Modo Humanizado</span>
+            <span className="text-xs text-muted-foreground">Etapas que o bot segue na conversa (funil). Reordene com as setas.</span>
+          </div>
           {!stagesLoaded && <Loader2 className="h-5 w-5 animate-spin" />}
           {stages.filter(s => !s._delete).map((st, idx) => {
             const realIdx = stages.indexOf(st);
@@ -593,6 +652,10 @@ Bot: "Olá! 😊 Que ótimo! Acesse ${bookingUrl} para escolher profissional e h
 
         {/* INSTRUÇÕES */}
         <TabsContent value="instrucoes" className="space-y-3 pt-4">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">🧠 Modo Humanizado</span>
+            <span className="text-xs text-muted-foreground">Clique em "Gerar com meus dados" para criar um prompt automático.</span>
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={generatePrompt} disabled={generating}>
               {generating ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Wand2 className="h-4 w-4 mr-1" />}
@@ -602,7 +665,6 @@ Bot: "Olá! 😊 Que ótimo! Acesse ${bookingUrl} para escolher profissional e h
               <Download className="h-4 w-4 mr-1" /> Baixar
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">Clique em "Gerar com meus dados" para criar um prompt automático com seus serviços, profissionais e link de agendamento.</p>
           <Textarea value={prompt} onChange={(e) => { setPrompt(e.target.value); markDirty(); }} rows={16} placeholder="Prompt mestre da IA…" className="font-mono text-xs" />
         </TabsContent>
 
@@ -638,14 +700,26 @@ Bot: "Olá! 😊 Que ótimo! Acesse ${bookingUrl} para escolher profissional e h
 
         {/* RESPOSTAS */}
         <TabsContent value="respostas" className="space-y-3 pt-4">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">📋 Modo Mensagens Prontas</span>
+            <span className="text-xs text-muted-foreground">Palavras-chave e respostas fixas.</span>
+          </div>
           <div className="flex items-center justify-between">
-            <p className="text-xs text-muted-foreground flex-1">Quando o cliente enviar mensagem com a palavra-chave, a IA usa o texto como base para gerar resposta humanizada.</p>
+            <p className="text-xs text-muted-foreground flex-1">
+              {botMode === "menu"
+                ? "Quando o cliente enviar uma mensagem com a palavra-chave, o bot responde automaticamente com o texto definido abaixo."
+                : "Quando o cliente enviar mensagem com a palavra-chave, a IA usa o texto como base para gerar resposta humanizada."}
+            </p>
             <Button size="sm" onClick={() => { setEditingResp({ trigger_word: "", response_text: "", active: true }); setRespModalOpen(true); }}>
               <Plus className="h-4 w-4 mr-1" /> Nova Regra
             </Button>
           </div>
           {responses.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-6">Nenhuma regra cadastrada — o bot usará a IA para todas as respostas.</p>
+            <p className="text-xs text-muted-foreground text-center py-6">
+              {botMode === "menu"
+                ? "Nenhuma regra cadastrada — cadastre palavras-chave e respostas para o bot funcionar."
+                : "Nenhuma regra cadastrada — o bot usará a IA para todas as respostas."}
+            </p>
           ) : (
             <div className="space-y-2">
               {responses.map(r => (
