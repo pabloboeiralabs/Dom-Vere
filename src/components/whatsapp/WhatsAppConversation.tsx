@@ -110,9 +110,14 @@ export function WhatsAppConversation({ chat, messages, onSendMessage, onBack, se
               ) : (
                 <p className="whitespace-pre-wrap break-words">{msg.wa_text || `[${msg.wa_type}]`}</p>
               )}
-              <p className={`text-[10px] mt-1 text-right ${msg.wa_fromMe ? "text-green-700 dark:text-green-400" : "text-muted-foreground"}`}>
-                {formatMsgTime(msg.wa_timestamp)}
-              </p>
+              <div className="flex items-center justify-end gap-1 mt-1">
+                {msg.msg_type === "bot" && (
+                  <span className="text-[9px] bg-green-600/20 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded-sm font-medium">Bot</span>
+                )}
+                <p className={`text-[10px] text-right ${msg.wa_fromMe ? "text-green-700 dark:text-green-400" : "text-muted-foreground"}`}>
+                  {formatMsgTime(msg.wa_timestamp)}
+                </p>
+              </div>
             </div>
           </div>
         ))}

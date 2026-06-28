@@ -1031,7 +1031,7 @@ Deno.serve(async (req) => {
           // envia o texto primeiro
           if (replyText) {
             await sendWhatsappMessage(apiUrl, token, sender, replyText);
-            await supabase.from("whatsapp_messages").insert({ user_id: cfg.user_id, wa_chatid: `${sender}${suffix}`, text: replyText, from_me: true, wa_timestamp: Date.now() });
+            await supabase.from("whatsapp_messages").insert({ user_id: cfg.user_id, wa_chatid: `${sender}${suffix}`, text: replyText, from_me: true, msg_type: 'bot', wa_timestamp: Date.now() });
           }
           const carouselResult = await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl);
           if (carouselResult === "CAROUSEL_SENT") {
@@ -1061,7 +1061,7 @@ Deno.serve(async (req) => {
 
 
       await sendWhatsappMessage(apiUrl, token, sender, replyText);
-      await supabase.from("whatsapp_messages").insert({ user_id: cfg.user_id, wa_chatid: `${sender}${suffix}`, text: replyText, from_me: true, wa_timestamp: Date.now() });
+      await supabase.from("whatsapp_messages").insert({ user_id: cfg.user_id, wa_chatid: `${sender}${suffix}`, text: replyText, from_me: true, msg_type: 'bot', wa_timestamp: Date.now() });
     }
 
     return new Response(JSON.stringify({ ok: true }));

@@ -46,6 +46,7 @@ export interface UazapiMessage {
   wa_type: string;
   wa_timestamp: number;
   wa_pushName?: string;
+  msg_type?: string;
 }
 
 function normalizeUazapiUrl(url: string): string {
@@ -353,6 +354,7 @@ export function useUazapi() {
         wa_fromMe: m.from_me ?? false,
         wa_text: m.text || "",
         wa_type: m.msg_type || "text",
+        msg_type: m.msg_type || undefined,
         wa_timestamp: Number(m.wa_timestamp) || 0,
         wa_pushName: m.push_name || "",
       }));
