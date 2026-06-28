@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from "react";
 import { useUazapi, type UazapiChat, type UazapiMessage } from "@/hooks/useUazapi";
 import { WhatsAppConnect } from "@/components/whatsapp/WhatsAppConnect";
 import { WhatsAppChatList } from "@/components/whatsapp/WhatsAppChatList";
@@ -8,7 +8,8 @@ import { WhatsAppBotConfigTabs } from "@/components/whatsapp/WhatsAppBotConfigTa
 import { WhatsAppJsonConfigs } from "@/components/whatsapp/WhatsAppJsonConfigs";
 import { WhatsAppAdminSidebar } from "@/components/whatsapp/WhatsAppAdminSidebar";
 import { WhatsAppBotResponses } from "@/components/whatsapp/WhatsAppBotResponses";
-import { WhatsAppBotFlow } from "@/components/whatsapp/WhatsAppBotFlow";
+
+const WhatsAppBotFlow = lazy(() => import("@/components/whatsapp/WhatsAppBotFlow"));
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -239,7 +240,11 @@ export default function WhatsApp() {
 
   // Connected - show flow editor instead of chat
   if (showFlowEditor) {
-    return <WhatsAppBotFlow onBack={() => setShowFlowEditor(false)} />;
+    return (
+      <Suspense fallback={<div className="flex items-center justify-center h-screen"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+        <WhatsAppBotFlow onBack={() => setShowFlowEditor(false)} />
+      </Suspense>
+    );
   }
 
   // Connected - WhatsApp Web layout
