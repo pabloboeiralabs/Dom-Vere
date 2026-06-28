@@ -101,7 +101,7 @@ interface Props {
   onBack?: () => void;
 }
 
-export function WhatsAppBotFlow({ onBack }: Props) {
+export default function WhatsAppBotFlow({ onBack }: Props) {
   const { user } = useAuth();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
