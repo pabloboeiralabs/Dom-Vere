@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useUazapi, type UazapiChat, type UazapiMessage } from "@/hooks/useUazapi";
 import { WhatsAppConnect } from "@/components/whatsapp/WhatsAppConnect";
 import { WhatsAppChatList } from "@/components/whatsapp/WhatsAppChatList";
@@ -8,8 +8,6 @@ import { WhatsAppBotConfigTabs } from "@/components/whatsapp/WhatsAppBotConfigTa
 import { WhatsAppJsonConfigs } from "@/components/whatsapp/WhatsAppJsonConfigs";
 import { WhatsAppAdminSidebar } from "@/components/whatsapp/WhatsAppAdminSidebar";
 import { WhatsAppBotResponses } from "@/components/whatsapp/WhatsAppBotResponses";
-
-const WhatsAppBotFlow = lazy(() => import("@/components/whatsapp/WhatsAppBotFlow"));
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -37,7 +35,6 @@ export default function WhatsApp() {
   const [sending, setSending] = useState(false);
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [showAdminSidebar, setShowAdminSidebar] = useState(false);
-  const [showFlowEditor, setShowFlowEditor] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedChats, setSelectedChats] = useState<Set<string>>(new Set());
   const [chatTab, setChatTab] = useState<"conversas" | "leads" | "espera">("conversas");
@@ -238,15 +235,6 @@ export default function WhatsApp() {
     );
   }
 
-  // Connected - show flow editor instead of chat
-  if (showFlowEditor) {
-    return (
-      <Suspense fallback={<div className="flex items-center justify-center h-screen"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
-        <WhatsAppBotFlow onBack={() => setShowFlowEditor(false)} />
-      </Suspense>
-    );
-  }
-
   // Connected - WhatsApp Web layout
   return (
     <div className="flex h-[calc(100vh-4rem)] border border-border rounded-lg overflow-hidden bg-card -mx-3 md:mx-0">
@@ -322,11 +310,7 @@ export default function WhatsApp() {
                 </>
               ) : (
                 <>
-                  {/* 1. Editor de Fluxo */}
-                  <Button variant="ghost" size="icon" onClick={() => setShowFlowEditor(true)} title="Editor de Fluxo (n8n)">
-                    <Bot className="h-5 w-5" />
-                  </Button>
-                  {/* 2. Regras do Bot */}
+                  {/* 1. Regras do Bot */}
                   <WhatsAppBotResponses />
                   {/* 3. Configurações */}
                   <Sheet>

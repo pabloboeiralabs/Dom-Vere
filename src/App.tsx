@@ -21,6 +21,7 @@ const Settings = lazy(() => import("@/pages/Settings"));
 const Admin = lazy(() => import("@/pages/Admin"));
 const Reports = lazy(() => import("@/pages/Reports"));
 const WhatsApp = lazy(() => import("@/pages/WhatsApp"));
+const WhatsAppBotFlow = lazy(() => import("@/components/whatsapp/WhatsAppBotFlow"));
 const Scheduling = lazy(() => import("@/pages/Scheduling"));
 const Campaigns = lazy(() => import("@/pages/Campaigns"));
 const Professionals = lazy(() => import("@/pages/Professionals"));
@@ -67,6 +68,7 @@ const App = () => (
               <Route path="/expirations" element={<SuspenseWrap><Expirations /></SuspenseWrap>} />
               <Route path="/reports" element={<SuspenseWrap><Reports /></SuspenseWrap>} />
               <Route path="/whatsapp" element={<PremiumRoute><SuspenseWrap><WhatsApp /></SuspenseWrap></PremiumRoute>} />
+              <Route path="/whatsapp/flow" element={<PremiumRoute><SuspenseWrap><WhatsAppBotFlow /></SuspenseWrap></PremiumRoute>} />
                <Route path="/scheduling" element={<PremiumRoute><SuspenseWrap><Scheduling /></SuspenseWrap></PremiumRoute>} />
                <Route path="/campaigns" element={<PremiumRoute><SuspenseWrap><Campaigns /></SuspenseWrap></PremiumRoute>} />
                <Route path="/crm" element={<PremiumRoute><SuspenseWrap><CrmKanban /></SuspenseWrap></PremiumRoute>} />
