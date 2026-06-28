@@ -7,6 +7,7 @@ import { WhatsAppBotWizard } from "@/components/whatsapp/WhatsAppBotWizard";
 import { WhatsAppBotConfigTabs } from "@/components/whatsapp/WhatsAppBotConfigTabs";
 import { WhatsAppJsonConfigs } from "@/components/whatsapp/WhatsAppJsonConfigs";
 import { WhatsAppAdminSidebar } from "@/components/whatsapp/WhatsAppAdminSidebar";
+import { WhatsAppBotResponses } from "@/components/whatsapp/WhatsAppBotResponses";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -309,7 +310,9 @@ export default function WhatsApp() {
                 </>
               ) : (
                 <>
-                  {/* 1. Configurações */}
+                  {/* 1. Regras do Bot */}
+                  <WhatsAppBotResponses />
+                  {/* 2. Configurações */}
                   <Sheet>
                     <SheetTrigger asChild>
                       <Button variant="ghost" size="icon" title="Configurações">
