@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Loader2, Wand2, Save, Download, AlertTriangle, CheckCircle2, XCircle,
   ArrowUp, ArrowDown, Plus, Trash2, Pencil, X, Copy, ExternalLink,
@@ -521,7 +521,7 @@ Bot: "Olá! 😊 Que ótimo! Acesse ${bookingUrl} para escolher profissional e h
 
       {/* Tabs */}
       <Tabs defaultValue="geral" className="w-full">
-        <TabsList className={`grid w-full h-auto ${botMode === "ai" ? "grid-cols-3 sm:grid-cols-6" : "grid-cols-3 sm:grid-cols-5"}`}>
+        <TabsList className={`grid w-full h-auto ${botMode === "ai" ? "grid-cols-3 sm:grid-cols-5" : "grid-cols-3 sm:grid-cols-4"}`}>
           <TabsTrigger value="geral" className="text-xs">Geral</TabsTrigger>
           {botMode === "ai" && (
             <>
@@ -534,7 +534,6 @@ Bot: "Olá! 😊 Que ótimo! Acesse ${bookingUrl} para escolher profissional e h
             <TabsTrigger value="respostas" className="text-xs">Respostas</TabsTrigger>
           )}
           <TabsTrigger value="lembretes" className="text-xs">Lembretes</TabsTrigger>
-          <TabsTrigger value="avancado" className="text-xs">Avançado</TabsTrigger>
         </TabsList>
 
         {/* GERAL */}
@@ -815,61 +814,7 @@ Bot: "Olá! 😊 Que ótimo! Acesse ${bookingUrl} para escolher profissional e h
             Executar agora (teste)
           </Button>
         </TabsContent>
-
-        {/* AVANÇADO */}
-        <TabsContent value="avancado" className="space-y-4 pt-4">
-          <div className="rounded-md border border-border p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Webhook className={`h-4 w-4 ${webhookEnabled === "on" ? "text-emerald-500" : "text-muted-foreground"}`} />
-                <Label>Webhook (tempo real)</Label>
-              </div>
-              <Badge variant={webhookEnabled === "on" ? "default" : "outline"}>{webhookEnabled}</Badge>
-            </div>
-            <Input readOnly value={webhookUrl} className="font-mono text-xs" placeholder="(não configurado)" />
-            <Button variant="outline" size="sm" onClick={handleConfigureWebhook} className="w-full">
-              <Webhook className="h-4 w-4 mr-1" /> Configurar Webhook
-            </Button>
-          </div>
-
-          <div className="rounded-md border border-border p-3 space-y-2">
-            <Label>Diagnóstico</Label>
-            <Dialog open={diagOpen} onOpenChange={setDiagOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="w-full" onClick={runDiag}>
-                  <TestTube2 className="h-4 w-4 mr-1" /> Testar configuração
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader><DialogTitle>Diagnóstico</DialogTitle></DialogHeader>
-                {diagLoading ? (
-                  <div className="flex items-center justify-center py-6"><Loader2 className="h-6 w-6 animate-spin" /></div>
-                ) : diag ? (
-                  diag.error ? (
-                    <Alert variant="destructive"><AlertDescription>{diag.error}</AlertDescription></Alert>
-                  ) : (
-                    <div className="space-y-2 text-sm">
-                      <DiagRow label="Conexão WhatsApp" ok={diag.connection === "connected"} value={diag.connection} />
-                      <DiagRow label="Chatbot habilitado no provedor" ok={diag.chatbotEnabled} value={diag.chatbotEnabled ? "sim" : "não"} />
-                      <DiagRow label="Prompt" ok={diag.promptOk} value={diag.promptOk ? `"${diag.promptPreview}…"` : "vazio"} />
-                      <DiagRow label="Webhook" ok={diag.webhookOk} value={diag.webhookUrl || "(sem URL)"} />
-                    </div>
-                  )
-                ) : null}
-              </DialogContent>
-            </Dialog>
-          </div>
-
-          <div className="rounded-md border border-border p-3 space-y-2">
-            <div className="flex items-center gap-2">
-              <KeyRound className="h-4 w-4 text-muted-foreground" />
-              <Label>API Key OpenAI (opcional)</Label>
-            </div>
-            <Input type="password" value={openaiKey} onChange={(e) => { setOpenaiKey(e.target.value); markDirty(); }} placeholder="sk-…" />
-            <p className="text-xs text-muted-foreground">Se vazio, será usada a IA padrão do sistema.</p>
-          </div>
-        </TabsContent>
-      </Tabs>
+	      </Tabs>
 
       {/* Footer save */}
       <div className="sticky bottom-0 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-card border-t border-border flex items-center justify-between gap-2">
