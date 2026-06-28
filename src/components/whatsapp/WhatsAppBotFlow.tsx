@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, memo } from "react";
 import {
   ReactFlow,
   Background,
@@ -7,15 +7,12 @@ import {
   useNodesState,
   useEdgesState,
   addEdge,
-  type Node,
-  type Edge,
-  type Connection,
-  type NodeProps,
   Handle,
   Position,
   MarkerType,
   BackgroundVariant,
 } from "@xyflow/react";
+import type { Node, Edge, Connection, NodeProps } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,7 +30,7 @@ type TriggerResp = {
 };
 
 // ─── Custom Trigger Node ───────────────────────────────────
-function TriggerNode({ data, selected }: NodeProps) {
+const TriggerNode = memo(({ data, selected }: NodeProps) => {
   return (
     <div className={`rounded-xl border-2 overflow-hidden shadow-sm w-64 ${selected ? "border-orange-500 shadow-orange-500/20" : "border-orange-300 dark:border-orange-700"}`}>
       <Handle type="target" position={Position.Top} className="w-3 h-3 !bg-orange-500 border-2 border-background" />
@@ -43,8 +40,8 @@ function TriggerNode({ data, selected }: NodeProps) {
       <div className="px-3 py-2 bg-card">
         <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Palavra-chave</p>
         <Input
-          value={data.trigger_word}
-          onChange={(e) => data.onUpdate({ trigger_word: e.target.value })}
+          value={data.trigger_word || ""}
+          onChange={(e) => data.onUpdate?.({ trigger_word: e.target.value })}
           className="h-8 text-sm font-mono border-orange-200 dark:border-orange-800 focus-visible:ring-orange-500"
           placeholder="ex: preco"
         />
@@ -52,10 +49,10 @@ function TriggerNode({ data, selected }: NodeProps) {
       <Handle type="source" position={Position.Bottom} className="w-3 h-3 !bg-orange-500 border-2 border-background" />
     </div>
   );
-}
+});
 
 // ─── Custom Response Node ───────────────────────────────────
-function ResponseNode({ data, selected }: NodeProps) {
+const ResponseNode = memo(({ data, selected }: NodeProps) => {
   return (
     <div className={`rounded-xl border-2 overflow-hidden shadow-sm w-80 ${selected ? "border-green-500 shadow-green-500/20" : "border-green-300 dark:border-green-700"}`}>
       <Handle type="target" position={Position.Top} className="w-3 h-3 !bg-green-500 border-2 border-background" />
@@ -65,8 +62,8 @@ function ResponseNode({ data, selected }: NodeProps) {
       <div className="px-3 py-2 bg-card">
         <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Resposta do bot</p>
         <Textarea
-          value={data.response_text}
-          onChange={(e) => data.onUpdate({ response_text: e.target.value })}
+          value={data.response_text || ""}
+          onChange={(e) => data.onUpdate?.({ response_text: e.target.value })}
           className="h-24 text-sm border-green-200 dark:border-green-800 focus-visible:ring-green-500"
           placeholder="mensagem que o bot vai enviar..."
         />
@@ -74,17 +71,17 @@ function ResponseNode({ data, selected }: NodeProps) {
       <Handle type="source" position={Position.Bottom} className="w-3 h-3 !bg-green-500 border-2 border-background" />
     </div>
   );
-}
+});
 
 // ─── Action Node (delete rule) ────────────────────────────
-function ActionNode({ data, selected }: NodeProps) {
+const ActionNode = memo(({ data, selected }: NodeProps) => {
   return (
     <div className={`rounded-xl border-2 overflow-hidden shadow-sm w-48 ${selected ? "border-red-500 shadow-red-500/20" : "border-border"}`}>
       <Handle type="target" position={Position.Top} className="w-3 h-3 !bg-red-400 border-2 border-background" />
       <div className="bg-card px-3 py-2 flex items-center justify-center gap-2">
-        <span className="text-xs text-muted-foreground">{data.label}</span>
+        <span className="text-xs text-muted-foreground">{data.label || ""}</span>
         <button
-          onClick={data.onDelete}
+          onClick={() => data.onDelete?.()}
           className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950 rounded p-1 transition-colors"
           title="Excluir regra"
         >
@@ -93,7 +90,7 @@ function ActionNode({ data, selected }: NodeProps) {
       </div>
     </div>
   );
-}
+});
 
 const nodeTypes = {
   trigger: TriggerNode,
