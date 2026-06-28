@@ -354,10 +354,18 @@ export function WhatsAppBotFlow({ onBack }: Props) {
       )}
 
       {/* React Flow canvas */}
-      <div className="flex-1">
+      <div className="flex-1 relative">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : nodes.length === 0 ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <Bot className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
+              <p className="text-sm text-muted-foreground">Nenhuma regra encontrada</p>
+              <p className="text-xs text-muted-foreground/70 mt-1">Clique em "Nova regra" para começar</p>
+            </div>
           </div>
         ) : (
           <ReactFlow
@@ -368,32 +376,17 @@ export function WhatsAppBotFlow({ onBack }: Props) {
             onConnect={onConnect}
             nodeTypes={nodeTypes}
             fitView
-            fitViewOptions={{ padding: 0.3 }}
             minZoom={0.3}
             maxZoom={2}
-            defaultEdgeOptions={{
-              animated: true,
-              style: { stroke: "#666", strokeWidth: 2 },
-              markerEnd: { type: MarkerType.ArrowClosed, color: "#666" },
-            }}
+            colorMode="dark"
           >
-            <Background
-              variant={BackgroundVariant.Dots}
-              gap={20}
-              size={1}
-              color="#94a3b8"
-              className="opacity-30"
-            />
-            <Controls
-              className="rounded-lg border border-border shadow-sm"
-              showInteractive={false}
-            />
+            <Background color="#94a3b8" gap={20} size={1} />
+            <Controls className="rounded-lg border border-border shadow-sm" />
             <MiniMap
               nodeStrokeColor="#666"
               nodeColor={(node) =>
                 node.type === "trigger" ? "#f97316" :
                 node.type === "response" ? "#22c55e" :
-                node.type === "action" ? "#ef4444" :
                 "#94a3b8"
               }
               maskColor="rgba(0,0,0,0.1)"
