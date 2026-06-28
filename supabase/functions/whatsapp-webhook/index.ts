@@ -639,7 +639,7 @@ function extractContextFromHistory(history: Array<{ text?: string | null; from_m
   };
 }
 
-function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: any[], services: any[], slots: AvailableSlot[], customerInfo?: any, stages?: Array<{ name: string; instruction: string; skip_if_registered: boolean }>): string {
+function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: any[], services: any[], slots: AvailableSlot[], customerInfo?: any, stages?: Array<{ name: string; instruction: string; skip_if_registered: boolean }>, currentStage: number = 0): string {
   const profList = professionals.map((p: any) => `- ${p.name}`).join("\n");
   const svcList = services.map((s: any) => `- ${s.name}: R$ ${Number(s.price || 0).toFixed(2)}`).join("\n");
   const todayStr = formatUtcDate(getBrasiliaTodayUtc());
@@ -663,8 +663,12 @@ function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: 
 
   const isRegistered = !!customerInfo?.id;
   const activeStages = (stages || []).filter(s => !(s.skip_if_registered && isRegistered));
+  const safeIdx = Math.min(currentStage, Math.max(0, activeStages.length - 1));
   const stagesBlock = activeStages.length > 0
-    ? `\n========================================\nETAPAS DA CONVERSA (OBRIGATÓRIO seguir nesta ordem):\n${activeStages.map((s, i) => `${i + 1}. [${s.name}]\n   ${s.instruction}`).join("\n\n")}\n========================================\nIDENTIFIQUE pelo histórico em qual etapa está. Se for a primeira mensagem do cliente, EXECUTE a ETAPA 1 EXATAMENTE como descrito (incluindo qualquer informação da barbearia, nome do cliente, etc.). NÃO pule etapas. NÃO use saudações genéricas se a etapa 1 pede algo específico.\n`
+    ? `\n========================================\nETAPAS DA CONVERSA:\n${activeStages.map((s, i) => {
+      const prefix = i === safeIdx ? "▶️ [ATUAL] " : `   ${i + 1}. `;
+      return i >= safeIdx ? `${prefix}${i === safeIdx ? s.name : `[${s.name}]`}\n   ${i === safeIdx ? s.instruction : "(aguarde a etapa atual ser concluída)"}` : "";
+    }).filter(Boolean).join("\n\n")}\n========================================\nVOCÊ ESTÁ NA ETAPA "${activeStages[safeIdx]?.name || ""}". Siga a instrução acima EXATAMENTE. Complete esta etapa antes de prosseguir.\nQuando completar a etapa, use a ferramenta advance_stage para ir para a próxima.\n`
     : "";
 
   const customerBlock = isRegistered
@@ -849,6 +853,7 @@ async function sendWhatsappMessage(apiUrl: string, token: string, number: string
 const checkAvailabilityTool = { type: "function", function: { name: "check_availability", parameters: { type: "object", properties: { date: { type: "string" }, time: { type: "string" }, professional_name: { type: "string" } }, required: ["date", "time"] } } };
 const appointmentTool = { type: "function", function: { name: "create_appointment", parameters: { type: "object", properties: { date: { type: "string" }, time: { type: "string" }, professional_name: { type: "string" }, service_name: { type: "string" } }, required: ["date", "time", "professional_name"] } } };
 const sendCarouselTool = { type: "function", function: { name: "send_professional_carousel", parameters: { type: "object", properties: {} } } };
+const advanceStageTool = { type: "function", function: { name: "advance_stage", parameters: { type: "object", properties: { summary: { type: "string", description: "Breve resumo do que foi concluído nesta etapa" } }, required: ["summary"] } } };
 
 Deno.serve(async (req) => {
   console.log("[webhook] Request received:", req.method, req.url);
@@ -922,13 +927,14 @@ Deno.serve(async (req) => {
     });
 
     const phoneDigits = sender.replace(/\D/g, "");
-    const [settingsRes, profsRes, servsRes, historyRes, stagesRes, customerRes] = await Promise.all([
+    const [settingsRes, profsRes, servsRes, historyRes, stagesRes, customerRes, leadRes] = await Promise.all([
       supabase.from("settings").select("*").eq("user_id", cfg.user_id).maybeSingle(),
       supabase.from("professionals").select("*").eq("user_id", cfg.user_id).eq("active", true),
       supabase.from("services").select("*").eq("user_id", cfg.user_id).eq("active", true),
       supabase.from("whatsapp_messages").select("*").eq("user_id", cfg.user_id).eq("wa_chatid", `${sender}${suffix}`).order("wa_timestamp", { ascending: false }).limit(10),
       supabase.from("bot_conversation_stages").select("name, instruction, stage_order, skip_if_registered").eq("user_id", cfg.user_id).eq("active", true).order("stage_order"),
       supabase.from("customers").select("id, name, birth_date, phone").eq("user_id", cfg.user_id).ilike("phone", `%${phoneDigits.slice(-8)}%`).maybeSingle(),
+      supabase.from("crm_leads").select("id, current_stage").eq("user_id", cfg.user_id).eq("wa_chatid", `${sender}${suffix}`).maybeSingle(),
     ]);
 
     const shopName = settingsRes.data?.shop_name || "Barbearia";
@@ -937,6 +943,24 @@ Deno.serve(async (req) => {
     const history = (historyRes.data || []).reverse();
     const stages = stagesRes.data || [];
     const customerInfo = customerRes.data || null;
+    let lead = leadRes.data || null;
+
+    // Ensure lead exists with current_stage tracking
+    if (!lead) {
+      const { data: newLead } = await supabase.from("crm_leads").insert({
+        user_id: cfg.user_id,
+        wa_chatid: `${sender}${suffix}`,
+        phone: sender,
+        name: "Novo Lead",
+        stage: "novo",
+        current_stage: 0,
+        last_interaction_at: new Date().toISOString(),
+      }).select("id, current_stage").single();
+      lead = newLead || { id: null, current_stage: 0 };
+    } else {
+      await supabase.from("crm_leads").update({ last_interaction_at: new Date().toISOString() }).eq("id", lead.id);
+    }
+    const currentStage = (lead?.current_stage ?? 0) as number;
 
     if (isMe) {
       console.log("[webhook] Message is from me, saving but skipping AI reply.");
@@ -974,15 +998,18 @@ Deno.serve(async (req) => {
       }
     } else {
       const slots = await getAvailableSlots(supabase, cfg.user_id, professionals, 7);
-      const systemPrompt = buildSystemPrompt(shopName, bookingUrl, professionals, services, slots, customerInfo, stages);
+      const systemPrompt = buildSystemPrompt(shopName, bookingUrl, professionals, services, slots, customerInfo, stages, currentStage);
       const aiMessages = [{ role: "system", content: systemPrompt }, ...history.map(m => ({ role: m.from_me ? "assistant" : "user", content: m.text }))];
-      
+
       // Ensure current message is in context if not in history yet
       if (!history.some(m => m.wa_message_id === messageId)) {
         aiMessages.push({ role: "user", content: text || `[Button: ${buttonId}]` });
       }
 
-      const aiResponse = await callAI(aiMessages, [checkAvailabilityTool, appointmentTool, sendCarouselTool]);
+      const aiTools = stages && stages.length > 0
+        ? [checkAvailabilityTool, appointmentTool, sendCarouselTool, advanceStageTool]
+        : [checkAvailabilityTool, appointmentTool, sendCarouselTool];
+      const aiResponse = await callAI(aiMessages, aiTools);
       const message = aiResponse.choices?.[0]?.message;
 
       if (message?.tool_calls?.length > 0) {
@@ -1016,6 +1043,19 @@ Deno.serve(async (req) => {
             replyText = ""; // não envia texto por cima do carrossel
           } else {
             replyText = carouselResult;
+          }
+        } else if (tc.function.name === "advance_stage") {
+          // Avançar para a próxima etapa
+          const nextStage = currentStage + 1;
+          if (nextStage < stages.length) {
+            if (lead?.id) {
+              await supabase.from("crm_leads").update({ current_stage: nextStage }).eq("id", lead.id);
+            }
+            const nextName = stages[nextStage]?.name || "";
+            const summary = args.summary || "Etapa concluída";
+            replyText = `✅ ${summary}. Agora vamos para a próxima etapa: ${nextName}.`;
+          } else {
+            replyText = "Todas as etapas foram concluídas! Como mais posso ajudar? 😊";
           }
         }
       } else {
@@ -1055,24 +1095,6 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ ok: true, ignored: "duplicate_reply" }));
       }
 
-      // Auto-create CRM lead
-      try {
-        const { data: existingLead } = await supabase.from("crm_leads").select("id").eq("user_id", cfg.user_id).eq("wa_chatid", `${sender}${suffix}`).maybeSingle();
-        if (!existingLead) {
-          await supabase.from("crm_leads").insert({
-            user_id: cfg.user_id,
-            wa_chatid: `${sender}${suffix}`,
-            phone: sender,
-            name: "Novo Lead",
-            stage: "novo",
-            last_interaction_at: new Date().toISOString(),
-          });
-        } else {
-          await supabase.from("crm_leads").update({ last_interaction_at: new Date().toISOString() }).eq("id", existingLead.id);
-        }
-      } catch (e) {
-        console.warn("[webhook] CRM lead error:", e);
-      }
 
       await sendWhatsappMessage(apiUrl, token, sender, replyText);
       await supabase.from("whatsapp_messages").insert({ user_id: cfg.user_id, wa_chatid: `${sender}${suffix}`, text: replyText, from_me: true, wa_timestamp: Date.now() });
