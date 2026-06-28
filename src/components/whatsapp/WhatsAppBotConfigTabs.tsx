@@ -521,7 +521,7 @@ Bot: "Olá! 😊 Que ótimo! Acesse ${bookingUrl} para escolher profissional e h
 
       {/* Tabs */}
       <Tabs defaultValue="geral" className="w-full">
-        <TabsList className={`grid w-full h-auto ${botMode === "ai" ? "grid-cols-3 sm:grid-cols-5" : "grid-cols-3 sm:grid-cols-4"}`}>
+        <TabsList className={`grid w-full h-auto ${botMode === "ai" ? "grid-cols-3 sm:grid-cols-6" : "grid-cols-3 sm:grid-cols-5"}`}>
           <TabsTrigger value="geral" className="text-xs">Geral</TabsTrigger>
           {botMode === "ai" && (
             <>
@@ -530,9 +530,7 @@ Bot: "Olá! 😊 Que ótimo! Acesse ${bookingUrl} para escolher profissional e h
             </>
           )}
           <TabsTrigger value="controles" className="text-xs">Controles</TabsTrigger>
-          {botMode === "menu" && (
-            <TabsTrigger value="respostas" className="text-xs">Respostas</TabsTrigger>
-          )}
+          <TabsTrigger value="respostas" className="text-xs">Respostas</TabsTrigger>
           <TabsTrigger value="lembretes" className="text-xs">Lembretes</TabsTrigger>
         </TabsList>
 
