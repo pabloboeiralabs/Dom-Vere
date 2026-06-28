@@ -8,6 +8,7 @@ import { WhatsAppBotConfigTabs } from "@/components/whatsapp/WhatsAppBotConfigTa
 import { WhatsAppJsonConfigs } from "@/components/whatsapp/WhatsAppJsonConfigs";
 import { WhatsAppAdminSidebar } from "@/components/whatsapp/WhatsAppAdminSidebar";
 import { WhatsAppBotResponses } from "@/components/whatsapp/WhatsAppBotResponses";
+import { WhatsAppBotFlow } from "@/components/whatsapp/WhatsAppBotFlow";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -35,6 +36,7 @@ export default function WhatsApp() {
   const [sending, setSending] = useState(false);
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [showAdminSidebar, setShowAdminSidebar] = useState(false);
+  const [showFlowEditor, setShowFlowEditor] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedChats, setSelectedChats] = useState<Set<string>>(new Set());
   const [chatTab, setChatTab] = useState<"conversas" | "leads" | "espera">("conversas");
@@ -235,6 +237,11 @@ export default function WhatsApp() {
     );
   }
 
+  // Connected - show flow editor instead of chat
+  if (showFlowEditor) {
+    return <WhatsAppBotFlow onBack={() => setShowFlowEditor(false)} />;
+  }
+
   // Connected - WhatsApp Web layout
   return (
     <div className="flex h-[calc(100vh-4rem)] border border-border rounded-lg overflow-hidden bg-card -mx-3 md:mx-0">
@@ -310,9 +317,13 @@ export default function WhatsApp() {
                 </>
               ) : (
                 <>
-                  {/* 1. Regras do Bot */}
+                  {/* 1. Editor de Fluxo */}
+                  <Button variant="ghost" size="icon" onClick={() => setShowFlowEditor(true)} title="Editor de Fluxo (n8n)">
+                    <Bot className="h-5 w-5" />
+                  </Button>
+                  {/* 2. Regras do Bot */}
                   <WhatsAppBotResponses />
-                  {/* 2. Configurações */}
+                  {/* 3. Configurações */}
                   <Sheet>
                     <SheetTrigger asChild>
                       <Button variant="ghost" size="icon" title="Configurações">
