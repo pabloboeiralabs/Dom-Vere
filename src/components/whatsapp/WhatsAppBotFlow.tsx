@@ -10,7 +10,6 @@ import {
   Handle,
   Position,
   MarkerType,
-  BackgroundVariant,
 } from "@xyflow/react";
 import type { Node, Edge, Connection, NodeProps } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -378,7 +377,6 @@ export function WhatsAppBotFlow({ onBack }: Props) {
             fitView
             minZoom={0.3}
             maxZoom={2}
-            colorMode="dark"
           >
             <Background color="#94a3b8" gap={20} size={1} />
             <Controls className="rounded-lg border border-border shadow-sm" />
