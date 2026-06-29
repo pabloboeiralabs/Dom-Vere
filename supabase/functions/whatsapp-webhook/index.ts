@@ -939,6 +939,21 @@ Deno.serve(async (req) => {
 	    }
     const currentStage = (lead?.current_stage ?? 0) as number;
 
+
+    // Auto-reset: se 30+ min sem conversa e conversa finalizada, comeca do zero
+    if (history.length > 0 && botMode === "menu") {
+      const lastMsg = history[history.length - 1];
+      const lastTs = typeof lastMsg.wa_timestamp === "number" ? lastMsg.wa_timestamp : 0;
+      const lastMs = lastTs > 9999999999 ? lastTs : lastTs * 1000;
+      const minutesSinceLast = (Date.now() - lastMs) / 60000;
+      const recentTexts = history.slice(-5).map(m => (m.text || "").toLowerCase()).join(" ");
+      const finalized = /encerrad|tchau|ate logo|volte sempre|obrigado.*atendimento|encerrado|0️⃣|7️⃣/.test(recentTexts);
+      if (minutesSinceLast > 30 && finalized && lead?.id) {
+        console.log("[webhook] Conversa finalizada ha mais de 30min. Resetando lead.");
+        await supabase.from("crm_leads").update({ current_stage: 0, bot_paused: false }).eq("id", lead.id);
+        lead.current_stage = 0;
+      }
+    }
     if (isMe) {
       console.log("[webhook] Message is from me, saving but skipping AI reply.");
       return new Response(JSON.stringify({ ok: true, message: "Outbound message stored." }));
