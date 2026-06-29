@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
+import ReminderPreference from "@/components/ReminderPreference";
 
 interface Professional {
   id: string;
@@ -101,7 +102,7 @@ export default function Booking() {
   const [services, setServices] = useState<Service[]>([]);
   const [schedules, setSchedules] = useState<Record<string, Schedule[]>>({});
   const [selectedProf, setSelectedProf] = useState("");
-  const [selectedService, setSelectedService] = useState("");
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [availableSlots, setAvailableSlots] = useState<SlotInfo[]>([]);
   const [selectedSlot, setSelectedSlot] = useState("");
@@ -111,6 +112,7 @@ export default function Booking() {
   const [loginMode, setLoginMode] = useState<"" | "login" | "register" | "guest">("");
   const [loginError, setLoginError] = useState("");
   const [loggingIn, setLoggingIn] = useState(false);
+  const [bookedCustomerId, setBookedCustomerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [booking, setBooking] = useState(false);
   const [booked, setBooked] = useState(false);
@@ -295,7 +297,7 @@ export default function Booking() {
       case "professional":
         return !!selectedProf;
       case "service":
-        return !!selectedService;
+        return selectedServices.length > 0;
       case "datetime":
         return !!selectedSlot;
       case "info":
@@ -355,16 +357,17 @@ export default function Booking() {
         user_id: userId,
         professional_id: selectedProf,
         customer_id: customerId,
-        service_id: selectedService || null,
+        service_id: selectedServices[0] || null,
         date: format(selectedDate, "yyyy-MM-dd"),
         start_time: selectedSlot,
         end_time: endTime,
-        notes: "Agendamento online",
+        notes: selectedServices.length > 1 ? "Agendamento online - Serviços: " + selectedServices.map(id => services.find(s => s.id === id)?.name).filter(Boolean).join(", ") : "Agendamento online",
       });
       if (error) throw error;
+      setBookedCustomerId(customerId);
 
       // Notify professional via WhatsApp (fire and forget)
-      const svcName = services.find((s: any) => s.id === selectedService)?.name || "";
+      const svcName = selectedServices.map(id => services.find((s: any) => s.id === id)?.name).filter(Boolean).join(", ");
       supabase.functions.invoke("notify-professional", {
         body: {
           professional_id: selectedProf,
@@ -401,7 +404,6 @@ export default function Booking() {
 
   if (booked) {
     const selectedProfObj = professionals.find((p) => p.id === selectedProf);
-    const selectedSvcObj = services.find((s) => s.id === selectedService);
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
         <motion.div
@@ -446,15 +448,25 @@ export default function Booking() {
                 </span>
               </div>
             )}
-            {selectedSvcObj && (
-              <div className="flex items-center gap-3">
-                <Scissors className="h-5 w-5 text-primary flex-shrink-0" />
-                <span className="text-foreground font-medium">
-                  {selectedSvcObj.name}
-                </span>
+            {selectedServices.length > 0 && (
+              <div className="border-t border-border pt-3 space-y-2">
+                <div className="flex items-center gap-3">
+                  <Scissors className="h-5 w-5 text-primary flex-shrink-0" />
+                  <span className="text-foreground font-medium text-sm">
+                    {selectedServices.map(id => services.find(s => s.id === id)?.name).filter(Boolean).join(", ")}
+                  </span>
+                </div>
               </div>
             )}
           </div>
+
+          {/* Reminder Preference */}
+          {customerId && (
+            <div className="bg-muted/30 rounded-2xl p-5">
+              <ReminderPreference customerId={bookedCustomerId} />
+            </div>
+          )}
+
           <Button
             onClick={() => {
               setBooked(false);
@@ -683,11 +695,14 @@ export default function Booking() {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: i * 0.06 }}
                     onClick={() => {
-                      setSelectedService(s.id);
-                      setTimeout(goNext, 300);
+                      if (selectedServices.includes(s.id)) {
+                        setSelectedServices(prev => prev.filter(id => id !== s.id));
+                      } else {
+                        setSelectedServices(prev => [...prev, s.id]);
+                      }
                     }}
                     className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all duration-200 text-left ${
-                      selectedService === s.id
+                      selectedServices.includes(s.id)
                         ? "border-primary bg-primary/5 shadow-md shadow-primary/10"
                         : "border-border/50 bg-card hover:border-primary/50"
                     }`}
@@ -695,7 +710,7 @@ export default function Booking() {
                     <div className="flex items-center gap-3">
                       <div
                         className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                          selectedService === s.id
+                          selectedServices.includes(s.id)
                             ? "bg-primary text-primary-foreground"
                             : "bg-muted text-muted-foreground"
                         }`}
@@ -704,7 +719,7 @@ export default function Booking() {
                       </div>
                       <span
                         className={`font-medium ${
-                          selectedService === s.id
+                          selectedServices.includes(s.id)
                             ? "text-foreground"
                             : "text-foreground/80"
                         }`}
@@ -724,6 +739,11 @@ export default function Booking() {
                     </Badge>
                   </motion.button>
                 ))}
+                {selectedServices.length > 0 && (
+                  <button onClick={goNext} className="w-full mt-4 py-3 rounded-2xl bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-all shadow-lg shadow-primary/20">
+                    Continuar ({selectedServices.length} serviço{selectedServices.length > 1 ? "s" : ""})
+                  </button>
+                )}
               </div>
             )}
 
@@ -849,7 +869,7 @@ export default function Booking() {
                         {professionals.find((p) => p.id === selectedProf)?.name}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {services.find((s) => s.id === selectedService)?.name ||
+                        {selectedServices.map(id => services.find((s) => s.id === id)).filter(Boolean)?.name ||
                           "Serviço"}{" "}
                         •{" "}
                         {format(selectedDate, "dd/MM", { locale: ptBR })} às{" "}
