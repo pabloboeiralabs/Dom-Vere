@@ -1005,21 +1005,7 @@ Deno.serve(async (req) => {
         }
       } else {
         replyText = message?.content || "Como posso ajudar?";
-        // Fallback: se a IA está perguntando sobre profissional, dispara carrossel automaticamente
-        const askingProf = /profissional|barbeir|com quem|preferência de|prefere atender|qual barbeiro/i.test(replyText);
-        const userWantsBooking = /agend|marca|cortar|corte|hor[aá]rio/i.test(text || "");
-        if (!profAlreadyChosen && (askingProf || userWantsBooking) && professionals.length > 0 && !carouselAlreadySent) {
-          // envia o texto primeiro
-          if (replyText) {
-            await sendWhatsappMessage(apiUrl, token, sender, replyText);
-            await supabase.from("whatsapp_messages").insert({ user_id: cfg.user_id, wa_chatid: `${sender}${suffix}`, text: replyText, from_me: true, wa_timestamp: Date.now() });
-          }
-          const carouselResult = await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl);
-          if (carouselResult === "CAROUSEL_SENT") {
-            carouselAlreadySent = true;
-            replyText = "";
-          }
-        }
+
       }
     }
 
