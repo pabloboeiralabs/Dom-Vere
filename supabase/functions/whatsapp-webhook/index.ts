@@ -965,8 +965,8 @@ Deno.serve(async (req) => {
         replyText = carouselResult;
       }
     } else {
-      // Check trigger responses first (Mensagens Prontas mode)
-      if (triggerResponses.length > 0 && text) {
+      // Check trigger responses only in Mensagens Prontas mode
+      if (botMode === "menu" && triggerResponses.length > 0 && text) {
         const lowerText = text.toLowerCase().trim();
         const matched = triggerResponses.find(r => {
           const words = r.trigger_word.toLowerCase().split(",").map(w => w.trim());
