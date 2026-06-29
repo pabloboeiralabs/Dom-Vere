@@ -668,7 +668,7 @@ function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: 
     ? `\n========================================\nETAPAS DA CONVERSA:\n${activeStages.map((s, i) => {
       const prefix = i === safeIdx ? "▶️ [ATUAL] " : `   ${i + 1}. `;
       return i >= safeIdx ? `${prefix}${i === safeIdx ? s.name : `[${s.name}]`}\n   ${i === safeIdx ? s.instruction : "(aguarde a etapa atual ser concluída)"}` : "";
-    }).filter(Boolean).join("\n\n")}\n========================================\nVOCÊ ESTÁ NA ETAPA "${activeStages[safeIdx]?.name || ""}". Siga a instrução acima EXATAMENTE. Complete esta etapa antes de prosseguir.\nQuando completar a etapa, use a ferramenta advance_stage para ir para a próxima.\n`
+    }).filter(Boolean).join("\n\n")}\n========================================\nVOCÊ ESTÁ NA ETAPA "${activeStages[safeIdx]?.name || ""}". Siga a instrução acima. Converse naturalmente com o cliente, sem pressa para avançar.\n`
     : "";
 
   const customerBlock = isRegistered
@@ -702,7 +702,6 @@ ${availability}LINK: ${bookingUrl}
 - Seja breve: 2-3 frases por mensagem, com no máximo 1 emoji.
 - Use formato YYYY-MM-DD e HH:MM ao chamar ferramentas.
 - Ao finalizar, pergunte se precisa de mais algo.
-- NÃO use advance_stage na primeira interação. Só avance de etapa depois de pelo menos 3 trocas de mensagens com o cliente e quando tiver certeza que a etapa foi realmente concluída.
 - Se o cliente já for cadastrado, trate pelo nome e NÃO peça cadastro novamente.`;
 }
 
@@ -828,7 +827,6 @@ async function sendWhatsappMessage(apiUrl: string, token: string, number: string
 const checkAvailabilityTool = { type: "function", function: { name: "check_availability", parameters: { type: "object", properties: { date: { type: "string" }, time: { type: "string" }, professional_name: { type: "string" } }, required: ["date", "time"] } } };
 const appointmentTool = { type: "function", function: { name: "create_appointment", parameters: { type: "object", properties: { date: { type: "string" }, time: { type: "string" }, professional_name: { type: "string" }, service_name: { type: "string" } }, required: ["date", "time", "professional_name"] } } };
 const sendCarouselTool = { type: "function", function: { name: "send_professional_carousel", parameters: { type: "object", properties: {} } } };
-const advanceStageTool = { type: "function", function: { name: "advance_stage", parameters: { type: "object", properties: { summary: { type: "string", description: "Breve resumo do que foi concluído nesta etapa" } }, required: ["summary"] } } };
 
 Deno.serve(async (req) => {
   console.log("[webhook] Request received:", req.method, req.url);
@@ -1032,6 +1030,15 @@ Deno.serve(async (req) => {
       if (!replyText && !skipAi) {
       const slots = await getAvailableSlots(supabase, cfg.user_id, professionals, 7);
       const systemPrompt = buildSystemPrompt(shopName, bookingUrl, professionals, services, slots, customerInfo, stages, currentStage);
+      // Avança etapa automaticamente a cada 4 mensagens do cliente
+      if (stages.length > 0 && lead?.id) {
+        const customerMsgCount = history.filter(m => !m.from_me).length;
+        const autoNextStage = Math.min(Math.floor(customerMsgCount / 4), stages.length - 1);
+        if (autoNextStage > currentStage) {
+          console.log("[webhook] Auto-avancando etapa:", currentStage, "->", autoNextStage);
+          await supabase.from("crm_leads").update({ current_stage: autoNextStage }).eq("id", lead.id);
+        }
+      }
       const aiMessages = [{ role: "system", content: systemPrompt }, ...history.map(m => ({ role: m.from_me ? "assistant" : "user", content: m.text }))];
 
       // Ensure current message is in context if not in history yet
@@ -1044,7 +1051,7 @@ Deno.serve(async (req) => {
       const aiTools = isFirstInteraction
         ? []  // sem ferramentas - só conversa natural
         : stages && stages.length > 0
-          ? [checkAvailabilityTool, appointmentTool, sendCarouselTool, advanceStageTool]
+          ? [checkAvailabilityTool, appointmentTool, sendCarouselTool]
           : [checkAvailabilityTool, appointmentTool, sendCarouselTool];
       const aiResponse = await callAI(aiMessages, aiTools);
       const message = aiResponse.choices?.[0]?.message;
@@ -1081,19 +1088,7 @@ Deno.serve(async (req) => {
           } else {
             replyText = carouselResult;
           }
-        } else if (tc.function.name === "advance_stage") {
           // Só avança se houver pelo menos 3 interações do cliente
-          const customerMsgs = history.filter(m => !m.from_me).length;
-          if (customerMsgs < 5) {
-            replyText = "Vamos com calma! Antes de avançar, me conte mais sobre o que você precisa. 😊";
-          } else {
-            const nextStage = currentStage + 1;
-            if (nextStage < stages.length) {
-              if (lead?.id) {
-                await supabase.from("crm_leads").update({ current_stage: nextStage }).eq("id", lead.id);
-              }
-              const nextName = stages[nextStage]?.name || "";
-              replyText = `✅ Entendi! Agora vamos para a próxima etapa: ${nextName}.`;
             } else {
               replyText = "Todas as etapas foram concluídas! Como mais posso ajudar? 😊";
             }
