@@ -1088,12 +1088,6 @@ Deno.serve(async (req) => {
           } else {
             replyText = carouselResult;
           }
-          // Só avança se houver pelo menos 3 interações do cliente
-            } else {
-              replyText = "Todas as etapas foram concluídas! Como mais posso ajudar? 😊";
-            }
-          }
-        }
       } else {
         replyText = message?.content || "Como posso ajudar?";
         // Fallback: se a IA pergunta sobre profissional e cliente quer agendar, envia carrossel
