@@ -893,13 +893,14 @@ Deno.serve(async (req) => {
     });
 
     const phoneDigits = sender.replace(/\D/g, "");
-    const [settingsRes, profsRes, servsRes, historyRes, stagesRes, customerRes] = await Promise.all([
+    const [settingsRes, profsRes, servsRes, historyRes, stagesRes, customerRes, , responsesRes] = await Promise.all([
       supabase.from("settings").select("*").eq("user_id", cfg.user_id).maybeSingle(),
       supabase.from("professionals").select("*").eq("user_id", cfg.user_id).eq("active", true),
       supabase.from("services").select("*").eq("user_id", cfg.user_id).eq("active", true),
       supabase.from("whatsapp_messages").select("*").eq("user_id", cfg.user_id).eq("wa_chatid", `${sender}${suffix}`).order("wa_timestamp", { ascending: false }).limit(10),
       supabase.from("bot_conversation_stages").select("name, instruction, stage_order, skip_if_registered").eq("user_id", cfg.user_id).eq("active", true).order("stage_order"),
       supabase.from("customers").select("id, name, birth_date, phone").eq("user_id", cfg.user_id).ilike("phone", `%${phoneDigits.slice(-8)}%`).maybeSingle(),
+      supabase.from("bot_trigger_responses").select("trigger_word, response_text, active").eq("user_id", cfg.user_id).eq("active", true),
     ]);
 
     const shopName = settingsRes.data?.shop_name || "Barbearia";
@@ -908,6 +909,8 @@ Deno.serve(async (req) => {
     const history = (historyRes.data || []).reverse();
     const stages = stagesRes.data || [];
     const customerInfo = customerRes.data || null;
+    const botMode = (settingsRes.data as any)?.bot_mode || "ai";
+    const triggerResponses = (responsesRes?.data || []) as Array<{ trigger_word: string; response_text: string; active: boolean }>;
 
     if (isMe) {
       console.log("[webhook] Message is from me, saving but skipping AI reply.");
