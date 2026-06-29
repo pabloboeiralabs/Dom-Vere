@@ -732,20 +732,21 @@ export default function Booking() {
                     </div>
                     <Badge
                       variant="secondary"
-                      className={`text-sm px-3 py-1 ${
-                        selectedService === s.id
-                          ? "bg-primary/20 text-primary"
-                          : ""
-                      }`}
+                      className="text-sm px-3 py-1"
                     >
                       R$ {Number(s.price).toFixed(2)}
                     </Badge>
                   </motion.button>
                 ))}
-                {selectedServices.length > 0 && (
-                  <button onClick={goNext} className="w-full mt-4 py-3 rounded-2xl bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-all shadow-lg shadow-primary/20">
-                    Continuar ({selectedServices.length} serviço{selectedServices.length > 1 ? "s" : ""})
-                  </button>
+                {selectedServices.length > 0 && services.length > 0 && (
+                  <motion.button
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    onClick={goNext}
+                    className="w-full mt-4 py-3.5 rounded-2xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-all shadow-lg shadow-primary/30"
+                  >
+                    Continuar ({selectedServices.length} serviço{selectedServices.length > 1 ? "s" : ""}) →
+                  </motion.button>
                 )}
               </div>
             )}
@@ -872,7 +873,7 @@ export default function Booking() {
                         {professionals.find((p) => p.id === selectedProf)?.name}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {selectedServices.map(id => services.find((s) => s.id === id)).filter(Boolean)?.name ||
+                        {selectedServices.map(id => services.find((s) => s.id === id)?.name).filter(Boolean).join(", ") ||
                           "Serviço"}{" "}
                         •{" "}
                         {format(selectedDate, "dd/MM", { locale: ptBR })} às{" "}
