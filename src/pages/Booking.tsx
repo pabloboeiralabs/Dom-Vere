@@ -464,7 +464,7 @@ export default function Booking() {
           </div>
 
           {/* Reminder Preference */}
-          {customerId && (
+          {bookedCustomerId && (
             <div className="bg-muted/30 rounded-2xl p-5">
               <ReminderPreference customerId={bookedCustomerId} />
             </div>
