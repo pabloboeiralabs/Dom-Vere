@@ -950,6 +950,7 @@ Deno.serve(async (req) => {
 
     let replyText = "";
     let carouselAlreadySent = false;
+    let skipAi = false;
 
     if (buttonId.startsWith("PROF_")) {
       const profName = buttonId.replace("PROF_", "");
@@ -989,7 +990,8 @@ Deno.serve(async (req) => {
                   longitude: locData.lng,
                 }),
               });
-              replyText = ""; // só o card, sem texto extra
+              replyText = "";
+                skipAi = true; // não manda texto nem chama IA
             } catch (e) {
               console.error("[webhook] Error sending location:", e);
               replyText = "📍 Aqui está nosso endereço. Em breve enviaremos a localização!";
@@ -1001,7 +1003,7 @@ Deno.serve(async (req) => {
       }
 
       // If no trigger matched, use AI
-      if (!replyText) {
+      if (!replyText && !skipAi) {
       const slots = await getAvailableSlots(supabase, cfg.user_id, professionals, 7);
       const systemPrompt = buildSystemPrompt(shopName, bookingUrl, professionals, services, slots, customerInfo, stages, currentStage);
       const aiMessages = [{ role: "system", content: systemPrompt }, ...history.map(m => ({ role: m.from_me ? "assistant" : "user", content: m.text }))];
