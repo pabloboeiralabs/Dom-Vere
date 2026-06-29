@@ -693,7 +693,7 @@ ${availability}LINK: ${bookingUrl}
 3. Se ele quiser agendar, pergunte UM item de cada vez: serviço, profissional, dia, horário.
 4. Só use ferramentas (check_availability, create_appointment) quando tiver TODOS os dados.
 5. Se ele perguntar valores, responda com os preços dos serviços.
-6. Se ele perguntar sobre profissionais, DESCREVA brevemente e pergunte se quer ver as opções.
+6. Se ele demonstrar interesse em agendar com algum profissional, use send_professional_carousel para mostrar as opções disponíveis.
 
 ⚠️ *REGRAS IMPORTANTES:*
 - Use send_professional_carousel quando o cliente demonstrar interesse em agendar MAS SEMPRE depois de uma saudação inicial e de entender o que ele precisa.
