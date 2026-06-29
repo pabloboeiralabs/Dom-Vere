@@ -931,6 +931,20 @@ Deno.serve(async (req) => {
     let replyText = "";
     let carouselAlreadySent = false;
 
+    // Check trigger responses (Mensagens Prontas mode)
+    if (botMode === "menu" && triggerResponses.length > 0 && text) {
+      const lowerText = text.toLowerCase().trim();
+      const matched = triggerResponses.find(r => {
+        const words = r.trigger_word.toLowerCase().split(",").map(w => w.trim());
+        return words.some(w => lowerText === w || lowerText.includes(w));
+      });
+      if (matched) {
+        replyText = matched.response_text;
+        console.log("[webhook] Trigger response matched:", matched.trigger_word);
+      }
+    }
+
+    if (!replyText) {
     if (buttonId.startsWith("PROF_")) {
       const profName = buttonId.replace("PROF_", "");
       replyText = `Ótimo! Escolheu ${profName}. Qual dia e horário você prefere? 😊`;
@@ -1007,6 +1021,8 @@ Deno.serve(async (req) => {
           }
         }
       }
+    }
+
     }
 
     console.log("[webhook] Sending reply:", { sender, replyText: replyText?.slice(0, 50), carouselAlreadySent });
