@@ -704,10 +704,6 @@ async function handleSendCarousel(
   apiUrl: string,
   token: string,
   sender: string,
-async function handleSendCarousel(
-  apiUrl: string,
-  token: string,
-  sender: string,
   professionals: any[],
   bookingUrl: string,
   _config?: any
@@ -795,21 +791,6 @@ async function handleSendCarousel(
   return `✅ Confirmado! ${dateISO} às ${timeHHMM} com ${prof.name}.`;
 }
 
-async function sendWhatsappMessage(apiUrl: string, token: string, number: string, text: string) {
-  const isEvolution = apiUrl.includes("evolution");
-
-  let url: string;
-  let headers: Record<string, string>;
-  let body: any;
-
-  if (isEvolution) {
-    let instanceName = token;
-    let apikey = token;
-    if (token.includes(":")) {
-      const parts = token.split(":");
-      instanceName = parts[0];
-      apikey = parts[1];
-    }
 async function sendWhatsappMessage(apiUrl: string, token: string, number: string, text: string) {
   const url = `${apiUrl}/send/text`;
   const headers: Record<string, string> = {
