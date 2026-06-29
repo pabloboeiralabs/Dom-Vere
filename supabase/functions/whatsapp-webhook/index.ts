@@ -1008,7 +1008,7 @@ Deno.serve(async (req) => {
         // Fallback: se a IA está perguntando sobre profissional, dispara carrossel automaticamente
         const askingProf = /profissional|barbeir|com quem|preferência de|prefere atender|qual barbeiro/i.test(replyText);
         const userWantsBooking = /agend|marca|cortar|corte|hor[aá]rio/i.test(text || "");
-        if ((askingProf || userWantsBooking) && professionals.length > 0 && !carouselAlreadySent) {
+        if (!profAlreadyChosen && (askingProf || userWantsBooking) && professionals.length > 0 && !carouselAlreadySent {
           // envia o texto primeiro
           if (replyText) {
             await sendWhatsappMessage(apiUrl, token, sender, replyText);
