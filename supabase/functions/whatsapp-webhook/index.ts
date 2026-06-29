@@ -125,15 +125,6 @@ function extractPushName(body: any): string {
   ).toString().trim();
 }
 
-function wantsProfessionalCarousel(text: string): boolean {
-  const normalized = text
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-
-  return /\b(profissionais?|barbeir[oa]s?|equipe|quem corta|com quem|qual profissional)\b/i.test(normalized);
-}
-
 function extractSender(body: any): string {
   const key = body?.data?.key || body?.key || {};
   const remoteJid =
@@ -685,60 +676,13 @@ ${availability}LINK: ${bookingUrl}
 🪜 *FLUXO DA CONVERSA (siga naturalmente, um passo por vez):*
 1. CUMPRIMENTE o cliente com uma saudação calorosa. Pergunte como pode ajudar.
 2. ESCUTE o que ele precisa. Deixe o cliente falar primeiro.
-3. Se o cliente demonstrar interesse em qualquer serviço (corte, barba, agendar, etc), USE send_professional_carousel imediatamente para mostrar os profissionais disponíveis com fotos.
+3. Se o cliente quiser agendar, pergunte o serviço desejado e informe os profissionais disponíveis.
 4. Só use check_availability ou create_appointment quando tiver TODOS os dados (profissional, serviço, data, horário).
 5. Se ele perguntar valores, responda com os preços.
 6. Seja breve: 2-3 frases, no máximo 1 emoji.
 7. Ao finalizar, pergunte se precisa de mais algo.
 8. Use formato YYYY-MM-DD e HH:MM ao chamar ferramentas.
 9. Se o cliente já for cadastrado, trate pelo nome e NÃO peça cadastro novamente.`;
-}
-
-async function handleSendCarousel(
-  apiUrl: string,
-  token: string,
-  sender: string,
-  professionals: any[],
-  bookingUrl: string,
-  _config?: any
-): Promise<string> {
-  const defaultFallback = (name: string) =>
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&size=600&length=2&background=333&color=fff&format=png`;
-  const safeImage = (p: any) => {
-    const url = String(p.photo_url || "").trim();
-    if (!url) return defaultFallback(p.name);
-    return /\.(png|jpe?g)(\?|$)/i.test(url) ? url : defaultFallback(p.name);
-  };
-
-  const cards = professionals.map((p: any) => ({
-    header: { title: p.name, imageUrl: safeImage(p) },
-    body: { text: `💈 *${p.name}*` },
-    buttons: [
-      { type: "REPLY", displayText: `Escolher ${p.name.split(" ")[0]}`, id: `PROF_${p.name}` },
-    ],
-  }));
-
-  try {
-    const res = await fetch(`${apiUrl}/send/carousel`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "apikey": token,
-      },
-      body: JSON.stringify({
-        number: sender,
-        body: "Escolha o profissional de sua preferência:",
-        cards,
-      }),
-    });
-    const data = await res.json();
-    console.log("[webhook] carousel sent:", res.status, data);
-    if (res.status === 200) return "CAROUSEL_SENT";
-    throw new Error(`Carousel failed: ${res.status}`);
-  } catch (err: any) {
-    console.error("[webhook] carousel send error:", err.message);
-    return `Escolha um profissional:\n\n${professionals.map((p, i) => `${i + 1}️⃣ ${p.name}`).join("\n")}\n\nOu agende pelo link: ${bookingUrl}`;
-  }
 }
 
 async function handleToolCall(supabase: any, userId: string, args: any, senderPhone: string, professionals: any[], services: any[], templateConfigs?: any[]): Promise<string> {
@@ -812,7 +756,6 @@ async function sendWhatsappMessage(apiUrl: string, token: string, number: string
 
 const checkAvailabilityTool = { type: "function", function: { name: "check_availability", parameters: { type: "object", properties: { date: { type: "string" }, time: { type: "string" }, professional_name: { type: "string" } }, required: ["date", "time"] } } };
 const appointmentTool = { type: "function", function: { name: "create_appointment", parameters: { type: "object", properties: { date: { type: "string" }, time: { type: "string" }, professional_name: { type: "string" }, service_name: { type: "string" } }, required: ["date", "time", "professional_name"] } } };
-const sendCarouselTool = { type: "function", function: { name: "send_professional_carousel", parameters: { type: "object", properties: {} } } };
 
 Deno.serve(async (req) => {
   console.log("[webhook] Request received:", req.method, req.url);
@@ -925,8 +868,7 @@ Deno.serve(async (req) => {
     const token = cfg.instance_token;
 
     let replyText = "";
-    let carouselAlreadySent = false;
-
+    
     // Check trigger responses (Mensagens Prontas mode)
     if (botMode === "menu" && triggerResponses.length > 0 && text) {
       const lowerText = text.toLowerCase().trim();
@@ -942,21 +884,10 @@ Deno.serve(async (req) => {
 
     if (!replyText) {
     // Check if professional was already chosen OR this is a button response
-    const isButtonResponse = (text || "").match(/^escolher /i) || buttonId.startsWith("PROF_") || (text || "").includes("PROF_");
-    const profAlreadyChosen = isButtonResponse || history.some(m => (m.text || "").includes("PROF_") || (m.text || "").startsWith("Ótimo! Escolheu"));
 
     if (buttonId.startsWith("PROF_")) {
       const profName = buttonId.replace("PROF_", "");
       replyText = `Ótimo! Escolheu ${profName}. Qual dia e horário você prefere? 😊`;
-    } else if (!profAlreadyChosen && wantsProfessionalCarousel(text || "")) {
-      console.log("[webhook] direct carousel intent detected");
-      const carouselResult = await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl);
-      if (carouselResult === "CAROUSEL_SENT") {
-        carouselAlreadySent = true;
-        replyText = "";
-      } else {
-        replyText = carouselResult;
-      }
     } else {
       const slots = await getAvailableSlots(supabase, cfg.user_id, professionals, 7);
       const systemPrompt = buildSystemPrompt(shopName, bookingUrl, professionals, services, slots, customerInfo, stages);
@@ -967,7 +898,7 @@ Deno.serve(async (req) => {
         aiMessages.push({ role: "user", content: text || `[Button: ${buttonId}]` });
       }
 
-      const aiResponse = await callAI(aiMessages, [checkAvailabilityTool, appointmentTool, sendCarouselTool]);
+      const aiResponse = await callAI(aiMessages, [checkAvailabilityTool, appointmentTool]);
       const message = aiResponse.choices?.[0]?.message;
 
       if (message?.tool_calls?.length > 0) {
@@ -994,14 +925,6 @@ Deno.serve(async (req) => {
           }
         } else if (tc.function.name === "create_appointment") {
           replyText = await handleToolCall(supabase, cfg.user_id, args, sender, professionals, services);
-        } else if (tc.function.name === "send_professional_carousel") {
-          const carouselResult = await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl);
-          if (carouselResult === "CAROUSEL_SENT") {
-            carouselAlreadySent = true;
-            replyText = ""; // não envia texto por cima do carrossel
-          } else {
-            replyText = carouselResult;
-          }
         }
       } else {
         replyText = message?.content || "Como posso ajudar?";
@@ -1011,8 +934,8 @@ Deno.serve(async (req) => {
 
     }
 
-    console.log("[webhook] Sending reply:", { sender, replyText: replyText?.slice(0, 50), carouselAlreadySent });
-    if (replyText && !carouselAlreadySent) {
+    console.log("[webhook] Sending reply:", { sender, replyText: replyText?.slice(0, 50) });
+    if (replyText ) {
       // Avoid duplicated AI replies for the same messageId
       const { data: existingReply } = await supabase
         .from("whatsapp_messages")
