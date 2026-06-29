@@ -696,7 +696,8 @@ ${availability}LINK: ${bookingUrl}
 6. Se ele perguntar sobre profissionais, DESCREVA brevemente e pergunte se quer ver as opções.
 
 ⚠️ *REGRAS IMPORTANTES:*
-- NÃO envie carrossel de profissionais (send_professional_carousel) a menos que o cliente PEÇA explicitamente.
+- Use send_professional_carousel quando o cliente demonstrar interesse em agendar MAS SEMPRE depois de uma saudação inicial e de entender o que ele precisa.
+- NÃO envie carrossel na primeira mensagem. Primeiro cumprimente, pergunte como pode ajudar, e só depois, se for relevante, ofereça os profissionais.
 - NÃO pergunte tudo de uma vez. Faça uma pergunta por vez.
 - Seja breve: 2-3 frases por mensagem, com no máximo 1 emoji.
 - Use formato YYYY-MM-DD e HH:MM ao chamar ferramentas.
@@ -1076,10 +1077,10 @@ Deno.serve(async (req) => {
         }
       } else {
         replyText = message?.content || "Como posso ajudar?";
-        // Fallback: se a IA está perguntando sobre profissional, dispara carrossel automaticamente
-        const askingProf = /profissional|barbeir|com quem|preferência de|prefere atender|qual barbeiro/i.test(replyText);
-        const userWantsBooking = /agend|marca|cortar|corte|hor[aá]rio/i.test(text || "");
-        if (botMode === "menu" && (askingProf || userWantsBooking) && professionals.length > 0 && !carouselAlreadySent {
+        // Fallback: se a IA pergunta sobre profissional e cliente quer agendar, envia carrossel
+        const askingProf = /profissional|barbeir|com quem|gostaria de saber|escolher|preferência de|prefere atender|qual barbeiro/i.test(replyText);
+        const customerAskingBooking = /agend|marca|cortar|corte|hor[aá]rio|quero|gostaria/i.test(text || "");
+        if (customerAskingBooking && askingProf && professionals.length > 0 && !carouselAlreadySent) {
           // envia o texto primeiro
           if (replyText) {
             await sendWhatsappMessage(apiUrl, token, sender, replyText);
