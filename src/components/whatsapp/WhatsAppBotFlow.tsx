@@ -188,11 +188,12 @@ export default function WhatsAppBotFlow({ onBack }: Props) {
       const flowNodes: Node[] = [];
       const flowEdges: Edge[] = [];
 
-      // Staggered layout: odd rules on left, even on right, with generous spacing
+      // Layout vertical sequencial: cada regra em uma linha, descendo
       allRules.forEach((rule, idx) => {
-        const isOdd = idx % 2 === 0;
-        const colX = isOdd ? 0 : 680;
-        const rowY = Math.floor(idx / 2) * 400;
+        const rowY = idx * 220;
+        const triggerX = 0;
+        const responseX = 290;
+        const actionX = 640;
 
         const triggerId = `trigger-${rule.id}`;
         const responseId = `response-${rule.id}`;
@@ -202,7 +203,7 @@ export default function WhatsAppBotFlow({ onBack }: Props) {
         flowNodes.push({
           id: triggerId,
           type: "trigger",
-          position: { x: colX, y: rowY },
+          position: { x: triggerX, y: rowY },
           data: {
             trigger_word: rule.trigger_word,
             onUpdate: (patch: Partial<TriggerResp>) => handleNodeUpdate(triggerId, patch),
@@ -213,7 +214,7 @@ export default function WhatsAppBotFlow({ onBack }: Props) {
         flowNodes.push({
           id: responseId,
           type: "response",
-          position: { x: colX + 300, y: rowY },
+          position: { x: responseX, y: rowY },
           data: {
             response_text: rule.response_text,
             onUpdate: (patch: Partial<TriggerResp>) => handleNodeUpdate(responseId, patch),
@@ -224,7 +225,7 @@ export default function WhatsAppBotFlow({ onBack }: Props) {
         flowNodes.push({
           id: actionId,
           type: "action",
-          position: { x: colX + 660, y: rowY + 30 },
+          position: { x: actionX, y: rowY + 20 },
           data: {
             label: rule.trigger_word,
             onDelete: () => handleDeleteRule(rule.id!),
@@ -257,7 +258,7 @@ export default function WhatsAppBotFlow({ onBack }: Props) {
         });
       });
 
-      // Add cross-edges between rules for visual flow
+      // Connect rules verticalmente: bottom do action → top do proximo trigger
       for (let i = 0; i < allRules.length - 1; i++) {
         const currentActionId = `action-${allRules[i].id}`;
         const nextTriggerId = `trigger-${allRules[i + 1].id}`;
@@ -268,7 +269,7 @@ export default function WhatsAppBotFlow({ onBack }: Props) {
           target: nextTriggerId,
           targetHandle: "t",
           type: "smoothstep",
-          style: { stroke: "#555", strokeWidth: 1, strokeDasharray: "3,6" },
+          style: { stroke: "#555", strokeWidth: 1, strokeDasharray: "3,5" },
           markerEnd: { type: MarkerType.ArrowClosed, color: "#555" },
         });
       }
