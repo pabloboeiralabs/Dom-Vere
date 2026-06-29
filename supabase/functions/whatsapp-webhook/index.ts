@@ -702,43 +702,36 @@ async function handleSendCarousel(
   bookingUrl: string,
   _config?: any
 ): Promise<string> {
-  if (apiUrl.includes("evolution")) {
-    return `Escolha um profissional:\n\n${professionals.map((p, i) => `${i + 1}️⃣ ${p.name}`).join("\n")}\n\nOu agende pelo link: ${bookingUrl}`;
-  }
   const defaultFallback = (name: string) =>
     `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&size=600&length=2&background=333&color=fff&format=png`;
   const safeImage = (p: any) => {
     const url = String(p.photo_url || "").trim();
     if (!url) return defaultFallback(p.name);
-    // WhatsApp Carousel só renderiza JPG/PNG de forma confiável.
-    // webp/avif/svg/etc caem no fallback PNG (ui-avatars).
     return /\.(png|jpe?g)(\?|$)/i.test(url) ? url : defaultFallback(p.name);
   };
 
-  const carousel = professionals.map((p: any) => ({
-    text: `💈 *${p.name}*`,
-    image: safeImage(p),
+  const cards = professionals.map((p: any) => ({
+    header: { title: p.name, imageUrl: safeImage(p) },
+    body: { text: `💈 *${p.name}*` },
     buttons: [
-      { id: `PROF_${p.name}`, text: `Escolher ${p.name.split(" ")[0]}`, type: "REPLY" },
+      { type: "REPLY", displayText: `Escolher ${p.name.split(" ")[0]}`, id: `PROF_${p.name}` },
     ],
   }));
 
   try {
-    const res = await fetch(`${apiUrl}/send/carousel?token=${token}`, {
+    const res = await fetch(`${apiUrl}/send/carousel`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        token,
-        Authorization: `Bearer ${token}`,
+        "apikey": token,
       },
       body: JSON.stringify({
         number: sender,
-        text: "Escolha o profissional de sua preferência:",
-        carousel,
-        readchat: true,
+        body: "Escolha o profissional de sua preferência:",
+        cards,
       }),
     });
-    const data = await res.json().catch(() => null);
+    const data = await res.json();
     console.log("[webhook] carousel sent:", res.status, data);
     if (res.status === 200) return "CAROUSEL_SENT";
     throw new Error(`Carousel failed: ${res.status}`);
