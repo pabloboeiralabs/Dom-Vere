@@ -66,7 +66,7 @@ const stepMeta: Record<Step, { icon: any; title: string; subtitle: string }> = {
   info: {
     icon: User,
     title: "Seus Dados",
-    subtitle: "Quase lá! Informe seu nome",
+    subtitle: "Informe nome e telefone. Se já tem cadastro, seus dados serao carregados!",
   },
   history: {
     icon: History,
