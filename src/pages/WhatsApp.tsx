@@ -34,6 +34,8 @@ export default function WhatsApp() {
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [showAdminSidebar, setShowAdminSidebar] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
+  const [botMode, setBotMode] = useState<"ai" | "menu">("ai");
+  const [togglingMode, setTogglingMode] = useState(false);
   const [selectedChats, setSelectedChats] = useState<Set<string>>(new Set());
   const [chatTab, setChatTab] = useState<"conversas" | "leads" | "espera">("conversas");
   const [crmLeads, setCrmLeads] = useState<any[]>([]);
@@ -60,6 +62,14 @@ export default function WhatsApp() {
   const msgPollRef = useRef<ReturnType<typeof setInterval>>();
 
   const isConnected = instanceStatus?.status === "connected";
+
+  // Load bot mode
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("settings").select("bot_mode").eq("user_id", user.id).maybeSingle().then(({ data }) => {
+      if (data) setBotMode((data as any).bot_mode === "menu" ? "menu" : "ai");
+    });
+  }, [user]);
 
   // Load CRM leads for tabs
   useEffect(() => {
@@ -308,7 +318,27 @@ export default function WhatsApp() {
                 </>
               ) : (
                 <>
-                  {/* 1. Regras do Bot */}
+                  {/* 1. Modo do Bot */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={async () => {
+                      if (!user || togglingMode) return;
+                      setTogglingMode(true);
+                      const next = botMode === "ai" ? "menu" : "ai";
+                      try {
+                        await supabase.from("settings").update({ bot_mode: next } as any).eq("user_id", user.id);
+                        setBotMode(next);
+                        toast.success(next === "ai" ? "Modo Humanizado ativado 🧠" : "Modo Mensagens Prontas ativado 📋");
+                      } catch (e: any) { toast.error("Erro: " + (e?.message || "")); }
+                      finally { setTogglingMode(false); }
+                    }}
+                    title="Clique para alternar modo do bot"
+                    className="text-xs gap-1"
+                  >
+                    {togglingMode ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : botMode === "ai" ? "🧠" : "📋"}
+                    <span className="hidden sm:inline text-[10px]">{botMode === "ai" ? "Humanizado" : "Prontas"}</span>
+                  </Button>
                   {/* 2. Editor de Fluxo */}
                   <Button variant="ghost" size="icon" onClick={() => window.location.href = "/whatsapp/flow"} title="Editor de Fluxo (n8n)">
                     <GitBranch className="h-5 w-5" />
