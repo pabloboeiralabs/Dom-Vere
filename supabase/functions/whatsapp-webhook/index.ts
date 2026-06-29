@@ -883,6 +883,10 @@ Deno.serve(async (req) => {
     }
 
     if (!replyText) {
+      // If in menu mode and no trigger matched, send menu message
+      if (botMode === "menu") {
+        replyText = "🤖 *Atendimento Dom Vere* 💈\n\nOlá! Escolha uma opção abaixo:\n\n1️⃣ *Tabela de Preços*\n2️⃣ *Agendar Horário*\n3️⃣ *Horários de Funcionamento*\n4️⃣ *Nosso Endereço*\n5️⃣ *Serviços Disponíveis*\n6️⃣ *Falar com Atendente*\n7️⃣ *Encerrar*\n\nDigite o número da opção desejada. 😊";
+      } else
     // Check if professional was already chosen OR this is a button response
 
     if (buttonId.startsWith("PROF_")) {

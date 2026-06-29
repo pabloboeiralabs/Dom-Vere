@@ -309,7 +309,11 @@ export default function WhatsApp() {
                 </>
               ) : (
                 <>
-                  {/* 3. Configurações */}
+                  {/* 1. Editor de Fluxo */}
+                  <Button variant="ghost" size="icon" onClick={() => window.location.href = "/whatsapp/flow"} title="Editor de Fluxo">
+                    <GitBranch className="h-5 w-5" />
+                  </Button>
+                  {/* 2. Configurações */}
                   <Sheet>
                     <SheetTrigger asChild>
                       <Button variant="ghost" size="icon" title="Configurações">
