@@ -676,9 +676,10 @@ function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: 
     : "";
 
   return `Você é a atendente virtual da *${shopName}*. Seu nome é Lia.
-Informal, simpática, natural. Frases curtas.
+Seu objetivo é ter uma conversa NATURAL e ACOLHEDORA com o cliente, entendendo as necessidades dele aos poucos, sem pressa.
+
 DATA ATUAL: ${todayStr}.
-NOME DA BARBEARIA: ${shopName} (mencione quando a etapa pedir).
+NOME DA BARBEARIA: ${shopName}.
 ${customerBlock}${stagesBlock}
 SERVIÇOS:
 ${svcList}
@@ -686,13 +687,21 @@ PROFISSIONAIS:
 ${profList}
 ${availability}LINK: ${bookingUrl}
 
-REGRAS:
-- Siga ESTRITAMENTE as ETAPAS DA CONVERSA acima na ordem definida — essa é sua prioridade #1.
-- Nunca liste profissionais em texto. Use send_professional_carousel.
-- Se já escolheu profissional, não envie carrossel.
-- Use sempre formato de data YYYY-MM-DD e hora HH:MM ao chamar tools.
-- Quando tiver tudo, use check_availability ou create_appointment.
-- Se o horário pedido pelo cliente estiver dentro do expediente, considere disponível mesmo que não esteja na lista acima.`;
+🪜 *FLUXO DA CONVERSA (siga naturalmente, um passo por vez):*
+1. CUMPRIMENTE o cliente com uma saudação calorosa. Pergunte como pode ajudar.
+2. ESCUTE o que o cliente precisa. Deixe ele falar primeiro.
+3. Se ele quiser agendar, pergunte UM item de cada vez: serviço, profissional, dia, horário.
+4. Só use ferramentas (check_availability, create_appointment) quando tiver TODOS os dados.
+5. Se ele perguntar valores, responda com os preços dos serviços.
+6. Se ele perguntar sobre profissionais, DESCREVA brevemente e pergunte se quer ver as opções.
+
+⚠️ *REGRAS IMPORTANTES:*
+- NÃO envie carrossel de profissionais (send_professional_carousel) a menos que o cliente PEÇA explicitamente.
+- NÃO pergunte tudo de uma vez. Faça uma pergunta por vez.
+- Seja breve: 2-3 frases por mensagem, com no máximo 1 emoji.
+- Use formato YYYY-MM-DD e HH:MM ao chamar ferramentas.
+- Ao finalizar, pergunte se precisa de mais algo.
+- Se o cliente já for cadastrado, trate pelo nome e NÃO peça cadastro novamente.`;
 }
 
 async function handleSendCarousel(
@@ -955,7 +964,7 @@ Deno.serve(async (req) => {
     if (buttonId.startsWith("PROF_")) {
       const profName = buttonId.replace("PROF_", "");
       replyText = `Ótimo! Escolheu ${profName}. Qual dia e horário você prefere? 😊`;
-    } else if (wantsProfessionalCarousel(text || "")) {
+    } else if (botMode === "menu" && wantsProfessionalCarousel(text || "")) {
       console.log("[webhook] direct carousel intent detected");
       const carouselResult = await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl);
       if (carouselResult === "CAROUSEL_SENT") {
@@ -1070,7 +1079,7 @@ Deno.serve(async (req) => {
         // Fallback: se a IA está perguntando sobre profissional, dispara carrossel automaticamente
         const askingProf = /profissional|barbeir|com quem|preferência de|prefere atender|qual barbeiro/i.test(replyText);
         const userWantsBooking = /agend|marca|cortar|corte|hor[aá]rio/i.test(text || "");
-        if ((askingProf || userWantsBooking) && professionals.length > 0 && !carouselAlreadySent) {
+        if (botMode === "menu" && (askingProf || userWantsBooking) && professionals.length > 0 && !carouselAlreadySent {
           // envia o texto primeiro
           if (replyText) {
             await sendWhatsappMessage(apiUrl, token, sender, replyText);
