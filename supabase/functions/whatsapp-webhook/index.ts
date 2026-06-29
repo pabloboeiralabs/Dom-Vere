@@ -702,6 +702,7 @@ ${availability}LINK: ${bookingUrl}
 - Seja breve: 2-3 frases por mensagem, com no máximo 1 emoji.
 - Use formato YYYY-MM-DD e HH:MM ao chamar ferramentas.
 - Ao finalizar, pergunte se precisa de mais algo.
+- NÃO use advance_stage na primeira interação. Só avance de etapa depois de pelo menos 3 trocas de mensagens com o cliente e quando tiver certeza que a etapa foi realmente concluída.
 - Se o cliente já for cadastrado, trate pelo nome e NÃO peça cadastro novamente.`;
 }
 
@@ -1081,17 +1082,21 @@ Deno.serve(async (req) => {
             replyText = carouselResult;
           }
         } else if (tc.function.name === "advance_stage") {
-          // Avançar para a próxima etapa
-          const nextStage = currentStage + 1;
-          if (nextStage < stages.length) {
-            if (lead?.id) {
-              await supabase.from("crm_leads").update({ current_stage: nextStage }).eq("id", lead.id);
-            }
-            const nextName = stages[nextStage]?.name || "";
-            const summary = args.summary || "Etapa concluída";
-            replyText = `✅ ${summary}. Agora vamos para a próxima etapa: ${nextName}.`;
+          // Só avança se houver pelo menos 3 interações do cliente
+          const customerMsgs = history.filter(m => !m.from_me).length;
+          if (customerMsgs < 2) {
+            replyText = "Vamos com calma! Antes de avançar, me conte mais sobre o que você precisa. 😊";
           } else {
-            replyText = "Todas as etapas foram concluídas! Como mais posso ajudar? 😊";
+            const nextStage = currentStage + 1;
+            if (nextStage < stages.length) {
+              if (lead?.id) {
+                await supabase.from("crm_leads").update({ current_stage: nextStage }).eq("id", lead.id);
+              }
+              const nextName = stages[nextStage]?.name || "";
+              replyText = `✅ Entendi! Agora vamos para a próxima etapa: ${nextName}.`;
+            } else {
+              replyText = "Todas as etapas foram concluídas! Como mais posso ajudar? 😊";
+            }
           }
         }
       } else {
