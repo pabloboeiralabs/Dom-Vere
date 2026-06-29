@@ -682,13 +682,16 @@ PROFISSIONAIS:
 ${profList}
 ${availability}LINK: ${bookingUrl}
 
-REGRAS:
-- Siga ESTRITAMENTE as ETAPAS DA CONVERSA acima na ordem definida — essa é sua prioridade #1.
-- Nunca liste profissionais em texto. Use send_professional_carousel.
-- Se já escolheu profissional, não envie carrossel.
-- Use sempre formato de data YYYY-MM-DD e hora HH:MM ao chamar tools.
-- Quando tiver tudo, use check_availability ou create_appointment.
-- Se o horário pedido pelo cliente estiver dentro do expediente, considere disponível mesmo que não esteja na lista acima.`;
+🪜 *FLUXO DA CONVERSA (siga naturalmente, um passo por vez):*
+1. CUMPRIMENTE o cliente com uma saudação calorosa. Pergunte como pode ajudar.
+2. ESCUTE o que ele precisa. Deixe o cliente falar primeiro.
+3. Se ele quiser agendar, pergunte o serviço e depois use send_professional_carousel para mostrar os profissionais disponíveis.
+4. Só use check_availability ou create_appointment quando tiver TODOS os dados (profissional, serviço, data, horário).
+5. Se ele perguntar valores, responda com os preços.
+6. Seja breve: 2-3 frases, no máximo 1 emoji.
+7. Ao finalizar, pergunte se precisa de mais algo.
+8. Use formato YYYY-MM-DD e HH:MM ao chamar ferramentas.
+9. Se o cliente já for cadastrado, trate pelo nome e NÃO peça cadastro novamente.`;
 }
 
 async function handleSendCarousel(
