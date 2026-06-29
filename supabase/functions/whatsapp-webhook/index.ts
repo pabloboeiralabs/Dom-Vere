@@ -941,10 +941,13 @@ Deno.serve(async (req) => {
     }
 
     if (!replyText) {
+    // Check if professional was already chosen in this conversation
+    const profAlreadyChosen = history.some(m => (m.text || "").includes("PROF_") || (m.text || "").startsWith("Ótimo! Escolheu"));
+
     if (buttonId.startsWith("PROF_")) {
       const profName = buttonId.replace("PROF_", "");
       replyText = `Ótimo! Escolheu ${profName}. Qual dia e horário você prefere? 😊`;
-    } else if (wantsProfessionalCarousel(text || "")) {
+    } else if (!profAlreadyChosen && wantsProfessionalCarousel(text || "")) {
       console.log("[webhook] direct carousel intent detected");
       const carouselResult = await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl);
       if (carouselResult === "CAROUSEL_SENT") {
