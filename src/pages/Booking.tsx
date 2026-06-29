@@ -393,18 +393,6 @@ export default function Booking() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-          className="h-10 w-10 border-4 border-primary border-t-transparent rounded-full"
-        />
-      </div>
-    );
-  }
-
   if (booked) {
     const selectedProfObj = professionals.find((p) => p.id === selectedProf);
     return (
