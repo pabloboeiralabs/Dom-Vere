@@ -4,7 +4,6 @@ import { WhatsAppConnect } from "@/components/whatsapp/WhatsAppConnect";
 import { WhatsAppChatList } from "@/components/whatsapp/WhatsAppChatList";
 import { WhatsAppConversation } from "@/components/whatsapp/WhatsAppConversation";
 import { WhatsAppBotWizard } from "@/components/whatsapp/WhatsAppBotWizard";
-import { WhatsAppBotConfigTabs } from "@/components/whatsapp/WhatsAppBotConfigTabs";
 import { WhatsAppJsonConfigs } from "@/components/whatsapp/WhatsAppJsonConfigs";
 import { WhatsAppAdminSidebar } from "@/components/whatsapp/WhatsAppAdminSidebar";
 
@@ -325,7 +324,6 @@ export default function WhatsApp() {
                       <Tabs defaultValue="connection">
                         <TabsList className="w-full">
                           <TabsTrigger value="connection" className="flex-1">Conexão</TabsTrigger>
-                          <TabsTrigger value="bot" className="flex-1">Bot</TabsTrigger>
                           <TabsTrigger value="json" className="flex-1">JSONs</TabsTrigger>
                         </TabsList>
                         <TabsContent value="connection">
@@ -336,9 +334,6 @@ export default function WhatsApp() {
                             onDisconnect={disconnect}
                             onGetStatus={getStatus}
                           />
-                        </TabsContent>
-                        <TabsContent value="bot">
-                          <WhatsAppBotConfigTabs />
                         </TabsContent>
                         <TabsContent value="json">
                           <WhatsAppJsonConfigs />
