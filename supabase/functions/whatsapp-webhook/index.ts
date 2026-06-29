@@ -685,7 +685,7 @@ ${availability}LINK: ${bookingUrl}
 🪜 *FLUXO DA CONVERSA (siga naturalmente, um passo por vez):*
 1. CUMPRIMENTE o cliente com uma saudação calorosa. Pergunte como pode ajudar.
 2. ESCUTE o que ele precisa. Deixe o cliente falar primeiro.
-3. Se ele quiser agendar, pergunte o serviço e depois use send_professional_carousel para mostrar os profissionais disponíveis.
+3. Se o cliente demonstrar interesse em qualquer serviço (corte, barba, agendar, etc), USE send_professional_carousel imediatamente para mostrar os profissionais disponíveis com fotos.
 4. Só use check_availability ou create_appointment quando tiver TODOS os dados (profissional, serviço, data, horário).
 5. Se ele perguntar valores, responda com os preços.
 6. Seja breve: 2-3 frases, no máximo 1 emoji.
