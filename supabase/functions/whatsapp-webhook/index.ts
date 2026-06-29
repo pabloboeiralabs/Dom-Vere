@@ -1084,7 +1084,7 @@ Deno.serve(async (req) => {
         } else if (tc.function.name === "advance_stage") {
           // Só avança se houver pelo menos 3 interações do cliente
           const customerMsgs = history.filter(m => !m.from_me).length;
-          if (customerMsgs < 2) {
+          if (customerMsgs < 5) {
             replyText = "Vamos com calma! Antes de avançar, me conte mais sobre o que você precisa. 😊";
           } else {
             const nextStage = currentStage + 1;
