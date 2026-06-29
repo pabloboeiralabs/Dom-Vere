@@ -454,7 +454,9 @@ export default function Booking() {
           {/* Reminder Preference */}
           {bookedCustomerId && (
             <div className="bg-muted/30 rounded-2xl p-5">
-              <ReminderPreference customerId={bookedCustomerId} />
+              <ReminderPreference customerId={bookedCustomerId}
+                appointmentDate={format(selectedDate, "yyyy-MM-dd")}
+                appointmentTime={selectedSlot} />
             </div>
           )}
 
