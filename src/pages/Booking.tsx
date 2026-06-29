@@ -109,6 +109,8 @@ export default function Booking() {
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerBirthDate, setCustomerBirthDate] = useState("");
   const [loginMode, setLoginMode] = useState<"" | "login" | "register" | "guest">("");
+  const [loginError, setLoginError] = useState("");
+  const [loggingIn, setLoggingIn] = useState(false);
   const [loading, setLoading] = useState(true);
   const [booking, setBooking] = useState(false);
   const [booked, setBooked] = useState(false);
