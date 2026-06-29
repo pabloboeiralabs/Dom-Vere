@@ -309,6 +309,7 @@ export default function Booking() {
   };
 
   const handleBook = async () => {
+    console.log("[booking] handleBook called", { userId, selectedProf, selectedSlot, customerName, selectedServices });
     if (!userId || !selectedProf || !selectedSlot || !customerName.trim()) {
       toast.error("Preencha todos os campos obrigatórios");
       return;
