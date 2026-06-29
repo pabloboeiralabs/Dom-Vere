@@ -1107,7 +1107,6 @@ Deno.serve(async (req) => {
         }
       }
 	    }
-      }
 
     console.log("[webhook] Sending reply:", { sender, replyText: replyText?.slice(0, 50), carouselAlreadySent });
     if (replyText && !carouselAlreadySent) {
