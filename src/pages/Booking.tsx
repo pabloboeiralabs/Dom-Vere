@@ -44,10 +44,15 @@ interface SlotInfo {
   available: boolean;
 }
 
-const STEPS = ["professional", "service", "datetime", "info", "history"] as const;
+const STEPS = ["login", "professional", "service", "datetime", "info", "history"] as const;
 type Step = (typeof STEPS)[number];
 
 const stepMeta: Record<Step, { icon: any; title: string; subtitle: string }> = {
+  login: {
+    icon: User,
+    title: "Bem-vindo!",
+    subtitle: "Você já tem cadastro na Dom Vere?",
+  },
   professional: {
     icon: Scissors,
     title: "Escolha o Profissional",
@@ -102,6 +107,8 @@ export default function Booking() {
   const [selectedSlot, setSelectedSlot] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [customerBirthDate, setCustomerBirthDate] = useState("");
+  const [loginMode, setLoginMode] = useState<"" | "login" | "register" | "guest">("");
   const [loading, setLoading] = useState(true);
   const [booking, setBooking] = useState(false);
   const [booked, setBooked] = useState(false);
@@ -281,6 +288,8 @@ export default function Booking() {
 
   const canProceed = () => {
     switch (currentStep) {
+      case "login":
+        return !!loginMode;
       case "professional":
         return !!selectedProf;
       case "service":
@@ -460,7 +469,7 @@ export default function Booking() {
     );
   }
 
-  const progress = ((step + 1) / STEPS.length) * 100;
+  const progress = ((step) / (STEPS.length - 1)) * 100;
   const StepIcon = stepMeta[currentStep].icon;
 
   return (
@@ -550,6 +559,25 @@ export default function Booking() {
             transition={{ duration: 0.3, ease: "easeInOut" }}
             className="w-full"
           >
+            {currentStep === "login" && (
+              <div className="space-y-4 py-4">
+                <button onClick={() => { setLoginMode("login"); goNext(); }}
+                  className="w-full rounded-2xl border-2 border-primary/30 p-5 text-left hover:border-primary hover:bg-primary/5 transition-all">
+                  <p className="font-bold text-base">🔑 Já tenho cadastro</p>
+                  <p className="text-sm text-muted-foreground mt-1">Fazer login com telefone e data de nascimento</p>
+                </button>
+                <button onClick={() => { setLoginMode("register"); goNext(); }}
+                  className="w-full rounded-2xl border-2 border-border p-5 text-left hover:border-primary/50 hover:bg-muted/50 transition-all">
+                  <p className="font-bold text-base">📝 Novo por aqui</p>
+                  <p className="text-sm text-muted-foreground mt-1">Criar cadastro rápido</p>
+                </button>
+                <button onClick={() => { setLoginMode("guest"); goNext(); }}
+                  className="w-full rounded-2xl border-2 border-border p-5 text-left hover:border-primary/50 hover:bg-muted/50 transition-all">
+                  <p className="font-bold text-base">👤 Sem cadastro</p>
+                  <p className="text-sm text-muted-foreground mt-1">Agendar como visitante</p>
+                </button>
+              </div>
+            )}
             {currentStep === "professional" && (
               <div className="grid grid-cols-2 gap-3">
                 {professionals.map((p, i) => (
