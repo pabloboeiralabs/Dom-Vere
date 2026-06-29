@@ -184,7 +184,7 @@ async function findWhatsappConfig(supabase: any, payloadToken: string, requestUr
     urlUserId = url.searchParams.get("user_id") || "";
     if (urlUserId.includes("/")) {
       urlUserId = urlUserId.split("/")[0];
-	    }
+    }
   } catch (e) {
     console.error("[webhook] invalid request URL", requestUrl);
   }
@@ -377,7 +377,7 @@ async function isSlotAvailable(
       if (isWorkDayDefault && minute >= DEFAULT_START && minute < DEFAULT_END) {
         candidateProfs.push(profId);
       }
-	    }
+    }
   }
 
   if (candidateProfs.length === 0) return { available: false, reason: "out_of_schedule" };
@@ -453,7 +453,7 @@ async function getAvailableSlots(
     while (c < end) {
       occupied.add(occupiedKey(a.professional_id, a.date, c));
       c += 30;
-	    }
+    }
   }
 
   const dayNames = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
@@ -507,7 +507,7 @@ async function getAvailableSlots(
           current += 30;
         }
       }
-	    }
+    }
   }
   return slots;
 }
@@ -597,7 +597,7 @@ function extractContextFromHistory(history: Array<{ text?: string | null; from_m
       for (const svc of servicePatterns) {
         if (t.includes(svc)) { detectedService = svc; break; }
       }
-	    }
+    }
     if (!detectedTime) {
       const tm = t.match(timeRegex) || t.match(timeAsRegex);
       if (tm) {
@@ -606,11 +606,11 @@ function extractContextFromHistory(history: Array<{ text?: string | null; from_m
           detectedTime = `${String(hNum).padStart(2, "0")}:${(tm[2] || "00").padStart(2, "0")}`;
         }
       }
-	    }
+    }
     if (!detectedDate) {
       for (const dk of dateKeywords) { if (t.includes(dk)) { detectedDate = dk; break; } }
       if (!detectedDate) { const dm = t.match(dateRegex); if (dm) detectedDate = `${dm[1]}/${dm[2]}`; }
-	    }
+    }
   };
 
   for (let i = history.length - 1; i >= 0; i--) {
@@ -623,7 +623,7 @@ function extractContextFromHistory(history: Array<{ text?: string | null; from_m
   for (const msg of history) {
     if (msg.text?.startsWith("[Selecionou profissional:")) {
       detectedProf = msg.text.replace("[Selecionou profissional:", "").replace("]", "").trim();
-	    }
+    }
   }
 
   if (detectedService) found.push(`serviço=${detectedService}`);
@@ -639,7 +639,7 @@ function extractContextFromHistory(history: Array<{ text?: string | null; from_m
   };
 }
 
-function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: any[], services: any[], slots: AvailableSlot[], customerInfo?: any, stages?: Array<{ name: string; instruction: string; skip_if_registered: boolean }>, currentStage: number = 0): string {
+function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: any[], services: any[], slots: AvailableSlot[], customerInfo?: any, stages?: Array<{ name: string; instruction: string; skip_if_registered: boolean }>): string {
   const profList = professionals.map((p: any) => `- ${p.name}`).join("\n");
   const svcList = services.map((s: any) => `- ${s.name}: R$ ${Number(s.price || 0).toFixed(2)}`).join("\n");
   const todayStr = formatUtcDate(getBrasiliaTodayUtc());
@@ -655,7 +655,7 @@ function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: 
     for (const prof of Object.keys(grouped[date])) {
       const times = grouped[date][prof].slice(0, 12).join(", ");
       availLines.push(`- ${date} ${prof}: ${times}`);
-	    }
+    }
   }
   const availability = availLines.length > 0
     ? `DISPONIBILIDADE (próximos dias):\n${availLines.join("\n")}\n`
@@ -663,12 +663,8 @@ function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: 
 
   const isRegistered = !!customerInfo?.id;
   const activeStages = (stages || []).filter(s => !(s.skip_if_registered && isRegistered));
-  const safeIdx = Math.min(currentStage, Math.max(0, activeStages.length - 1));
   const stagesBlock = activeStages.length > 0
-    ? `\n========================================\nETAPAS DA CONVERSA:\n${activeStages.map((s, i) => {
-      const prefix = i === safeIdx ? "▶️ [ATUAL] " : `   ${i + 1}. `;
-      return i >= safeIdx ? `${prefix}${i === safeIdx ? s.name : `[${s.name}]`}\n   ${i === safeIdx ? s.instruction : "(aguarde a etapa atual ser concluída)"}` : "";
-    }).filter(Boolean).join("\n\n")}\n========================================\nVOCÊ ESTÁ NA ETAPA "${activeStages[safeIdx]?.name || ""}". Siga a instrução acima. Converse naturalmente com o cliente, sem pressa para avançar.\n`
+    ? `\n========================================\nETAPAS DA CONVERSA (OBRIGATÓRIO seguir nesta ordem):\n${activeStages.map((s, i) => `${i + 1}. [${s.name}]\n   ${s.instruction}`).join("\n\n")}\n========================================\nIDENTIFIQUE pelo histórico em qual etapa está. Se for a primeira mensagem do cliente, EXECUTE a ETAPA 1 EXATAMENTE como descrito (incluindo qualquer informação da barbearia, nome do cliente, etc.). NÃO pule etapas. NÃO use saudações genéricas se a etapa 1 pede algo específico.\n`
     : "";
 
   const customerBlock = isRegistered
@@ -676,7 +672,7 @@ function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: 
     : "";
 
   return `Você é a atendente virtual da *${shopName}*. Seu nome é Lia.
-Seu objetivo é ter uma conversa NATURAL e ACOLHEDORA com o cliente, entendendo as necessidades dele aos poucos, sem pressa.
+Seu objetivo é ter uma conversa NATURAL e ACOLHEDORA com o cliente, entendendo as necessidades dele aos poucos.
 
 DATA ATUAL: ${todayStr}.
 NOME DA BARBEARIA: ${shopName}.
@@ -693,11 +689,10 @@ ${availability}LINK: ${bookingUrl}
 3. Se ele quiser agendar, pergunte UM item de cada vez: serviço, profissional, dia, horário.
 4. Só use ferramentas (check_availability, create_appointment) quando tiver TODOS os dados.
 5. Se ele perguntar valores, responda com os preços dos serviços.
-6. Se ele demonstrar interesse em agendar com algum profissional, use send_professional_carousel para mostrar as opções disponíveis.
 
 ⚠️ *REGRAS IMPORTANTES:*
-- Use send_professional_carousel quando o cliente demonstrar interesse em agendar MAS SEMPRE depois de uma saudação inicial e de entender o que ele precisa.
-- NÃO envie carrossel na primeira mensagem. Primeiro cumprimente, pergunte como pode ajudar, e só depois, se for relevante, ofereça os profissionais.
+- Use send_professional_carousel quando o cliente demonstrar interesse em agendar, mas SEMPRE depois de cumprimentar primeiro.
+- NÃO envie carrossel na primeira mensagem. Primeiro converse, entenda a necessidade.
 - NÃO pergunte tudo de uma vez. Faça uma pergunta por vez.
 - Seja breve: 2-3 frases por mensagem, com no máximo 1 emoji.
 - Use formato YYYY-MM-DD e HH:MM ao chamar ferramentas.
@@ -705,6 +700,10 @@ ${availability}LINK: ${bookingUrl}
 - Se o cliente já for cadastrado, trate pelo nome e NÃO peça cadastro novamente.`;
 }
 
+async function handleSendCarousel(
+  apiUrl: string,
+  token: string,
+  sender: string,
 async function handleSendCarousel(
   apiUrl: string,
   token: string,
@@ -718,7 +717,7 @@ async function handleSendCarousel(
   const safeImage = (p: any) => {
     const url = String(p.photo_url || "").trim();
     if (!url) return defaultFallback(p.name);
-    return /\.(png|jpe?g)(\?|$)/i.test(url) ? url : defaultFallback(p.name);
+    return /.(png|jpe?g)(\?|$)/i.test(url) ? url : defaultFallback(p.name);
   };
 
   const cards = professionals.map((p: any) => ({
@@ -751,11 +750,6 @@ async function handleSendCarousel(
     return `Escolha um profissional:\n\n${professionals.map((p, i) => `${i + 1}️⃣ ${p.name}`).join("\n")}\n\nOu agende pelo link: ${bookingUrl}`;
   }
 }
-
-async function handleToolCall(supabase: any, userId: string, args: any, senderPhone: string, professionals: any[], services: any[], templateConfigs?: any[]): Promise<string> {
-  const prof = professionals.find(p => p.name.toLowerCase() === (args.professional_name || "").toLowerCase());
-  if (!prof) return "Profissional não encontrado.";
-  const svc = services.find(s => s.name.toLowerCase() === (args.service_name || "").toLowerCase()) || services[0];
   const customerName = args.customer_name || "Cliente";
 
   const dateISO = normalizeDate(args.date);
@@ -802,6 +796,21 @@ async function handleToolCall(supabase: any, userId: string, args: any, senderPh
 }
 
 async function sendWhatsappMessage(apiUrl: string, token: string, number: string, text: string) {
+  const isEvolution = apiUrl.includes("evolution");
+
+  let url: string;
+  let headers: Record<string, string>;
+  let body: any;
+
+  if (isEvolution) {
+    let instanceName = token;
+    let apikey = token;
+    if (token.includes(":")) {
+      const parts = token.split(":");
+      instanceName = parts[0];
+      apikey = parts[1];
+    }
+async function sendWhatsappMessage(apiUrl: string, token: string, number: string, text: string) {
   const url = `${apiUrl}/send/text`;
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -811,6 +820,18 @@ async function sendWhatsappMessage(apiUrl: string, token: string, number: string
 
   const res = await fetch(url, {
     method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error(`[sendWhatsappMessage] Failed to send message. Status: ${res.status}, Response: ${errText}`);
+    throw new Error(`WhatsApp API error: ${res.status}`);
+  }
+
+  return await res.json().catch(() => ({}));
+}
     headers,
     body: JSON.stringify(body),
   });
@@ -850,7 +871,7 @@ Deno.serve(async (req) => {
     if (eventType && !allowedEvents.includes(eventType)) {
       console.log("[webhook] Ignored event type:", eventType);
       return new Response(JSON.stringify({ ok: true, ignored: "event_type", type: eventType }));
-	    }
+    }
 
     const text = extractMessageText(body);
     const sender = extractSender(body);
@@ -862,7 +883,7 @@ Deno.serve(async (req) => {
     if (!messageId && !text) {
       console.log("[webhook] No message ID and no text, ignoring.");
       return new Response(JSON.stringify({ ok: true, ignored: "no_data" }));
-	    }
+    }
 
     const payloadToken = extractPayloadToken(body);
     const buttonId = extractButtonId(body);
@@ -882,7 +903,7 @@ Deno.serve(async (req) => {
     if (existingMsg) {
       console.log("[webhook] Duplicate message detected (DB):", messageId);
       return new Response(JSON.stringify({ ok: true, ignored: "duplicate" }));
-	    }
+    }
 
     const isGroup = isGroupMessage(body);
     const suffix = isGroup ? "@g.us" : "@s.whatsapp.net";
@@ -900,15 +921,13 @@ Deno.serve(async (req) => {
     });
 
     const phoneDigits = sender.replace(/\D/g, "");
-    const [settingsRes, profsRes, servsRes, historyRes, stagesRes, customerRes, leadRes, responsesRes] = await Promise.all([
+    const [settingsRes, profsRes, servsRes, historyRes, stagesRes, customerRes] = await Promise.all([
       supabase.from("settings").select("*").eq("user_id", cfg.user_id).maybeSingle(),
       supabase.from("professionals").select("*").eq("user_id", cfg.user_id).eq("active", true),
       supabase.from("services").select("*").eq("user_id", cfg.user_id).eq("active", true),
       supabase.from("whatsapp_messages").select("*").eq("user_id", cfg.user_id).eq("wa_chatid", `${sender}${suffix}`).order("wa_timestamp", { ascending: false }).limit(10),
       supabase.from("bot_conversation_stages").select("name, instruction, stage_order, skip_if_registered").eq("user_id", cfg.user_id).eq("active", true).order("stage_order"),
       supabase.from("customers").select("id, name, birth_date, phone").eq("user_id", cfg.user_id).ilike("phone", `%${phoneDigits.slice(-8)}%`).maybeSingle(),
-      supabase.from("crm_leads").select("id, current_stage").eq("user_id", cfg.user_id).eq("wa_chatid", `${sender}${suffix}`).maybeSingle(),
-      supabase.from("bot_trigger_responses").select("trigger_word, response_text, active").eq("user_id", cfg.user_id).eq("active", true),
     ]);
 
     const shopName = settingsRes.data?.shop_name || "Barbearia";
@@ -917,69 +936,47 @@ Deno.serve(async (req) => {
     const history = (historyRes.data || []).reverse();
     const stages = stagesRes.data || [];
     const customerInfo = customerRes.data || null;
-    let lead = leadRes.data || null;
-    const triggerResponses = (responsesRes?.data || []) as Array<{ trigger_word: string; response_text: string; active: boolean }>;
-    const botMode = (settingsRes.data as any)?.bot_mode || "ai";
 
-    // Ensure lead exists with current_stage tracking
-    if (!lead) {
-      const { data: newLead } = await supabase.from("crm_leads").insert({
-        user_id: cfg.user_id,
-        wa_chatid: `${sender}${suffix}`,
-        phone: sender,
-        name: "Novo Lead",
-        stage: "novo",
-        current_stage: 0,
-        last_interaction_at: new Date().toISOString(),
-      }).select("id, current_stage").single();
-      lead = newLead || { id: null, current_stage: 0 };
-    } else {
-      await supabase.from("crm_leads").update({ last_interaction_at: new Date().toISOString() }).eq("id", lead.id);
-	    }
-    const currentStage = (lead?.current_stage ?? 0) as number;
-
-
-    // Auto-reset: se 30+ min sem conversa e conversa finalizada, comeca do zero
-    if (history.length > 0 && botMode === "menu") {
-      const lastMsg = history[history.length - 1];
-      const lastTs = typeof lastMsg.wa_timestamp === "number" ? lastMsg.wa_timestamp : 0;
-      const lastMs = lastTs > 9999999999 ? lastTs : lastTs * 1000;
-      const minutesSinceLast = (Date.now() - lastMs) / 60000;
-      const recentTexts = history.slice(-5).map(m => (m.text || "").toLowerCase()).join(" ");
-      const finalized = /encerrad|tchau|ate logo|volte sempre|obrigado.*atendimento|encerrado|0️⃣|7️⃣/.test(recentTexts);
-      if (minutesSinceLast > 30 && finalized && lead?.id) {
-        console.log("[webhook] Conversa finalizada ha mais de 30min. Resetando lead.");
-        await supabase.from("crm_leads").update({ current_stage: 0, bot_paused: false }).eq("id", lead.id);
-        lead.current_stage = 0;
-      }
-    }
     if (isMe) {
       console.log("[webhook] Message is from me, saving but skipping AI reply.");
       return new Response(JSON.stringify({ ok: true, message: "Outbound message stored." }));
-	    }
+    }
 
     if (isGroup) {
       console.log("[webhook] Message is in a group, saving but skipping AI reply.");
       return new Response(JSON.stringify({ ok: true, message: "Group message stored." }));
-	    }
+    }
 
     const isBotEnabled = !!(settingsRes.data?.bot_enabled);
     if (!isBotEnabled) {
       console.log("[webhook] Bot is disabled for user, saving message but skipping AI reply.");
       return new Response(JSON.stringify({ ok: true, message: "Bot disabled, message stored." }));
-	    }
+    }
     const bookingUrl = `https://domvere.zlabs.com.br/booking/${cfg.user_id}`;
     const apiUrl = cfg.api_url.replace(/\/$/, "");
     const token = cfg.instance_token;
 
     let replyText = "";
     let carouselAlreadySent = false;
-    let skipAi = false;
 
+    // Check trigger responses first (Mensagens Prontas mode)
+    if (botMode === "menu" && triggerResponses.length > 0 && text) {
+      const lowerText = text.toLowerCase().trim();
+      const matched = triggerResponses.find(r => {
+        const words = r.trigger_word.toLowerCase().split(",").map(w => w.trim());
+        return words.some(w => lowerText === w || lowerText.includes(w));
+      });
+      if (matched) {
+        replyText = matched.response_text;
+        console.log("[webhook] Trigger response matched:", matched.trigger_word);
+      }
+    }
+
+    if (!replyText) {
     if (buttonId.startsWith("PROF_")) {
       const profName = buttonId.replace("PROF_", "");
       replyText = `Ótimo! Escolheu ${profName}. Qual dia e horário você prefere? 😊`;
-    } else if (botMode === "menu" && wantsProfessionalCarousel(text || "")) {
+    } else if (wantsProfessionalCarousel(text || "")) {
       console.log("[webhook] direct carousel intent detected");
       const carouselResult = await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl);
       if (carouselResult === "CAROUSEL_SENT") {
@@ -989,71 +986,16 @@ Deno.serve(async (req) => {
         replyText = carouselResult;
       }
     } else {
-      // Check trigger responses only in Mensagens Prontas mode
-      if (botMode === "menu" && triggerResponses.length > 0 && text) {
-        const lowerText = text.toLowerCase().trim();
-        const matched = triggerResponses.find(r => {
-          const words = r.trigger_word.toLowerCase().split(",").map(w => w.trim());
-          return words.some(w => lowerText === w || lowerText.includes(w));
-        });
-        if (matched) {
-          const rawText = matched.response_text;
-          const locMatch = rawText.match(/^\[LOCATION\](\{.*\})/);
-          if (locMatch) {
-            try {
-              const locData = JSON.parse(locMatch[1]);
-              const locUrl = `${apiUrl}/send/location`;
-              await fetch(locUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "apikey": token },
-                body: JSON.stringify({
-                  number: sender,
-                  name: locData.name || "Localização",
-                  address: locData.address || "",
-                  latitude: locData.lat,
-                  longitude: locData.lng,
-                }),
-              });
-              replyText = "";
-                skipAi = true; // não manda texto nem chama IA
-            } catch (e) {
-              console.error("[webhook] Error sending location:", e);
-              replyText = "📍 Aqui está nosso endereço. Em breve enviaremos a localização!";
-            }
-          } else {
-            replyText = rawText;
-          }
-        }
-      }
-
-      // If no trigger matched, use AI
-      if (!replyText && !skipAi) {
       const slots = await getAvailableSlots(supabase, cfg.user_id, professionals, 7);
-      const systemPrompt = buildSystemPrompt(shopName, bookingUrl, professionals, services, slots, customerInfo, stages, currentStage);
-      // Avança etapa automaticamente a cada 4 mensagens do cliente
-      if (stages.length > 0 && lead?.id) {
-        const customerMsgCount = history.filter(m => !m.from_me).length;
-        const autoNextStage = Math.min(Math.floor(customerMsgCount / 4), stages.length - 1);
-        if (autoNextStage > currentStage) {
-          console.log("[webhook] Auto-avancando etapa:", currentStage, "->", autoNextStage);
-          await supabase.from("crm_leads").update({ current_stage: autoNextStage }).eq("id", lead.id);
-        }
-      }
+      const systemPrompt = buildSystemPrompt(shopName, bookingUrl, professionals, services, slots, customerInfo, stages);
       const aiMessages = [{ role: "system", content: systemPrompt }, ...history.map(m => ({ role: m.from_me ? "assistant" : "user", content: m.text }))];
-
+      
       // Ensure current message is in context if not in history yet
       if (!history.some(m => m.wa_message_id === messageId)) {
         aiMessages.push({ role: "user", content: text || `[Button: ${buttonId}]` });
       }
 
-      // Na primeira interação (poucas mensagens no histórico), só permite conversa básica
-      const isFirstInteraction = history.filter(m => !m.from_me).length <= 1;
-      const aiTools = isFirstInteraction
-        ? []  // sem ferramentas - só conversa natural
-        : stages && stages.length > 0
-          ? [checkAvailabilityTool, appointmentTool, sendCarouselTool]
-          : [checkAvailabilityTool, appointmentTool, sendCarouselTool];
-      const aiResponse = await callAI(aiMessages, aiTools);
+      const aiResponse = await callAI(aiMessages, [checkAvailabilityTool, appointmentTool, sendCarouselTool]);
       const message = aiResponse.choices?.[0]?.message;
 
       if (message?.tool_calls?.length > 0) {
@@ -1088,16 +1030,17 @@ Deno.serve(async (req) => {
           } else {
             replyText = carouselResult;
           }
+        }
       } else {
         replyText = message?.content || "Como posso ajudar?";
-        // Fallback: se a IA pergunta sobre profissional e cliente quer agendar, envia carrossel
-        const askingProf = /profissional|barbeir|com quem|gostaria de saber|escolher|preferência de|prefere atender|qual barbeiro/i.test(replyText);
-        const customerAskingBooking = /agend|marca|cortar|corte|hor[aá]rio|quero|gostaria/i.test(text || "");
-        if (customerAskingBooking && askingProf && professionals.length > 0 && !carouselAlreadySent) {
+        // Fallback: se a IA está perguntando sobre profissional, dispara carrossel automaticamente
+        const askingProf = /profissional|barbeir|com quem|preferência de|prefere atender|qual barbeiro/i.test(replyText);
+        const userWantsBooking = /agend|marca|cortar|corte|hor[aá]rio/i.test(text || "");
+        if ((askingProf || userWantsBooking) && professionals.length > 0 && !carouselAlreadySent) {
           // envia o texto primeiro
           if (replyText) {
             await sendWhatsappMessage(apiUrl, token, sender, replyText);
-            await supabase.from("whatsapp_messages").insert({ user_id: cfg.user_id, wa_chatid: `${sender}${suffix}`, text: replyText, from_me: true, msg_type: 'bot', wa_timestamp: Date.now() });
+            await supabase.from("whatsapp_messages").insert({ user_id: cfg.user_id, wa_chatid: `${sender}${suffix}`, text: replyText, from_me: true, wa_timestamp: Date.now() });
           }
           const carouselResult = await handleSendCarousel(apiUrl, token, sender, professionals, bookingUrl);
           if (carouselResult === "CAROUSEL_SENT") {
@@ -1105,6 +1048,8 @@ Deno.serve(async (req) => {
             replyText = "";
           }
         }
+      }
+    }
       }
 
     console.log("[webhook] Sending reply:", { sender, replyText: replyText?.slice(0, 50), carouselAlreadySent });
@@ -1124,10 +1069,28 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ ok: true, ignored: "duplicate_reply" }));
       }
 
+      // Auto-create CRM lead
+      try {
+        const { data: existingLead } = await supabase.from("crm_leads").select("id").eq("user_id", cfg.user_id).eq("wa_chatid", `${sender}${suffix}`).maybeSingle();
+        if (!existingLead) {
+          await supabase.from("crm_leads").insert({
+            user_id: cfg.user_id,
+            wa_chatid: `${sender}${suffix}`,
+            phone: sender,
+            name: "Novo Lead",
+            stage: "novo",
+            last_interaction_at: new Date().toISOString(),
+          });
+        } else {
+          await supabase.from("crm_leads").update({ last_interaction_at: new Date().toISOString() }).eq("id", existingLead.id);
+        }
+      } catch (e) {
+        console.warn("[webhook] CRM lead error:", e);
+      }
 
       await sendWhatsappMessage(apiUrl, token, sender, replyText);
-      await supabase.from("whatsapp_messages").insert({ user_id: cfg.user_id, wa_chatid: `${sender}${suffix}`, text: replyText, from_me: true, msg_type: 'bot', wa_timestamp: Date.now() });
-	    }
+      await supabase.from("whatsapp_messages").insert({ user_id: cfg.user_id, wa_chatid: `${sender}${suffix}`, text: replyText, from_me: true, wa_timestamp: Date.now() });
+    }
 
     return new Response(JSON.stringify({ ok: true }));
   } catch (err: any) {
