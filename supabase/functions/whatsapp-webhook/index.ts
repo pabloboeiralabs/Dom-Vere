@@ -877,7 +877,31 @@ Deno.serve(async (req) => {
         return words.some(w => lowerText === w || lowerText.includes(w));
       });
       if (matched) {
-        replyText = matched.response_text;
+        const rawText = matched.response_text;
+        const locMatch = rawText.match(/^\[LOCATION\](\{.*\})/);
+        if (locMatch) {
+          try {
+            const locData = JSON.parse(locMatch[1]);
+            const locUrl = `${apiUrl}/send/location`;
+            await fetch(locUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "apikey": token },
+              body: JSON.stringify({
+                number: sender,
+                name: locData.name || "Localização",
+                address: locData.address || "",
+                latitude: locData.lat,
+                longitude: locData.lng,
+              }),
+            });
+            replyText = ""; // só o card, sem texto extra
+          } catch (e) {
+            console.error("[webhook] Error sending location:", e);
+            replyText = "📍 Aqui está nosso endereço.";
+          }
+        } else {
+          replyText = rawText;
+        }
         console.log("[webhook] Trigger response matched:", matched.trigger_word);
       }
     }
