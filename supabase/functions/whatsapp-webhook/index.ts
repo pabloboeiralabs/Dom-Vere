@@ -829,7 +829,7 @@ Deno.serve(async (req) => {
     });
 
     const phoneDigits = sender.replace(/\D/g, "");
-    const [settingsRes, profsRes, servsRes, historyRes, stagesRes, customerRes, , responsesRes] = await Promise.all([
+    const [settingsRes, profsRes, servsRes, historyRes, stagesRes, customerRes, responsesRes] = await Promise.all([
       supabase.from("settings").select("*").eq("user_id", cfg.user_id).maybeSingle(),
       supabase.from("professionals").select("*").eq("user_id", cfg.user_id).eq("active", true),
       supabase.from("services").select("*").eq("user_id", cfg.user_id).eq("active", true),
