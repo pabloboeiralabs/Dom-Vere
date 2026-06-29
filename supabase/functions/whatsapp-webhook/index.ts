@@ -941,8 +941,9 @@ Deno.serve(async (req) => {
     }
 
     if (!replyText) {
-    // Check if professional was already chosen in this conversation
-    const profAlreadyChosen = history.some(m => (m.text || "").includes("PROF_") || (m.text || "").startsWith("Ótimo! Escolheu"));
+    // Check if professional was already chosen OR this is a button response
+    const isButtonResponse = (text || "").match(/^escolher /i) || buttonId.startsWith("PROF_") || (text || "").includes("PROF_");
+    const profAlreadyChosen = isButtonResponse || history.some(m => (m.text || "").includes("PROF_") || (m.text || "").startsWith("Ótimo! Escolheu"));
 
     if (buttonId.startsWith("PROF_")) {
       const profName = buttonId.replace("PROF_", "");
