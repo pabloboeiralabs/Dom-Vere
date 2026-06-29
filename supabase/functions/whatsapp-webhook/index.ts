@@ -1023,9 +1023,13 @@ Deno.serve(async (req) => {
         aiMessages.push({ role: "user", content: text || `[Button: ${buttonId}]` });
       }
 
-      const aiTools = stages && stages.length > 0
-        ? [checkAvailabilityTool, appointmentTool, sendCarouselTool, advanceStageTool]
-        : [checkAvailabilityTool, appointmentTool, sendCarouselTool];
+      // Na primeira interação (poucas mensagens no histórico), só permite conversa básica
+      const isFirstInteraction = history.filter(m => !m.from_me).length <= 1;
+      const aiTools = isFirstInteraction
+        ? []  // sem ferramentas - só conversa natural
+        : stages && stages.length > 0
+          ? [checkAvailabilityTool, appointmentTool, sendCarouselTool, advanceStageTool]
+          : [checkAvailabilityTool, appointmentTool, sendCarouselTool];
       const aiResponse = await callAI(aiMessages, aiTools);
       const message = aiResponse.choices?.[0]?.message;
 
