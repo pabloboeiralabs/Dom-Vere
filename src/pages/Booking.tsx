@@ -559,23 +559,57 @@ export default function Booking() {
             transition={{ duration: 0.3, ease: "easeInOut" }}
             className="w-full"
           >
-            {currentStep === "login" && (
-              <div className="space-y-4 py-4">
-                <button onClick={() => { setLoginMode("login"); goNext(); }}
-                  className="w-full rounded-2xl border-2 border-primary/30 p-5 text-left hover:border-primary hover:bg-primary/5 transition-all">
-                  <p className="font-bold text-base">🔑 Já tenho cadastro</p>
-                  <p className="text-sm text-muted-foreground mt-1">Fazer login com telefone e data de nascimento</p>
+            {currentStep === "login" && !loginMode && (
+              <div className="space-y-4 py-6">
+                <button onClick={() => window.location.href = "/cliente"}
+                  className="w-full rounded-2xl border-2 border-primary/30 p-5 text-left hover:border-primary hover:bg-primary/5 transition-all group">
+                  <p className="font-bold text-lg">🔑 Já tenho cadastro</p>
+                  <p className="text-sm text-muted-foreground mt-1 group-hover:text-foreground transition-colors">Fazer login no App do Cliente →</p>
                 </button>
-                <button onClick={() => { setLoginMode("register"); goNext(); }}
-                  className="w-full rounded-2xl border-2 border-border p-5 text-left hover:border-primary/50 hover:bg-muted/50 transition-all">
-                  <p className="font-bold text-base">📝 Novo por aqui</p>
-                  <p className="text-sm text-muted-foreground mt-1">Criar cadastro rápido</p>
+                <button onClick={() => setLoginMode("register")}
+                  className="w-full rounded-2xl border-2 border-border p-5 text-left hover:border-primary/50 hover:bg-muted/50 transition-all group">
+                  <p className="font-bold text-lg">📝 Novo por aqui</p>
+                  <p className="text-sm text-muted-foreground mt-1 group-hover:text-foreground transition-colors">Criar meu cadastro →</p>
                 </button>
                 <button onClick={() => { setLoginMode("guest"); goNext(); }}
-                  className="w-full rounded-2xl border-2 border-border p-5 text-left hover:border-primary/50 hover:bg-muted/50 transition-all">
-                  <p className="font-bold text-base">👤 Sem cadastro</p>
-                  <p className="text-sm text-muted-foreground mt-1">Agendar como visitante</p>
+                  className="w-full rounded-2xl border-2 border-border p-5 text-left hover:border-primary/50 hover:bg-muted/50 transition-all group">
+                  <p className="font-bold text-lg">👤 Sem cadastro</p>
+                  <p className="text-sm text-muted-foreground mt-1 group-hover:text-foreground transition-colors">Agendar como visitante →</p>
                 </button>
+              </div>
+            )}
+            {currentStep === "login" && loginMode === "register" && (
+              <div className="space-y-5 py-6">
+                <div className="rounded-2xl border-2 border-border p-6 space-y-4 bg-card shadow-sm">
+                  <p className="font-medium text-base">📝 Criar Cadastro</p>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1.5 block">Nome completo *</label>
+                    <Input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Seu nome" className="rounded-xl h-12 text-base" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1.5 block">Telefone (WhatsApp) *</label>
+                    <Input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="(00) 00000-0000" className="rounded-xl h-12 text-base" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1.5 block">Data de nascimento</label>
+                    <Input type="date" value={customerBirthDate} onChange={e => setCustomerBirthDate(e.target.value)} className="rounded-xl h-12 text-base" />
+                  </div>
+                  {loginError && <p className="text-sm text-destructive bg-destructive/5 p-3 rounded-xl">{loginError}</p>}
+                  <div className="flex gap-3 pt-2">
+                    <Button variant="outline" onClick={() => { setLoginMode(""); setLoginError(""); }} className="flex-1 rounded-xl h-12 text-sm">Voltar</Button>
+                    <Button disabled={!customerName || !customerPhone || loggingIn} onClick={async () => {
+                      setLoggingIn(true); setLoginError("");
+                      const { data: existing } = await supabase.from("customers").select("id").eq("user_id", userId).eq("phone", customerPhone.trim()).maybeSingle();
+                      if (existing) setLoginError("Este telefone já está cadastrado!");
+                      else {
+                        const { data: newC, error } = await supabase.from("customers").insert({ user_id: userId, name: customerName.trim(), phone: customerPhone.trim(), birth_date: customerBirthDate || null }).select("id, name, phone").single();
+                        if (newC) { setCustomerName(newC.name); setCustomerPhone(newC.phone); toast.success("Cadastro criado com sucesso!"); goNext(); }
+                        else setLoginError(error?.message || "Erro ao cadastrar.");
+                      }
+                      setLoggingIn(false);
+                    }} className="flex-1 rounded-xl h-12 text-sm">Cadastrar e Continuar</Button>
+                  </div>
+                </div>
               </div>
             )}
             {currentStep === "professional" && (
