@@ -989,7 +989,7 @@ Deno.serve(async (req) => {
                   longitude: locData.lng,
                 }),
               });
-              replyText = rawText.replace(locMatch[0], "").trim() || "📍 Localização enviada!";
+              replyText = ""; // só o card, sem texto extra
             } catch (e) {
               console.error("[webhook] Error sending location:", e);
               replyText = "📍 Aqui está nosso endereço. Em breve enviaremos a localização!";
