@@ -672,10 +672,9 @@ function buildSystemPrompt(shopName: string, bookingUrl: string, professionals: 
     : "";
 
   return `Você é a atendente virtual da *${shopName}*. Seu nome é Lia.
-Seu objetivo é ter uma conversa NATURAL e ACOLHEDORA com o cliente, entendendo as necessidades dele aos poucos.
-
+Informal, simpática, natural. Frases curtas.
 DATA ATUAL: ${todayStr}.
-NOME DA BARBEARIA: ${shopName}.
+NOME DA BARBEARIA: ${shopName} (mencione quando a etapa pedir).
 ${customerBlock}${stagesBlock}
 SERVIÇOS:
 ${svcList}
@@ -683,21 +682,13 @@ PROFISSIONAIS:
 ${profList}
 ${availability}LINK: ${bookingUrl}
 
-🪜 *FLUXO DA CONVERSA (siga naturalmente, um passo por vez):*
-1. CUMPRIMENTE o cliente com uma saudação calorosa. Pergunte como pode ajudar.
-2. ESCUTE o que o cliente precisa. Deixe ele falar primeiro.
-3. Se ele quiser agendar, pergunte UM item de cada vez: serviço, profissional, dia, horário.
-4. Só use ferramentas (check_availability, create_appointment) quando tiver TODOS os dados.
-5. Se ele perguntar valores, responda com os preços dos serviços.
-
-⚠️ *REGRAS IMPORTANTES:*
-- Use send_professional_carousel quando o cliente demonstrar interesse em agendar, mas SEMPRE depois de cumprimentar primeiro.
-- NÃO envie carrossel na primeira mensagem. Primeiro converse, entenda a necessidade.
-- NÃO pergunte tudo de uma vez. Faça uma pergunta por vez.
-- Seja breve: 2-3 frases por mensagem, com no máximo 1 emoji.
-- Use formato YYYY-MM-DD e HH:MM ao chamar ferramentas.
-- Ao finalizar, pergunte se precisa de mais algo.
-- Se o cliente já for cadastrado, trate pelo nome e NÃO peça cadastro novamente.`;
+REGRAS:
+- Siga ESTRITAMENTE as ETAPAS DA CONVERSA acima na ordem definida — essa é sua prioridade #1.
+- Nunca liste profissionais em texto. Use send_professional_carousel.
+- Se já escolheu profissional, não envie carrossel.
+- Use sempre formato de data YYYY-MM-DD e hora HH:MM ao chamar tools.
+- Quando tiver tudo, use check_availability ou create_appointment.
+- Se o horário pedido pelo cliente estiver dentro do expediente, considere disponível mesmo que não esteja na lista acima.`;
 }
 
 async function handleSendCarousel(
@@ -708,36 +699,43 @@ async function handleSendCarousel(
   bookingUrl: string,
   _config?: any
 ): Promise<string> {
+  if (apiUrl.includes("evolution")) {
+    return `Escolha um profissional:\n\n${professionals.map((p, i) => `${i + 1}️⃣ ${p.name}`).join("\n")}\n\nOu agende pelo link: ${bookingUrl}`;
+  }
   const defaultFallback = (name: string) =>
     `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&size=600&length=2&background=333&color=fff&format=png`;
   const safeImage = (p: any) => {
     const url = String(p.photo_url || "").trim();
     if (!url) return defaultFallback(p.name);
-    return /.(png|jpe?g)(\?|$)/i.test(url) ? url : defaultFallback(p.name);
+    // WhatsApp Carousel só renderiza JPG/PNG de forma confiável.
+    // webp/avif/svg/etc caem no fallback PNG (ui-avatars).
+    return /\.(png|jpe?g)(\?|$)/i.test(url) ? url : defaultFallback(p.name);
   };
 
-  const cards = professionals.map((p: any) => ({
-    header: { title: p.name, imageUrl: safeImage(p) },
-    body: { text: `💈 *${p.name}*` },
+  const carousel = professionals.map((p: any) => ({
+    text: `💈 *${p.name}*`,
+    image: safeImage(p),
     buttons: [
-      { type: "REPLY", displayText: `Escolher ${p.name.split(" ")[0]}`, id: `PROF_${p.name}` },
+      { id: `PROF_${p.name}`, text: `Escolher ${p.name.split(" ")[0]}`, type: "REPLY" },
     ],
   }));
 
   try {
-    const res = await fetch(`${apiUrl}/send/carousel`, {
+    const res = await fetch(`${apiUrl}/send/carousel?token=${token}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "apikey": token,
+        token,
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
         number: sender,
-        body: "Escolha o profissional de sua preferência:",
-        cards,
+        text: "Escolha o profissional de sua preferência:",
+        carousel,
+        readchat: true,
       }),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => null);
     console.log("[webhook] carousel sent:", res.status, data);
     if (res.status === 200) return "CAROUSEL_SENT";
     throw new Error(`Carousel failed: ${res.status}`);
@@ -746,6 +744,11 @@ async function handleSendCarousel(
     return `Escolha um profissional:\n\n${professionals.map((p, i) => `${i + 1}️⃣ ${p.name}`).join("\n")}\n\nOu agende pelo link: ${bookingUrl}`;
   }
 }
+
+async function handleToolCall(supabase: any, userId: string, args: any, senderPhone: string, professionals: any[], services: any[], templateConfigs?: any[]): Promise<string> {
+  const prof = professionals.find(p => p.name.toLowerCase() === (args.professional_name || "").toLowerCase());
+  if (!prof) return "Profissional não encontrado.";
+  const svc = services.find(s => s.name.toLowerCase() === (args.service_name || "").toLowerCase()) || services[0];
   const customerName = args.customer_name || "Cliente";
 
   const dateISO = normalizeDate(args.date);
@@ -798,31 +801,16 @@ async function sendWhatsappMessage(apiUrl: string, token: string, number: string
     "apikey": token,
   };
   const body = { number, text };
-
   const res = await fetch(url, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
   });
-
   if (!res.ok) {
     const errText = await res.text();
     console.error(`[sendWhatsappMessage] Failed to send message. Status: ${res.status}, Response: ${errText}`);
     throw new Error(`WhatsApp API error: ${res.status}`);
   }
-
-  return await res.json().catch(() => ({}));
-}
-    headers,
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    console.error(`[sendWhatsappMessage] Failed to send message. Status: ${res.status}, Response: ${errText}`);
-    throw new Error(`WhatsApp API error: ${res.status}`);
-  }
-
   return await res.json().catch(() => ({}));
 }
 
@@ -940,20 +928,6 @@ Deno.serve(async (req) => {
     let replyText = "";
     let carouselAlreadySent = false;
 
-    // Check trigger responses first (Mensagens Prontas mode)
-    if (botMode === "menu" && triggerResponses.length > 0 && text) {
-      const lowerText = text.toLowerCase().trim();
-      const matched = triggerResponses.find(r => {
-        const words = r.trigger_word.toLowerCase().split(",").map(w => w.trim());
-        return words.some(w => lowerText === w || lowerText.includes(w));
-      });
-      if (matched) {
-        replyText = matched.response_text;
-        console.log("[webhook] Trigger response matched:", matched.trigger_word);
-      }
-    }
-
-    if (!replyText) {
     if (buttonId.startsWith("PROF_")) {
       const profName = buttonId.replace("PROF_", "");
       replyText = `Ótimo! Escolheu ${profName}. Qual dia e horário você prefere? 😊`;
@@ -1031,7 +1005,6 @@ Deno.serve(async (req) => {
         }
       }
     }
-      }
 
     console.log("[webhook] Sending reply:", { sender, replyText: replyText?.slice(0, 50), carouselAlreadySent });
     if (replyText && !carouselAlreadySent) {
