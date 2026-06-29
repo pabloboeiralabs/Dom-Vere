@@ -7,7 +7,6 @@ import { WhatsAppBotWizard } from "@/components/whatsapp/WhatsAppBotWizard";
 import { WhatsAppBotConfigTabs } from "@/components/whatsapp/WhatsAppBotConfigTabs";
 import { WhatsAppJsonConfigs } from "@/components/whatsapp/WhatsAppJsonConfigs";
 import { WhatsAppAdminSidebar } from "@/components/whatsapp/WhatsAppAdminSidebar";
-import { WhatsAppBotResponses } from "@/components/whatsapp/WhatsAppBotResponses";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -311,7 +310,6 @@ export default function WhatsApp() {
               ) : (
                 <>
                   {/* 1. Regras do Bot */}
-                  <WhatsAppBotResponses />
                   {/* 2. Editor de Fluxo */}
                   <Button variant="ghost" size="icon" onClick={() => window.location.href = "/whatsapp/flow"} title="Editor de Fluxo (n8n)">
                     <GitBranch className="h-5 w-5" />

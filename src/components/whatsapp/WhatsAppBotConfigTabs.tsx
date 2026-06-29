@@ -530,7 +530,6 @@ Bot: "Olá! 😊 Que ótimo! Acesse ${bookingUrl} para escolher profissional e h
             </>
           )}
           <TabsTrigger value="controles" className="text-xs">Controles</TabsTrigger>
-          <TabsTrigger value="respostas" className="text-xs">Respostas</TabsTrigger>
           <TabsTrigger value="lembretes" className="text-xs">Lembretes</TabsTrigger>
         </TabsList>
 
@@ -695,63 +694,6 @@ Bot: "Olá! 😊 Que ótimo! Acesse ${bookingUrl} para escolher profissional e h
           </div>
         </TabsContent>
 
-        {/* RESPOSTAS */}
-        <TabsContent value="respostas" className="space-y-3 pt-4">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-full">📋 Modo Mensagens Prontas</span>
-            <span className="text-xs text-muted-foreground">Palavras-chave e respostas fixas.</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-muted-foreground flex-1">
-              {botMode === "menu"
-                ? "Quando o cliente enviar uma mensagem com a palavra-chave, o bot responde automaticamente com o texto definido abaixo."
-                : "Quando o cliente enviar mensagem com a palavra-chave, a IA usa o texto como base para gerar resposta humanizada."}
-            </p>
-            <Button size="sm" onClick={() => { setEditingResp({ trigger_word: "", response_text: "", active: true }); setRespModalOpen(true); }}>
-              <Plus className="h-4 w-4 mr-1" /> Nova Regra
-            </Button>
-          </div>
-          {responses.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-6">
-              {botMode === "menu"
-                ? "Nenhuma regra cadastrada — cadastre palavras-chave e respostas para o bot funcionar."
-                : "Nenhuma regra cadastrada — o bot usará a IA para todas as respostas."}
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {responses.map(r => (
-                <div key={r.id} className="rounded-md border border-border p-3 flex items-start gap-3">
-                  <Badge variant="secondary" className="mt-0.5">{r.trigger_word}</Badge>
-                  <p className="flex-1 text-sm text-foreground line-clamp-2">{r.response_text}</p>
-                  <Button variant="ghost" size="icon" onClick={() => { setEditingResp(r); setRespModalOpen(true); }}><Pencil className="h-4 w-4" /></Button>
-                  <Button variant="ghost" size="icon" onClick={() => r.id && deleteResponse(r.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <Dialog open={respModalOpen} onOpenChange={(o) => { setRespModalOpen(o); if (!o) setEditingResp(null); }}>
-            <DialogContent>
-              <DialogHeader><DialogTitle>{editingResp?.id ? "Editar regra" : "Nova regra"}</DialogTitle></DialogHeader>
-              {editingResp && (
-                <div className="space-y-3">
-                  <div className="space-y-2">
-                    <Label>Palavra-chave</Label>
-                    <Input value={editingResp.trigger_word} onChange={(e) => setEditingResp({ ...editingResp, trigger_word: e.target.value })} placeholder="ex: preço" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Resposta base</Label>
-                    <Textarea rows={4} value={editingResp.response_text} onChange={(e) => setEditingResp({ ...editingResp, response_text: e.target.value })} />
-                  </div>
-                </div>
-              )}
-              <DialogFooter>
-                <Button variant="outline" onClick={() => { setRespModalOpen(false); setEditingResp(null); }}>Cancelar</Button>
-                <Button onClick={() => editingResp && saveResponse(editingResp)}>Salvar</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </TabsContent>
 
         {/* LEMBRETES AUTOMÁTICOS */}
         <TabsContent value="lembretes" className="space-y-4 pt-4">
