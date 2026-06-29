@@ -188,11 +188,11 @@ export default function WhatsAppBotFlow({ onBack }: Props) {
       const flowNodes: Node[] = [];
       const flowEdges: Edge[] = [];
 
-      // Staggered layout: odd rules on left, even on right
+      // Staggered layout: odd rules on left, even on right, with generous spacing
       allRules.forEach((rule, idx) => {
         const isOdd = idx % 2 === 0;
-        const colX = isOdd ? 0 : 500;
-        const rowY = Math.floor(idx / 2) * 320;
+        const colX = isOdd ? 0 : 680;
+        const rowY = Math.floor(idx / 2) * 400;
 
         const triggerId = `trigger-${rule.id}`;
         const responseId = `response-${rule.id}`;
@@ -213,7 +213,7 @@ export default function WhatsAppBotFlow({ onBack }: Props) {
         flowNodes.push({
           id: responseId,
           type: "response",
-          position: { x: colX + 280, y: rowY },
+          position: { x: colX + 300, y: rowY },
           data: {
             response_text: rule.response_text,
             onUpdate: (patch: Partial<TriggerResp>) => handleNodeUpdate(responseId, patch),
@@ -224,7 +224,7 @@ export default function WhatsAppBotFlow({ onBack }: Props) {
         flowNodes.push({
           id: actionId,
           type: "action",
-          position: { x: colX + 600, y: rowY + 30 },
+          position: { x: colX + 660, y: rowY + 30 },
           data: {
             label: rule.trigger_word,
             onDelete: () => handleDeleteRule(rule.id!),
