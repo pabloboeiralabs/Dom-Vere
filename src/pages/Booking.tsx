@@ -135,7 +135,8 @@ export default function Booking() {
   const currentStep = STEPS[step];
 
   useEffect(() => {
-    if (!userId) { setLoading(false); return; }
+    const timeout = setTimeout(() => setLoading(false), 8000);
+    if (!userId) { setLoading(false); clearTimeout(timeout); return; }
     const load = async () => {
       try {
         const [settingsRes, profsRes, servsRes] = await Promise.all([
@@ -182,10 +183,12 @@ export default function Booking() {
       } catch (e) {
         console.error(e);
       } finally {
+        clearTimeout(timeout);
         setLoading(false);
       }
     };
     load();
+    return () => clearTimeout(timeout);
   }, [userId]);
 
   useEffect(() => {

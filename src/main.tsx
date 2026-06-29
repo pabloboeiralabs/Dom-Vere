@@ -3,18 +3,19 @@ import App from "./App.tsx";
 import "./index.css";
 
 // Fix: PostgrestBuilder (used by supabase .insert()) tem .then() mas nao .catch()
-// Isso causa erro "catch is not a function"
 import { createClient } from '@supabase/supabase-js';
-try {
-  const c = createClient('https://localhost', 'x');
-  const b = c.from('t').insert({});
-  let p = Object.getPrototypeOf(b);
-  while (p && p.constructor?.name !== 'PostgrestBuilder') p = Object.getPrototypeOf(p);
-  if (p && !p.catch) {
-    p.catch = function(this: any, onrejected: any) { return this.then().catch(onrejected); };
-    p.finally = function(this: any, onFinally: any) { return this.then().finally(onFinally); };
-  }
-} catch(_) {}
+if (typeof createClient === 'function') {
+  try {
+    const _c = createClient('https://localhost', 'x');
+    const _b = _c.from('t').insert({});
+    let _p = Object.getPrototypeOf(_b);
+    while (_p && _p.constructor?.name !== 'PostgrestBuilder') _p = Object.getPrototypeOf(_p);
+    if (_p && !_p.catch) {
+      _p.catch = function(this: any, onrejected: any) { return this.then().catch(onrejected); };
+      _p.finally = function(this: any, onFinally: any) { return this.then().finally(onFinally); };
+    }
+  } catch(_) {}
+}
 
 // Force unregister old service workers to prevent stale cache on deploy
 if ("serviceWorker" in navigator) {
