@@ -133,7 +133,7 @@ export default function Booking() {
   const currentStep = STEPS[step];
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) { setLoading(false); return; }
     const load = async () => {
       try {
         const [settingsRes, profsRes, servsRes] = await Promise.all([
