@@ -973,7 +973,7 @@ Deno.serve(async (req) => {
         });
         if (matched) {
           const rawText = matched.response_text;
-          const locMatch = rawText.match(/^[LOCATION]({.*})/);
+          const locMatch = rawText.match(/^\[LOCATION\](\{.*\})/);
           if (locMatch) {
             try {
               const locData = JSON.parse(locMatch[1]);
