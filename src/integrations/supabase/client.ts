@@ -12,24 +12,19 @@ const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, 
   }
 });
 
-// Fix: PostgrestFilterBuilder/Builder tem .then() mas nao .catch()
-// Isso causa erro "catch is not a function"
-// Adicionamos .catch() dinamicamente
-const origFrom = supabase.from.bind(supabase);
-supabase.from = ((table: string) => {
-  const builder = origFrom(table);
-  const origInsert = builder.insert.bind(builder);
-  builder.insert = (values: any) => {
-    const result = origInsert(values);
-    if (!result.catch) {
-      result.catch = (onrejected: any) => result.then().catch(onrejected);
-    }
-    if (!result.finally) {
-      result.finally = (onFinally: any) => result.then().finally(onFinally);
-    }
-    return result;
-  };
-  return builder;
-}) as any;
+// Fix: todos os builders do Supabase tem .then() mas nao .catch()
+// Isso faz com que .insert().catch() de erro "catch is not a function"
+// Adicionamos .catch() e .finally() diretamente no prototype apos criar o client
+try {
+  const testBuilder = supabase.from('_fix').insert({});
+  let proto = Object.getPrototypeOf(testBuilder);
+  while (proto && proto.constructor?.name !== 'PostgrestBuilder') {
+    proto = Object.getPrototypeOf(proto);
+  }
+  if (proto && !proto.catch) {
+    proto.catch = function(onrejected: any) { return this.then().catch(onrejected); };
+    proto.finally = function(onFinally: any) { return this.then().finally(onFinally); };
+  }
+} catch(_) {}
 
 export { supabase };
