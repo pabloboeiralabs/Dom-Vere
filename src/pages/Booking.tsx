@@ -109,6 +109,8 @@ export default function Booking() {
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerBirthDate, setCustomerBirthDate] = useState("");
   const [loginMode, setLoginMode] = useState<"" | "login" | "register" | "guest">("");
+  const [loginError, setLoginError] = useState("");
+  const [loggingIn, setLoggingIn] = useState(false);
   const [loading, setLoading] = useState(true);
   const [booking, setBooking] = useState(false);
   const [booked, setBooked] = useState(false);
@@ -559,14 +561,14 @@ export default function Booking() {
             transition={{ duration: 0.3, ease: "easeInOut" }}
             className="w-full"
           >
-            {currentStep === "login" && (
+            {currentStep === "login" && !loginMode && (
               <div className="space-y-4 py-4">
-                <button onClick={() => { setLoginMode("login"); goNext(); }}
+                <button onClick={() => setLoginMode("login")}
                   className="w-full rounded-2xl border-2 border-primary/30 p-5 text-left hover:border-primary hover:bg-primary/5 transition-all">
                   <p className="font-bold text-base">🔑 Já tenho cadastro</p>
                   <p className="text-sm text-muted-foreground mt-1">Fazer login com telefone e data de nascimento</p>
                 </button>
-                <button onClick={() => { setLoginMode("register"); goNext(); }}
+                <button onClick={() => setLoginMode("register")}
                   className="w-full rounded-2xl border-2 border-border p-5 text-left hover:border-primary/50 hover:bg-muted/50 transition-all">
                   <p className="font-bold text-base">📝 Novo por aqui</p>
                   <p className="text-sm text-muted-foreground mt-1">Criar cadastro rápido</p>
@@ -576,6 +578,47 @@ export default function Booking() {
                   <p className="font-bold text-base">👤 Sem cadastro</p>
                   <p className="text-sm text-muted-foreground mt-1">Agendar como visitante</p>
                 </button>
+              </div>
+            )}
+            {currentStep === "login" && loginMode === "login" && (
+              <div className="space-y-4 py-4">
+                <p className="text-sm text-muted-foreground">Informe seus dados para entrar:</p>
+                <Input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="Telefone (com DDD)" className="rounded-xl h-12 text-base" />
+                <Input type="date" value={customerBirthDate} onChange={e => setCustomerBirthDate(e.target.value)} className="rounded-xl h-12 text-base" />
+                {loginError && <p className="text-sm text-destructive">{loginError}</p>}
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setLoginMode("")} className="flex-1 rounded-xl">Voltar</Button>
+                  <Button disabled={!customerPhone || !customerBirthDate || loggingIn} onClick={async () => {
+                    setLoggingIn(true); setLoginError("");
+                    const { data } = await supabase.from("customers").select("id, name, phone").eq("user_id", userId).eq("phone", customerPhone).maybeSingle();
+                    if (data) { setCustomerName(data.name || ""); setCustomerPhone(data.phone || ""); goNext(); }
+                    else setLoginError("Cadastro não encontrado. Verifique os dados.");
+                    setLoggingIn(false);
+                  }} className="flex-1 rounded-xl">Entrar</Button>
+                </div>
+              </div>
+            )}
+            {currentStep === "login" && loginMode === "register" && (
+              <div className="space-y-4 py-4">
+                <p className="text-sm text-muted-foreground">Crie seu cadastro rápido:</p>
+                <Input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Nome completo *" className="rounded-xl h-12 text-base" />
+                <Input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} placeholder="Telefone (com DDD) *" className="rounded-xl h-12 text-base" />
+                <Input type="date" value={customerBirthDate} onChange={e => setCustomerBirthDate(e.target.value)} className="rounded-xl h-12 text-base" />
+                {loginError && <p className="text-sm text-destructive">{loginError}</p>}
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setLoginMode("")} className="flex-1 rounded-xl">Voltar</Button>
+                  <Button disabled={!customerName || !customerPhone || loggingIn} onClick={async () => {
+                    setLoggingIn(true); setLoginError("");
+                    const { data: existing } = await supabase.from("customers").select("id").eq("user_id", userId).eq("phone", customerPhone).maybeSingle();
+                    if (existing) setLoginError("Este telefone já está cadastrado. Faça login.");
+                    else {
+                      const { data: newC } = await supabase.from("customers").insert({ user_id: userId, name: customerName, phone: customerPhone, birth_date: customerBirthDate || null }).select("id, name, phone").single();
+                      if (newC) { setCustomerName(newC.name); setCustomerPhone(newC.phone); goNext(); }
+                      else setLoginError("Erro ao criar cadastro.");
+                    }
+                    setLoggingIn(false);
+                  }} className="flex-1 rounded-xl">Cadastrar e Continuar</Button>
+                </div>
               </div>
             )}
             {currentStep === "professional" && (
