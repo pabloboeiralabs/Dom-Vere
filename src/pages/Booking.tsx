@@ -368,7 +368,7 @@ export default function Booking() {
         notes: selectedServices.length > 1 ? "Agendamento online - Serviços: " + selectedServices.map(id => services.find(s => s.id === id)?.name).filter(Boolean).join(", ") : "Agendamento online",
       });
       if (error) throw error;
-      setBookedCustomerId(customerId);
+      console.log("[booking] setBookedCustomerId:", customerId); setBookedCustomerId(customerId);
 
       // Notify professional via WhatsApp (fire and forget)
       const svcName = selectedServices.map(id => services.find((s: any) => s.id === id)?.name).filter(Boolean).join(", ");
