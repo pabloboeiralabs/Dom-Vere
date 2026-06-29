@@ -26,13 +26,15 @@ export default function ReminderPreference({ customerId, appointmentDate, appoin
     setSaving(true);
 
     // Calcular horas antes do agendamento
-    let hoursBefore = 24; // default
-    if (appointmentDate && appointmentTime) {
-      const apptDt = new Date(`${appointmentDate}T${appointmentTime}:00`);
-      const remindDt = new Date(`${remindDate}T${String(remindHour).padStart(2, "0")}:${String(remindMinute).padStart(2, "0")}:00`);
-      const diffMs = apptDt.getTime() - remindDt.getTime();
-      hoursBefore = Math.max(0.1, Math.round((diffMs / 3600000) * 10) / 10);
+    const apptDt = new Date(`${appointmentDate || remindDate}T${appointmentTime || "12:00"}:00`);
+    const remindDt = new Date(`${remindDate}T${String(remindHour).padStart(2, "0")}:${String(remindMinute).padStart(2, "0")}:00`);
+    const apptTime = apptDt.getTime();
+    const remindTime = remindDt.getTime();
+    if (isNaN(apptTime) || isNaN(remindTime)) {
+      toast.error("Data inválida"); setSaving(false); return;
     }
+    const diffMs = apptTime - remindTime;
+    const hoursBefore = Math.max(0.1, Math.round((diffMs / 3600000) * 10) / 10);
 
     const { error } = await supabase
       .from("customers")
