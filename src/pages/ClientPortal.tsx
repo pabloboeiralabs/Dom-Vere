@@ -1,6 +1,7 @@
 import ReminderPreference from "@/components/ReminderPreference";
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -396,7 +397,7 @@ function HomeScreen({ session, appointments, onTabChange }: {
    BOOK SCREEN  (full integrated booking flow)
    =================================================================== */
 
-function BookScreen({ session, onDone, onCancel }: { session: Session; onDone: () => void; onCancel: () => void }) {
+function BookScreen({ session, onDone, onCancel, onDoneChange }: { session: Session; onDone: () => void; onCancel: () => void; onDoneChange: (done: boolean) => void }) {
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [schedules, setSchedules] = useState<Record<string, Schedule[]>>({});
@@ -582,6 +583,7 @@ function BookScreen({ session, onDone, onCancel }: { session: Session; onDone: (
 
       setLastCustomerId(customerId);
       setDone(true);
+      onDoneChange(true);
       toast.success("Agendamento confirmado!");
       onDone();
     } catch (e: any) {
@@ -606,11 +608,11 @@ function BookScreen({ session, onDone, onCancel }: { session: Session; onDone: (
     const selectedSvcNames = selSvcs.map(id => services.find((s) => s.id === id)?.name).filter(Boolean).join(", ");
     const totalPrice = selSvcs.reduce((acc, id) => acc + (services.find((s) => s.id === id)?.price || 0), 0);
     return (
-      <div className="flex-1 flex items-center justify-center p-4">
+      <div className="flex-1 overflow-y-auto flex items-start justify-center p-4 pt-8">
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className="w-full max-w-sm text-center space-y-6"
+          className="w-full max-w-sm text-center space-y-5"
         >
           <motion.div
             initial={{ scale: 0 }}
@@ -662,6 +664,7 @@ function BookScreen({ session, onDone, onCancel }: { session: Session; onDone: (
           <Button
             onClick={() => {
               setDone(false);
+              onDoneChange(false);
               setStep(0);
               setSelProf("");
               setSelSvcs([]);
@@ -1310,6 +1313,17 @@ export default function ClientPortal() {
   const [session, setSession] = useState<Session | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [activeTab, setActiveTab] = useState<TabId>("inicio");
+  const [bookDone, setBookDone] = useState(false);
+
+  const { pullDistance, refreshing } = usePullToRefresh({
+    onRefresh: async () => {
+      if (session) {
+        const { data } = await (supabase as any).rpc("client_portal_appointments", { p_customer_id: session.customer_id });
+        if (data) setAppointments(data as Appointment[]);
+      }
+    },
+    disabled: !session || activeTab === "agendar",
+  });
 
   /* Restore session */
   useEffect(() => {
@@ -1394,16 +1408,29 @@ export default function ClientPortal() {
             transition={{ duration: 0.15 }}
             className={activeTab === "agendar" ? "flex-1 flex flex-col min-h-0" : ""}
           >
+            {/* Pull-to-refresh indicator */}
+            {(pullDistance > 0 || refreshing) && (
+              <div
+                className="flex items-center justify-center text-primary flex-shrink-0"
+                style={{ height: `${pullDistance}px`, opacity: pullDistance / 70 }}
+              >
+                <motion.div
+                  animate={{ rotate: refreshing ? 360 : 0 }}
+                  transition={{ repeat: refreshing ? Infinity : 0, duration: 1, ease: "linear" }}
+                  className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full"
+                />
+              </div>
+            )}
             {activeTab === "inicio" && <HomeScreen session={session} appointments={appointments} onTabChange={setActiveTab} />}
-            {activeTab === "agendar" && <BookScreen session={session} onDone={fetchAppts} onCancel={() => setActiveTab("inicio")} />}
+            {activeTab === "agendar" && <BookScreen session={session} onDone={fetchAppts} onCancel={() => setActiveTab("inicio")} onDoneChange={setBookDone} />}
             {activeTab === "agenda" && <AppointmentsScreen session={session} />}
             {activeTab === "perfil" && <ProfileScreen session={session} onLogout={handleLogout} />}
           </motion.div>
         </AnimatePresence>
       </main>
 
-      {/* Bottom tab bar — visible unless booking */}
-      {activeTab !== "agendar" && (
+      {/* Bottom tab bar — visible unless actively booking (hidden only during booking steps, shown on success screen) */}
+      {!(activeTab === "agendar" && !bookDone) && (
         <nav className="sticky bottom-0 z-20 bg-background/80 backdrop-blur-xl border-t border-border/40 pb-1 safe-area-bottom">
           <div className="max-w-lg mx-auto flex">
             {TABS.map((tab) => {

@@ -23,6 +23,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
 import ReminderPreference from "@/components/ReminderPreference";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 
 interface Professional {
   id: string;
@@ -394,15 +395,33 @@ export default function Booking() {
     }
   };
 
+  const { pullDistance, refreshing } = usePullToRefresh({
+    onRefresh: () => window.location.reload(),
+    disabled: booked,
+  });
+
   if (booked) {
     const selectedProfObj = professionals.find((p) => p.id === selectedProf);
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
+      <div className="min-h-screen overflow-y-auto bg-gradient-to-br from-background via-background to-primary/5 p-4 pt-8">
+        {/* Pull-to-refresh indicator */}
+        {(pullDistance > 0 || refreshing) && (
+          <div
+            className="flex items-center justify-center text-primary"
+            style={{ height: `${pullDistance}px`, opacity: pullDistance / 70 }}
+          >
+            <motion.div
+              animate={{ rotate: refreshing ? 360 : 0 }}
+              transition={{ repeat: refreshing ? Infinity : 0, duration: 1, ease: "linear" }}
+              className="h-5 w-5 border-2 border-primary border-t-transparent rounded-full"
+            />
+          </div>
+        )}
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", damping: 20 }}
-          className="max-w-md w-full rounded-3xl bg-card border border-border/50 shadow-2xl p-8 text-center space-y-6"
+          className="max-w-md w-full mx-auto rounded-3xl bg-card border border-border/50 shadow-2xl p-6 sm:p-8 text-center space-y-5"
         >
           <motion.div
             initial={{ scale: 0 }}

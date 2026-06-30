@@ -5,6 +5,12 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+function normalizePhone(raw: string): string {
+  const cleaned = (raw || "").replace(/\D/g, "");
+  if (!cleaned) return "";
+  return cleaned.startsWith("55") ? cleaned : `55${cleaned}`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -62,10 +68,11 @@ Deno.serve(async (req) => {
       const msUntilAppt = apptDateTime.getTime() - now.getTime();
       const hoursUntilAppt = msUntilAppt / (1000 * 60 * 60);
 
-      // Send reminder if within the window (± 5min for small reminders, ± 1h otherwise)
-      const reminderWindow = reminderHours < 1 ? 5 / 60 : Math.min(reminderHours * 0.5, 1);
+      // Send reminder if within the window — widened to ensure we don't miss it between cron runs
+      // For small reminders (< 1h): ±30min window. For larger: ±2h window.
+      const reminderWindow = reminderHours < 1 ? 0.5 : Math.min(reminderHours * 0.5, 2);
       console.log(`[crm-reminder] Lead: ${lead.name}, Phone: ${lead.phone}, Appt: ${apptDateStr} ${apptTimeStr}, hoursUntilAppt: ${hoursUntilAppt.toFixed(2)}, reminderHours: ${reminderHours}, window: [${(reminderHours - reminderWindow).toFixed(2)}, ${(reminderHours + reminderWindow).toFixed(2)}]`);
-      if (hoursUntilAppt > reminderHours + reminderWindow || hoursUntilAppt < reminderHours - reminderWindow) continue;
+      if (hoursUntilAppt > reminderHours + reminderWindow || hoursUntilAppt < 0) continue;
 
       // Get professional name
       let profName = "";
@@ -92,6 +99,7 @@ Deno.serve(async (req) => {
 
       if (config) {
         const apiUrl = config.api_url.replace(/\/$/, "");
+        const normalizedPhone = normalizePhone(lead.phone);
         const res = await fetch(`${apiUrl}/send/text?token=${config.instance_token}`, {
           method: "POST",
           headers: {
@@ -100,7 +108,7 @@ Deno.serve(async (req) => {
             "token": config.instance_token,
             "Authorization": `Bearer ${config.instance_token}`,
           },
-          body: JSON.stringify({ number: lead.phone, text: reminderMsg }),
+          body: JSON.stringify({ number: normalizedPhone, text: reminderMsg }),
         });
 
         if (res.ok) {
