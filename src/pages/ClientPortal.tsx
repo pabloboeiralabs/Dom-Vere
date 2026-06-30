@@ -396,7 +396,7 @@ function HomeScreen({ session, appointments, onTabChange }: {
    BOOK SCREEN  (full integrated booking flow)
    =================================================================== */
 
-function BookScreen({ session, onDone }: { session: Session; onDone: () => void }) {
+function BookScreen({ session, onDone, onCancel }: { session: Session; onDone: () => void; onCancel: () => void }) {
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [schedules, setSchedules] = useState<Record<string, Schedule[]>>({});
@@ -965,7 +965,11 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
       {/* Bottom nav for booking — always visible */}
       <div className="flex-shrink-0 bg-background/95 backdrop-blur-xl border-t border-border/40 pb-6 pt-3 px-4 safe-area-bottom">
         <div className="flex gap-3 max-w-lg mx-auto">
-          {step > 0 && (
+          {step === 0 ? (
+            <Button variant="outline" onClick={onCancel} className="rounded-xl h-11 px-4 border-border/50 text-muted-foreground hover:text-foreground">
+              Cancelar
+            </Button>
+          ) : (
             <Button variant="outline" onClick={prevStep} className="rounded-xl h-11 px-4 border-border/50">
               <ChevronLeft className="h-5 w-5" />
             </Button>
@@ -1386,7 +1390,7 @@ export default function ClientPortal() {
             className={activeTab === "agendar" ? "flex-1 flex flex-col min-h-0" : ""}
           >
             {activeTab === "inicio" && <HomeScreen session={session} appointments={appointments} onTabChange={setActiveTab} />}
-            {activeTab === "agendar" && <BookScreen session={session} onDone={fetchAppts} />}
+            {activeTab === "agendar" && <BookScreen session={session} onDone={fetchAppts} onCancel={() => setActiveTab("inicio")} />}
             {activeTab === "agenda" && <AppointmentsScreen session={session} />}
             {activeTab === "perfil" && <ProfileScreen session={session} onLogout={handleLogout} />}
           </motion.div>
