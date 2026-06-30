@@ -87,6 +87,37 @@ const STATUS_LABEL: Record<string, string> = {
   agendado: "Agendado", confirmado: "Confirmado", concluído: "Concluído", cancelado: "Cancelado",
 };
 
+// Safe date parsing helpers for Safari (iOS) compatibility
+const safeParseDateTime = (dateStr: string, timeStr: string): Date => {
+  if (!dateStr) return new Date();
+  const [year, month, day] = dateStr.split("-").map(Number);
+  if (!timeStr) return new Date(year, month - 1, day);
+  const [hours, minutes] = timeStr.split(":").map(Number);
+  return new Date(year, month - 1, day, hours, minutes || 0);
+};
+
+const safeParseLocalDate = (dateStr: string): Date => {
+  if (!dateStr) return new Date();
+  const cleanDateStr = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr.includes(" ") ? dateStr.split(" ")[0] : dateStr;
+  const [year, month, day] = cleanDateStr.split("-").map(Number);
+  return new Date(year, month - 1, day);
+};
+
+const safeParseIsoString = (isoStr: string | null | undefined): Date => {
+  if (!isoStr) return new Date();
+  try {
+    const cleanStr = isoStr.replace("Z", "");
+    const parts = cleanStr.split("T");
+    const datePart = parts[0];
+    const timePart = parts[1] || "00:00:00";
+    const [year, month, day] = datePart.split("-").map(Number);
+    const [hours, minutes, seconds] = timePart.split(":").map(Number);
+    return new Date(year, month - 1, day, hours || 0, minutes || 0, seconds || 0);
+  } catch (e) {
+    return new Date(isoStr);
+  }
+};
+
 const STEP_META: Record<string, { icon: any; title: string }> = {
   type:         { icon: Award,        title: "Tipo de Agendamento" },
   professional: { icon: User,         title: "Escolha o Profissional" },
@@ -203,13 +234,13 @@ function HomeScreen({ session, appointments, onTabChange }: {
 }) {
   const nextAppt = useMemo(() => {
     const up = appointments
-      .filter((a) => new Date(`${a.date}T${a.start_time}`) >= new Date() && a.status !== "cancelado")
-      .sort((a, b) => new Date(`${a.date}T${a.start_time}`).getTime() - new Date(`${b.date}T${b.start_time}`).getTime());
+      .filter((a) => safeParseDateTime(a.date, a.start_time) >= new Date() && a.status !== "cancelado")
+      .sort((a, b) => safeParseDateTime(a.date, a.start_time).getTime() - safeParseDateTime(b.date, b.start_time).getTime());
     return up[0];
   }, [appointments]);
 
   const todayCount = appointments.filter((a) => {
-    const d = new Date(`${a.date}T${a.start_time}`);
+    const d = safeParseDateTime(a.date, a.start_time);
     return a.date === format(new Date(), "yyyy-MM-dd") && d >= new Date() && a.status !== "cancelado";
   }).length;
 
@@ -257,7 +288,7 @@ function HomeScreen({ session, appointments, onTabChange }: {
             <div className="flex items-center gap-4 mt-3 text-sm">
               <span className="flex items-center gap-1.5">
                 <Calendar className="h-4 w-4" />
-                {format(new Date(nextAppt.date + "T00:00:00"), "dd 'de' MMMM", { locale: ptBR })}
+                {format(safeParseLocalDate(nextAppt.date), "dd 'de' MMMM", { locale: ptBR })}
               </span>
               <span className="flex items-center gap-1.5">
                 <Clock className="h-4 w-4" />
@@ -992,13 +1023,13 @@ function AppointmentsScreen({ session }: { session: Session }) {
   }, [session.customer_id]);
 
   const upcoming = useMemo(() => appointments
-    .filter((a) => new Date(`${a.date}T${a.start_time}`) >= new Date() && a.status !== "cancelado")
-    .sort((a, b) => new Date(`${a.date}T${a.start_time}`).getTime() - new Date(`${b.date}T${b.start_time}`).getTime()),
+    .filter((a) => safeParseDateTime(a.date, a.start_time) >= new Date() && a.status !== "cancelado")
+    .sort((a, b) => safeParseDateTime(a.date, a.start_time).getTime() - safeParseDateTime(b.date, b.start_time).getTime()),
     [appointments]);
 
   const past = useMemo(() => appointments
-    .filter((a) => new Date(`${a.date}T${a.start_time}`) < new Date() || a.status === "cancelado")
-    .sort((a, b) => new Date(`${b.date}T${b.start_time}`).getTime() - new Date(`${a.date}T${a.start_time}`).getTime()),
+    .filter((a) => safeParseDateTime(a.date, a.start_time) < new Date() || a.status === "cancelado")
+    .sort((a, b) => safeParseDateTime(b.date, b.start_time).getTime() - safeParseDateTime(a.date, a.start_time).getTime()),
     [appointments]);
 
   const handleCancel = async (id: string) => {
@@ -1059,7 +1090,7 @@ function AppointmentsScreen({ session }: { session: Session }) {
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{h.description}</p>
                       <p className="text-xs text-muted-foreground">
-                        {format(new Date(h.record_date), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                        {format(safeParseIsoString(h.record_date), "dd/MM/yyyy HH:mm", { locale: ptBR })}
                       </p>
                     </div>
                     {h.amount > 0 && <p className="text-sm font-semibold ml-2">R$ {Number(h.amount).toFixed(2)}</p>}
@@ -1094,7 +1125,7 @@ function AppointmentsScreen({ session }: { session: Session }) {
                       <div className="flex items-center gap-3 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Calendar className="h-3.5 w-3.5" />
-                          {format(new Date(a.date + "T00:00:00"), "dd 'de' MMM", { locale: ptBR })}
+                          {format(safeParseLocalDate(a.date), "dd 'de' MMM", { locale: ptBR })}
                         </span>
                         <span className="flex items-center gap-1">
                           <Clock className="h-3.5 w-3.5" />
@@ -1132,7 +1163,7 @@ function AppointmentsScreen({ session }: { session: Session }) {
                       <div>
                         <p className="text-sm font-medium">{a.service_name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {format(new Date(a.date + "T00:00:00"), "dd/MM/yyyy", { locale: ptBR })} · {a.start_time.slice(0, 5)}h · {a.professional_name}
+                          {format(safeParseLocalDate(a.date), "dd/MM/yyyy", { locale: ptBR })} · {a.start_time.slice(0, 5)}h · {a.professional_name}
                         </p>
                       </div>
                       <Badge variant="outline" className={`${STATUS_STYLE[a.status]} text-[10px]`}>
@@ -1207,7 +1238,7 @@ function ProfileScreen({ session, onLogout }: { session: Session; onLogout: () =
             </div>
             {session.plan_expires_at && (
               <p className="text-xs text-muted-foreground">
-                Vence em {format(new Date(session.plan_expires_at), "dd 'de' MMMM", { locale: ptBR })}
+                Vence em {format(safeParseIsoString(session.plan_expires_at), "dd 'de' MMMM", { locale: ptBR })}
               </p>
             )}
           </div>
