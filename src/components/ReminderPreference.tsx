@@ -34,7 +34,7 @@ export default function ReminderPreference({ customerId, appointmentDate, appoin
       toast.error("Data inválida"); setSaving(false); return;
     }
     const diffMs = apptTime - remindTime;
-    const hoursBefore = Math.max(1, Math.round(diffMs / 3600000));
+    const hoursBefore = Math.max(1/12, Math.round((diffMs / 3600000) * 60) / 60);
 
     const { error } = await supabase
       .from("customers")

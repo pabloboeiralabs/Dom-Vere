@@ -62,8 +62,9 @@ Deno.serve(async (req) => {
       const msUntilAppt = apptDateTime.getTime() - now.getTime();
       const hoursUntilAppt = msUntilAppt / (1000 * 60 * 60);
 
-      // Send reminder if within the window (reminderHours ± 1h)
-      if (hoursUntilAppt > reminderHours + 1 || hoursUntilAppt < reminderHours - 1) continue;
+      // Send reminder if within the window (± 5min for small reminders, ± 1h otherwise)
+      const reminderWindow = reminderHours < 1 ? 5 / 60 : Math.min(reminderHours * 0.5, 1);
+      if (hoursUntilAppt > reminderHours + reminderWindow || hoursUntilAppt < reminderHours - reminderWindow) continue;
 
       // Get professional name
       let profName = "";
