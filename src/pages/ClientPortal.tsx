@@ -1306,8 +1306,24 @@ export default function ClientPortal() {
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) setSession(JSON.parse(saved));
-    } catch { /* ignore */ }
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Validate required fields to avoid crashes with stale sessions
+        if (parsed && parsed.user_id && parsed.customer_id && parsed.name) {
+          setSession(parsed);
+        } else {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      }
+    } catch {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+    // Force SW update on load
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(r => r.update());
+      });
+    }
   }, []);
 
   /* Fetch appointments */
