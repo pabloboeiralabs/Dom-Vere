@@ -42,7 +42,7 @@ export default function ReminderPreference({ customerId, appointmentDate, appoin
       .eq("id", customerId);
     setSaving(false);
     if (error) {
-      toast.error("Erro ao salvar preferência");
+      toast.error("Erro ao salvar: " + (error?.message || "desconhecido"));
       return;
     }
     setSaved(true);
