@@ -35,11 +35,35 @@ Deno.serve(async (req) => {
       // Get appointment details
       const { data: appt } = await supabase
         .from("appointments")
-        .select("date, start_time, professional_id")
+        .select("date, start_time, customer_id, professional_id")
         .eq("id", lead.appointment_id)
         .single();
 
       if (!appt) continue;
+
+      // Get customer's reminder_hours preference
+      let reminderHours = 24; // default: 1 day before
+      if (appt.customer_id) {
+        const { data: customer } = await supabase
+          .from("customers")
+          .select("reminder_hours")
+          .eq("id", appt.customer_id)
+          .maybeSingle();
+        if (customer?.reminder_hours) {
+          reminderHours = customer.reminder_hours;
+        }
+      }
+
+      // Calculate if it's time to send the reminder
+      const apptDateStr = appt.date;
+      const apptTimeStr = appt.start_time.slice(0, 5);
+      const apptDateTime = new Date(`${apptDateStr}T${apptTimeStr}:00`);
+      const now = new Date();
+      const msUntilAppt = apptDateTime.getTime() - now.getTime();
+      const hoursUntilAppt = msUntilAppt / (1000 * 60 * 60);
+
+      // Send reminder if within the window (reminderHours ± 1h)
+      if (hoursUntilAppt > reminderHours + 1 || hoursUntilAppt < reminderHours - 1) continue;
 
       // Get professional name
       let profName = "";
@@ -54,9 +78,10 @@ Deno.serve(async (req) => {
 
       const dd = appt.date.slice(8, 10);
       const mm = appt.date.slice(5, 7);
-      const reminderMsg = `Olá ${lead.name}! 😊 Lembrando do seu agendamento amanhã ${dd}/${mm} às ${appt.start_time.slice(0, 5)}${profName ? ` com ${profName}` : ""}. Te esperamos! 💈`;
+      const hhmm = apptTimeStr;
+      const reminderMsg = `Olá ${lead.name}! 😊 Lembrando do seu agendamento hoje ${dd}/${mm} às ${hhmm}${profName ? ` com ${profName}` : ""}. Te esperamos! 💈`;
 
-      // Get WhatsApp config for this user
+      // Get WhatsApp config
       const { data: config } = await supabase
         .from("whatsapp_config")
         .select("api_url, instance_token")
@@ -65,12 +90,11 @@ Deno.serve(async (req) => {
 
       if (config) {
         const apiUrl = config.api_url.replace(/\/$/, "");
-        const res = await fetch(`${apiUrl}/send/text?token=${config.instance_token}`, {
+        const res = await fetch(`${apiUrl}/send/text`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            token: config.instance_token,
-            Authorization: `Bearer ${config.instance_token}`,
+            "apikey": config.instance_token,
           },
           body: JSON.stringify({ number: lead.phone, text: reminderMsg }),
         });
