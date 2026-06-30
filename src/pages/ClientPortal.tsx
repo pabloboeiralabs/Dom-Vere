@@ -810,16 +810,7 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
                       <p className="text-sm">Nenhum serviço disponível no momento</p>
                     </div>
                   )}
-                  {selSvcs.length > 0 && services.length > 0 && (
-                    <motion.button
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      onClick={nextStep}
-                      className="w-full mt-4 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-all shadow-lg shadow-primary/30"
-                    >
-                      Continuar ({selSvcs.length} serviço{selSvcs.length > 1 ? "s" : ""}) →
-                    </motion.button>
-                  )}
+
                 </div>
               )}
 
@@ -935,44 +926,43 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
                       />
                     </div>
                   </div>
-                  <Button
-                    onClick={handleConfirm}
-                    disabled={busy || !customerName.trim()}
-                    className="w-full rounded-xl h-12 text-base font-semibold bg-gradient-to-r from-primary to-primary/80 shadow-lg shadow-primary/30"
-                  >
-                    {busy ? (
-                      <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{ repeat: Infinity, duration: 1 }}
-                        className="h-5 w-5 border-2 border-primary-foreground border-t-transparent rounded-full"
-                      />
-                    ) : (
-                      <><Check className="h-5 w-5 mr-2" /> Confirmar Agendamento</>
-                    )}
-                  </Button>
                 </div>
               )}
             </motion.div>
           </AnimatePresence>
         </div>
 
-        {/* Bottom nav (not on info step) — inside scrollable area */}
-        {currentStep !== "info" && (
-          <div className="pt-3 pb-4 px-4">
-            <div className="flex gap-3">
-              {step > 0 && (
-                <Button variant="outline" onClick={prevStep} className="rounded-xl h-11 px-4 border-border/50">
-                  <ChevronLeft className="h-5 w-5" />
-                </Button>
-              )}
-              {currentStep !== "service" && (
-                <Button onClick={nextStep} disabled={!canNext()} className="flex-1 rounded-xl h-11 text-sm font-semibold">
-                  Continuar <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              )}
-            </div>
+        {/* Fixed Bottom nav for booking */}
+        <div className="sticky bottom-0 z-20 bg-background/80 backdrop-blur-xl border-t border-border/40 pb-6 pt-3 px-4 safe-area-bottom">
+          <div className="flex gap-3 max-w-lg mx-auto">
+            {step > 0 && (
+              <Button variant="outline" onClick={prevStep} className="rounded-xl h-11 px-4 border-border/50">
+                <ChevronLeft className="h-5 w-5" />
+              </Button>
+            )}
+            {currentStep === "info" ? (
+              <Button
+                onClick={handleConfirm}
+                disabled={busy || !customerName.trim()}
+                className="flex-1 rounded-xl h-11 text-sm font-semibold bg-gradient-to-r from-primary to-primary/80 shadow-lg shadow-primary/30"
+              >
+                {busy ? (
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ repeat: Infinity, duration: 1 }}
+                    className="h-5 w-5 border-2 border-primary-foreground border-t-transparent rounded-full mx-auto"
+                  />
+                ) : (
+                  <><Check className="h-4 w-4 mr-1.5" /> Confirmar Agendamento</>
+                )}
+              </Button>
+            ) : (
+              <Button onClick={nextStep} disabled={!canNext()} className="flex-1 rounded-xl h-11 text-sm font-semibold">
+                Continuar <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
@@ -1357,7 +1347,8 @@ export default function ClientPortal() {
         </AnimatePresence>
       </main>
 
-      {/* Bottom tab bar — always visible */}
+      {/* Bottom tab bar — visible unless booking */}
+      {activeTab !== "agendar" && (
         <nav className="sticky bottom-0 z-20 bg-background/80 backdrop-blur-xl border-t border-border/40 pb-1 safe-area-bottom">
           <div className="max-w-lg mx-auto flex">
             {TABS.map((tab) => {
@@ -1381,6 +1372,7 @@ export default function ClientPortal() {
             })}
           </div>
         </nav>
+      )}
     </div>
   );
 }
