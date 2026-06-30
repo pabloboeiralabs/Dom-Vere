@@ -1346,7 +1346,7 @@ export default function ClientPortal() {
   if (!session) return <LoginScreen onLogin={handleLogin} />;
 
   return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
+    <div className="h-full bg-background flex flex-col overflow-hidden">
       {/* Header */}
       <header className="flex-shrink-0 bg-background/80 backdrop-blur-xl border-b border-border/40 z-20">
         <div className="max-w-lg mx-auto px-4 h-12 flex items-center justify-between">
