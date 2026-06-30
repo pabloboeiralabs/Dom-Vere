@@ -7,7 +7,27 @@ services:
       args:
         - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
         - VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY}
-    container_name: domvere-frontend
+    container_name: domvere-frontend-app
     restart: always
-    ports:
-      - "8085:80"
+    expose:
+      - "80"
+    environment:
+      - VIRTUAL_HOST=domvere.zlabs.com.br
+      - VIRTUAL_PORT=80
+      - LETSENCRYPT_HOST=domvere.zlabs.com.br
+      - LETSENCRYPT_EMAIL=painel@zlabs.com.br
+    networks:
+      - domvere-network
+      - zlabs-nginx-proxy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  domvere-network:
+    name: domvere-network
+    driver: bridge
+  zlabs-nginx-proxy:
+    external: true

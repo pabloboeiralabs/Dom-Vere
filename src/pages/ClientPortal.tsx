@@ -681,7 +681,7 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
       <div className="px-4 pt-4 pb-2">
         <div className="flex items-center justify-between mb-2">
           {steps.map((s, i) => {
-            const Icon = BOOK_META[s].icon;
+            const Icon = STEP_META[s].icon;
             return (
               <div
                 key={s}
@@ -705,7 +705,7 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
 
       {/* Step header */}
       <div className="px-4 pb-3">
-        <h3 className="text-base font-bold">{BOOK_META[currentStep].title}</h3>
+        <h3 className="text-base font-bold">{STEP_META[currentStep].title}</h3>
       </div>
 
       {/* Content + bottom nav */}
