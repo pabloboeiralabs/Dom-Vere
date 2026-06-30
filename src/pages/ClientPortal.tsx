@@ -87,9 +87,8 @@ const STATUS_LABEL: Record<string, string> = {
   agendado: "Agendado", confirmado: "Confirmado", concluído: "Concluído", cancelado: "Cancelado",
 };
 
-const BOOK_STEPS = ["professional", "service", "datetime", "info"] as const;
-type BookStep = (typeof BOOK_STEPS)[number];
-const BOOK_META: Record<BookStep, { icon: any; title: string }> = {
+const STEP_META: Record<string, { icon: any; title: string }> = {
+  type:         { icon: Award,        title: "Tipo de Agendamento" },
   professional: { icon: User,         title: "Escolha o Profissional" },
   service:      { icon: Sparkles,     title: "Escolha o Serviço" },
   datetime:     { icon: CalendarDays, title: "Data e Horário" },
@@ -375,7 +374,8 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
   const [step, setStep] = useState(0);
   const [dir, setDir] = useState(1);
   const [selProf, setSelProf] = useState("");
-  const [selSvc, setSelSvc] = useState("");
+  const [selSvcs, setSelSvcs] = useState<string[]>([]);
+  const [bookingType, setBookingType] = useState<"plan" | "avulso">("avulso");
   const [selDate, setSelDate] = useState<Date>(new Date());
   const [slots, setSlots] = useState<SlotInfo[]>([]);
   const [selSlot, setSelSlot] = useState("");
@@ -386,7 +386,17 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
   const [lastCustomerId, setLastCustomerId] = useState<string>("");
 
   const days = useMemo(() => Array.from({ length: 14 }, (_, i) => addDays(new Date(), i)), []);
-  const currentStep = BOOK_STEPS[step];
+  
+  const steps = useMemo(() => {
+    const s: string[] = [];
+    if (session.plan_id) {
+      s.push("type");
+    }
+    s.push("professional", "service", "datetime", "info");
+    return s;
+  }, [session.plan_id]);
+
+  const currentStep = steps[step];
 
   /* Load data */
   useEffect(() => {
@@ -451,21 +461,23 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
     })();
   }, [selProf, selDate, schedules]);
 
-  const nextStep = () => { setDir(1); setStep((s) => Math.min(s + 1, BOOK_STEPS.length - 1)); };
+  const nextStep = () => { setDir(1); setStep((s) => Math.min(s + 1, steps.length - 1)); };
   const prevStep = () => { setDir(-1); setStep((s) => Math.max(s - 1, 0)); };
   const canNext = () => {
     switch (currentStep) {
+      case "type":         return !!bookingType;
       case "professional": return !!selProf;
-      case "service":      return !!selSvc;
+      case "service":      return selSvcs.length > 0;
       case "datetime":     return !!selSlot;
       case "info":         return true;
+      default:             return false;
     }
   };
 
   /* Confirm booking */
   const handleConfirm = async () => {
-    if (!session.user_id || !selProf || !selSlot || !customerName.trim()) {
-      toast.error("Preencha todos os campos"); return;
+    if (!session.user_id || !selProf || !selSlot || !customerName.trim() || selSvcs.length === 0) {
+      toast.error("Preencha todos os campos e selecione pelo menos 1 serviço"); return;
     }
     setBusy(true);
     try {
@@ -486,19 +498,53 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
       const endMin = sh * 60 + sm + 30;
       const endTime = `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`;
 
-      const { error } = await supabase.from("appointments").insert({
+      let notesContent = "Agendamento via App do Cliente";
+      if (bookingType === "plan") {
+        notesContent = `Agendamento via Plano (${session.plan_name})`;
+      }
+      if (selSvcs.length > 1) {
+        notesContent += "\nServiços: " + selSvcs.map(id => services.find(s => s.id === id)?.name).filter(Boolean).join(", ");
+      }
+
+      const { data: newAppt, error } = await supabase.from("appointments").insert({
         user_id: session.user_id, professional_id: selProf, customer_id: customerId,
-        service_id: selSvc || null, date: format(selDate, "yyyy-MM-dd"),
+        service_id: selSvcs[0] || null, date: format(selDate, "yyyy-MM-dd"),
         start_time: selSlot, end_time: endTime,
-        notes: "Agendamento via App do Cliente",
-      });
+        notes: notesContent,
+      }).select("id").single();
       if (error) throw error;
 
+      if (bookingType === "plan" && session.plan_id) {
+        // 1. Criar registro de uso do plano
+        const { error: usageError } = await supabase.from("plan_usage_records").insert({
+          customer_plan_id: session.plan_id,
+          professional_id: selProf,
+          appointment_id: newAppt.id,
+        });
+        if (usageError) throw usageError;
+
+        // 2. Incrementar uso no plano do cliente
+        const currentCount = session.plan_usage_count || 0;
+        const { error: updateError } = await supabase
+          .from("customer_plans")
+          .update({ usage_count: currentCount + 1 })
+          .eq("id", session.plan_id);
+        if (updateError) throw updateError;
+
+        // 3. Sincronizar o localStorage para que o app renderize o limite restante na hora
+        const updatedSess = {
+          ...session,
+          plan_usage_count: currentCount + 1
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedSess));
+      }
+
+      const svcNames = selSvcs.map(id => services.find((s) => s.id === id)?.name).filter(Boolean).join(", ");
       supabase.functions.invoke("notify-professional", {
         body: {
           professional_id: selProf, user_id: session.user_id,
           customer_name: customerName.trim(),
-          service_name: services.find((s) => s.id === selSvc)?.name || "",
+          service_name: svcNames,
           date: format(selDate, "yyyy-MM-dd"), start_time: selSlot,
         },
       }).catch(() => {});
@@ -526,7 +572,8 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
   /* ── Success ── */
   if (done) {
     const prof = professionals.find((p) => p.id === selProf);
-    const svc = services.find((s) => s.id === selSvc);
+    const selectedSvcNames = selSvcs.map(id => services.find((s) => s.id === id)?.name).filter(Boolean).join(", ");
+    const totalPrice = selSvcs.reduce((acc, id) => acc + (services.find((s) => s.id === id)?.price || 0), 0);
     return (
       <div className="flex-1 flex items-center justify-center p-4">
         <motion.div
@@ -556,10 +603,12 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
                 <span className="font-medium">{prof.name}</span>
               </div>
             )}
-            {svc && (
+            {selSvcs.length > 0 && (
               <div className="flex items-center gap-3">
                 <Scissors className="h-5 w-5 text-primary flex-shrink-0" />
-                <span className="font-medium">{svc.name} — R$ {Number(svc.price).toFixed(2)}</span>
+                <span className="font-medium">
+                  {selectedSvcNames} {bookingType === "plan" ? "— Plano" : `— R$ ${totalPrice.toFixed(2)}`}
+                </span>
               </div>
             )}
             <div className="flex items-center gap-3">
@@ -575,7 +624,16 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
             <ReminderPreference customerId={lastCustomerId} onSave={() => {}} />
           </div>
           <Button
-            onClick={() => { setDone(false); setStep(0); setSelProf(""); setSelSvc(""); setSelSlot(""); setSelDate(new Date()); setLastCustomerId(""); }}
+            onClick={() => {
+              setDone(false);
+              setStep(0);
+              setSelProf("");
+              setSelSvcs([]);
+              setSelSlot("");
+              setSelDate(new Date());
+              setLastCustomerId("");
+              setBookingType("avulso");
+            }}
             variant="outline" className="rounded-xl"
           >
             Novo agendamento
@@ -591,7 +649,7 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
       {/* Steps indicator */}
       <div className="px-4 pt-4 pb-2">
         <div className="flex items-center justify-between mb-2">
-          {BOOK_STEPS.map((s, i) => {
+          {steps.map((s, i) => {
             const Icon = BOOK_META[s].icon;
             return (
               <div
@@ -608,7 +666,7 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
         <div className="h-1.5 bg-muted rounded-full overflow-hidden">
           <motion.div
             className="h-full bg-primary rounded-full"
-            animate={{ width: `${((step + 1) / BOOK_STEPS.length) * 100}%` }}
+            animate={{ width: `${((step + 1) / steps.length) * 100}%` }}
             transition={{ duration: 0.3 }}
           />
         </div>
@@ -631,6 +689,46 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
               exit={{ x: dir > 0 ? -200 : 200, opacity: 0 }}
               transition={{ duration: 0.2 }}
             >
+              {/* Step: Type (Plan vs Avulso) */}
+              {currentStep === "type" && (
+                <div className="space-y-4 py-4">
+                  <button
+                    onClick={() => { setBookingType("plan"); nextStep(); }}
+                    className={`w-full rounded-2xl border-2 p-5 text-left transition-all group ${
+                      bookingType === "plan" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50 hover:bg-muted/50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <p className="font-bold text-lg">📦 Usar Meu Plano</p>
+                      <Badge variant="secondary" className="bg-primary/10 text-primary">Ativo</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1 font-medium">
+                      {session.plan_name}
+                    </p>
+                    <p className="text-xs text-muted-foreground/80 mt-1">
+                      Saldo de usos: {session.plan_usage_count || 0} de {session.plan_usage_limit || 0}
+                    </p>
+                    <p className="text-xs text-primary mt-3 group-hover:translate-x-1 transition-transform">Agendar pelo plano →</p>
+                  </button>
+
+                  <button
+                    onClick={() => { setBookingType("avulso"); nextStep(); }}
+                    className={`w-full rounded-2xl border-2 p-5 text-left transition-all group ${
+                      bookingType === "avulso" ? "border-primary bg-primary/5" : "border-border hover:border-primary/50 hover:bg-muted/50"
+                    }`}
+                  >
+                    <p className="font-bold text-lg">💰 Agendamento Avulso</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Agendamento comum fora do plano.
+                    </p>
+                    <p className="text-xs text-muted-foreground/80 mt-1">
+                      Pague no local ou com seus créditos avulsos.
+                    </p>
+                    <p className="text-xs text-primary mt-3 group-hover:translate-x-1 transition-transform">Agendar avulso →</p>
+                  </button>
+                </div>
+              )}
+
               {/* Step: Professional */}
               {currentStep === "professional" && (
                 <div className="grid grid-cols-2 gap-3">
@@ -673,35 +771,54 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
               {/* Step: Service */}
               {currentStep === "service" && (
                 <div className="space-y-2">
-                  {services.map((svc, i) => (
-                    <motion.button
-                      key={svc.id}
-                      initial={{ opacity: 0, x: -16 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      onClick={() => { setSelSvc(svc.id); nextStep(); }}
-                      className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all text-left ${
-                        selSvc === svc.id ? "border-primary bg-primary/5 shadow-sm" : "border-border/40 bg-card"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                          selSvc === svc.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                        }`}>
-                          <Scissors className="h-5 w-5" />
+                  {services.map((svc, i) => {
+                    const isSelected = selSvcs.includes(svc.id);
+                    return (
+                      <motion.button
+                        key={svc.id}
+                        initial={{ opacity: 0, x: -16 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                        onClick={() => {
+                          if (isSelected) {
+                            setSelSvcs(prev => prev.filter(id => id !== svc.id));
+                          } else {
+                            setSelSvcs(prev => [...prev, svc.id]);
+                          }
+                        }}
+                        className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all text-left ${
+                          isSelected ? "border-primary bg-primary/5 shadow-sm" : "border-border/40 bg-card"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                            isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                          }`}>
+                            <Scissors className="h-5 w-5" />
+                          </div>
+                          <span className="font-medium">{svc.name}</span>
                         </div>
-                        <span className="font-medium">{svc.name}</span>
-                      </div>
-                      <Badge variant="secondary" className={selSvc === svc.id ? "bg-primary/15 text-primary" : ""}>
-                        R$ {Number(svc.price).toFixed(2)}
-                      </Badge>
-                    </motion.button>
-                  ))}
+                        <Badge variant="secondary" className={isSelected ? "bg-primary/15 text-primary" : ""}>
+                          R$ {Number(svc.price).toFixed(2)}
+                        </Badge>
+                      </motion.button>
+                    );
+                  })}
                   {services.length === 0 && (
                     <div className="text-center py-8 text-muted-foreground">
                       <Sparkles className="h-8 w-8 mx-auto mb-2 opacity-40" />
                       <p className="text-sm">Nenhum serviço disponível no momento</p>
                     </div>
+                  )}
+                  {selSvcs.length > 0 && services.length > 0 && (
+                    <motion.button
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      onClick={nextStep}
+                      className="w-full mt-4 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-all shadow-lg shadow-primary/30"
+                    >
+                      Continuar ({selSvcs.length} serviço{selSvcs.length > 1 ? "s" : ""}) →
+                    </motion.button>
                   )}
                 </div>
               )}
@@ -788,8 +905,14 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
                       </div>
                       <div className="flex items-center gap-2">
                         <Scissors className="h-4 w-4 text-primary flex-shrink-0" />
-                        <span>{services.find((s) => s.id === selSvc)?.name || "Serviço"}</span>
+                        <span>{selSvcs.map(id => services.find(s => s.id === id)?.name).filter(Boolean).join(", ")}</span>
                       </div>
+                      {bookingType === "plan" && (
+                        <div className="flex items-center gap-2 text-primary">
+                          <Award className="h-4 w-4 flex-shrink-0" />
+                          <span className="font-semibold">Descontado do plano ({session.plan_name})</span>
+                        </div>
+                      )}
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-primary flex-shrink-0" />
                         <span>{format(selDate, "dd 'de' MMMM", { locale: ptBR })} às {selSlot}h</span>
@@ -835,16 +958,18 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
 
         {/* Bottom nav (not on info step) — inside scrollable area */}
         {currentStep !== "info" && (
-          <div className="pt-3 pb-4">
+          <div className="pt-3 pb-4 px-4">
             <div className="flex gap-3">
               {step > 0 && (
                 <Button variant="outline" onClick={prevStep} className="rounded-xl h-11 px-4 border-border/50">
                   <ChevronLeft className="h-5 w-5" />
                 </Button>
               )}
-              <Button onClick={nextStep} disabled={!canNext()} className="flex-1 rounded-xl h-11 text-sm font-semibold">
-                Continuar <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
+              {currentStep !== "service" && (
+                <Button onClick={nextStep} disabled={!canNext()} className="flex-1 rounded-xl h-11 text-sm font-semibold">
+                  Continuar <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              )}
             </div>
           </div>
         )}
