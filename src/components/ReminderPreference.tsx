@@ -46,7 +46,7 @@ export default function ReminderPreference({ customerId, appointmentDate, appoin
       return;
     }
     setSaved(true);
-    const formattedDate = format(new Date(remindDate), "dd/MM");
+    const formattedDate = remindDate.slice(8, 10) + "/" + remindDate.slice(5, 7);
     toast.success(`🔔 Lembrete agendado para ${formattedDate} às ${remindHour}h${remindMinute}!`);
     onSave?.();
   };
