@@ -676,9 +676,9 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
 
   /* ── Main booking flow ── */
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col h-full min-h-0">
       {/* Steps indicator */}
-      <div className="px-4 pt-4 pb-2">
+      <div className="px-4 pt-4 pb-2 flex-shrink-0">
         <div className="flex items-center justify-between mb-2">
           {steps.map((s, i) => {
             const Icon = STEP_META[s].icon;
@@ -704,13 +704,12 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
       </div>
 
       {/* Step header */}
-      <div className="px-4 pb-3">
+      <div className="px-4 pb-3 flex-shrink-0">
         <h3 className="text-base font-bold">{STEP_META[currentStep].title}</h3>
       </div>
 
-      {/* Content + bottom nav */}
-      <div className="flex-1 flex flex-col">
-        <div className="flex-1 overflow-y-auto px-4 pb-3">
+      {/* Scrollable content area */}
+      <div className="flex-1 overflow-y-auto min-h-0 px-4 pb-3">
           <AnimatePresence mode="wait" custom={dir}>
             <motion.div
               key={currentStep}
@@ -963,36 +962,35 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
           </AnimatePresence>
         </div>
 
-        {/* Fixed Bottom nav for booking */}
-        <div className="sticky bottom-0 z-20 bg-background/80 backdrop-blur-xl border-t border-border/40 pb-6 pt-3 px-4 safe-area-bottom">
-          <div className="flex gap-3 max-w-lg mx-auto">
-            {step > 0 && (
-              <Button variant="outline" onClick={prevStep} className="rounded-xl h-11 px-4 border-border/50">
-                <ChevronLeft className="h-5 w-5" />
-              </Button>
-            )}
-            {currentStep === "info" ? (
-              <Button
-                onClick={handleConfirm}
-                disabled={busy || !customerName.trim()}
-                className="flex-1 rounded-xl h-11 text-sm font-semibold bg-gradient-to-r from-primary to-primary/80 shadow-lg shadow-primary/30"
-              >
-                {busy ? (
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ repeat: Infinity, duration: 1 }}
-                    className="h-5 w-5 border-2 border-primary-foreground border-t-transparent rounded-full mx-auto"
-                  />
-                ) : (
-                  <><Check className="h-4 w-4 mr-1.5" /> Confirmar Agendamento</>
-                )}
-              </Button>
-            ) : (
-              <Button onClick={nextStep} disabled={!canNext()} className="flex-1 rounded-xl h-11 text-sm font-semibold">
-                Continuar <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            )}
-          </div>
+      {/* Bottom nav for booking — always visible */}
+      <div className="flex-shrink-0 bg-background/95 backdrop-blur-xl border-t border-border/40 pb-6 pt-3 px-4 safe-area-bottom">
+        <div className="flex gap-3 max-w-lg mx-auto">
+          {step > 0 && (
+            <Button variant="outline" onClick={prevStep} className="rounded-xl h-11 px-4 border-border/50">
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+          )}
+          {currentStep === "info" ? (
+            <Button
+              onClick={handleConfirm}
+              disabled={busy || !customerName.trim()}
+              className="flex-1 rounded-xl h-11 text-sm font-semibold bg-gradient-to-r from-primary to-primary/80 shadow-lg shadow-primary/30"
+            >
+              {busy ? (
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ repeat: Infinity, duration: 1 }}
+                  className="h-5 w-5 border-2 border-primary-foreground border-t-transparent rounded-full mx-auto"
+                />
+              ) : (
+                <><Check className="h-4 w-4 mr-1.5" /> Confirmar Agendamento</>
+              )}
+            </Button>
+          ) : (
+            <Button onClick={nextStep} disabled={!canNext()} className="flex-1 rounded-xl h-11 text-sm font-semibold">
+              Continuar <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          )}
         </div>
       </div>
     </div>
