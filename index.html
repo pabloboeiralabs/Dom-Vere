@@ -6,9 +6,41 @@
     <title>DON VERE BARBEARIA</title>
     <meta name="description" content="VOCÊ MERECE O MELHOR!">
     <meta name="author" content="Lovable" />
-    <meta name="theme-color" content="#000000" />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="apple-touch-icon" href="/placeholder.svg" />
+    <meta name="theme-color" content="#ffffff" />
+    <script>
+      (function() {
+        var isClient = window.location.pathname.startsWith('/cliente') || window.location.pathname.startsWith('/booking');
+        var manifestHref = isClient ? '/manifest-client.webmanifest' : '/manifest-barber.webmanifest';
+        var iconHref = isClient ? '/client-icon-192.png' : '/barber-icon-192.png';
+        var faviconHref = isClient ? '/client-favicon.png' : '/barber-favicon.png';
+        var themeColor = isClient ? '#10162e' : '#ffffff';
+
+        // Set manifest
+        var linkManifest = document.createElement('link');
+        linkManifest.rel = 'manifest';
+        linkManifest.href = manifestHref;
+        document.head.appendChild(linkManifest);
+
+        // Set apple-touch-icon
+        var linkApple = document.createElement('link');
+        linkApple.rel = 'apple-touch-icon';
+        linkApple.href = iconHref;
+        document.head.appendChild(linkApple);
+
+        // Set shortcut icon/favicon
+        var linkFavicon = document.createElement('link');
+        linkFavicon.rel = 'icon';
+        linkFavicon.type = 'image/png';
+        linkFavicon.href = faviconHref;
+        document.head.appendChild(linkFavicon);
+
+        // Set meta theme-color
+        var metaTheme = document.querySelector('meta[name="theme-color"]');
+        if (metaTheme) {
+          metaTheme.setAttribute('content', themeColor);
+        }
+      })();
+    </script>
 
 
     <meta property="og:type" content="website" />

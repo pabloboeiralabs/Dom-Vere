@@ -1,0 +1,25 @@
+{
+  "name": "Dom Vere Cliente",
+  "short_name": "DomVere",
+  "description": "App do Cliente - Dom Vere Barbearia",
+  "theme_color": "#10162e",
+  "background_color": "#10162e",
+  "display": "standalone",
+  "orientation": "portrait",
+  "scope": "/cliente",
+  "start_url": "/cliente",
+  "icons": [
+    {
+      "src": "/client-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/client-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

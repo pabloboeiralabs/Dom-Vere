@@ -1,6 +1,6 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate, useLocation } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -42,6 +42,60 @@ const SuspenseWrap = ({ children }: { children: React.ReactNode }) => (
   </Suspense>
 );
 
+const PwaThemeSync = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    const isClient = location.pathname.startsWith('/cliente') || location.pathname.startsWith('/booking');
+    const manifestHref = isClient ? '/manifest-client.webmanifest' : '/manifest-barber.webmanifest';
+    const iconHref = isClient ? '/client-icon-192.png' : '/barber-icon-192.png';
+    const faviconHref = isClient ? '/client-favicon.png' : '/barber-favicon.png';
+    const themeColor = isClient ? '#10162e' : '#ffffff';
+
+    // Update Manifest
+    let linkManifest = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
+    if (linkManifest) {
+      linkManifest.href = manifestHref;
+    } else {
+      linkManifest = document.createElement('link');
+      linkManifest.rel = 'manifest';
+      linkManifest.href = manifestHref;
+      document.head.appendChild(linkManifest);
+    }
+
+    // Update Apple Touch Icon
+    let linkApple = document.querySelector('link[rel="apple-touch-icon"]') as HTMLLinkElement;
+    if (linkApple) {
+      linkApple.href = iconHref;
+    } else {
+      linkApple = document.createElement('link');
+      linkApple.rel = 'apple-touch-icon';
+      linkApple.href = iconHref;
+      document.head.appendChild(linkApple);
+    }
+
+    // Update Favicon
+    let linkFavicon = document.querySelector('link[rel="icon"][type="image/png"]') as HTMLLinkElement;
+    if (linkFavicon) {
+      linkFavicon.href = faviconHref;
+    } else {
+      linkFavicon = document.createElement('link');
+      linkFavicon.rel = 'icon';
+      linkFavicon.type = 'image/png';
+      linkFavicon.href = faviconHref;
+      document.head.appendChild(linkFavicon);
+    }
+
+    // Update theme-color
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (metaTheme) {
+      metaTheme.setAttribute('content', themeColor);
+    }
+  }, [location]);
+
+  return null;
+};
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -51,6 +105,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <PwaThemeSync />
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/change-password" element={<SuspenseWrap><ChangePassword /></SuspenseWrap>} />
