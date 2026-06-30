@@ -96,6 +96,7 @@ Deno.serve(async (req) => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            "apikey": config.instance_token,
             "token": config.instance_token,
             "Authorization": `Bearer ${config.instance_token}`,
           },
