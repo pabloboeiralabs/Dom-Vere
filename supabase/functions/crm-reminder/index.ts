@@ -91,11 +91,12 @@ Deno.serve(async (req) => {
 
       if (config) {
         const apiUrl = config.api_url.replace(/\/$/, "");
-        const res = await fetch(`${apiUrl}/send/text`, {
+        const res = await fetch(`${apiUrl}/send/text?token=${config.instance_token}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "apikey": config.instance_token,
+            "token": config.instance_token,
+            "Authorization": `Bearer ${config.instance_token}`,
           },
           body: JSON.stringify({ number: lead.phone, text: reminderMsg }),
         });
@@ -103,6 +104,9 @@ Deno.serve(async (req) => {
         if (res.ok) {
           await supabase.from("crm_leads").update({ reminder_sent: true }).eq("id", lead.id);
           sent++;
+        } else {
+          const errText = await res.text().catch(() => "");
+          console.error(`[crm-reminder] Failed to send message to ${lead.phone}. Status: ${res.status}. Body: ${errText}`);
         }
       }
     }

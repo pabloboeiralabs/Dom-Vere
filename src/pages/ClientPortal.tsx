@@ -652,7 +652,12 @@ function BookScreen({ session, onDone, onCancel }: { session: Session; onDone: (
             </div>
           </div>
           <div className="space-y-3 pt-2">
-            <ReminderPreference customerId={lastCustomerId} onSave={() => {}} />
+            <ReminderPreference
+              customerId={lastCustomerId}
+              appointmentDate={format(selDate, "yyyy-MM-dd")}
+              appointmentTime={selSlot}
+              onSave={() => {}}
+            />
           </div>
           <Button
             onClick={() => {
