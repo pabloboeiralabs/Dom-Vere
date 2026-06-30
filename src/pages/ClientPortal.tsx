@@ -383,6 +383,7 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
   const [customerPhone, setCustomerPhone] = useState(session.phone);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
+  const [lastCustomerId, setLastCustomerId] = useState<string>("");
 
   const days = useMemo(() => Array.from({ length: 14 }, (_, i) => addDays(new Date(), i)), []);
   const currentStep = BOOK_STEPS[step];
@@ -502,6 +503,7 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
         },
       }).catch(() => {});
 
+      setLastCustomerId(customerId);
       setDone(true);
       toast.success("Agendamento confirmado!");
       onDone();
@@ -573,7 +575,7 @@ function BookScreen({ session, onDone }: { session: Session; onDone: () => void 
             <ReminderPreference customerId={lastCustomerId} onSave={() => {}} />
           </div>
           <Button
-            onClick={() => { setDone(false); setStep(0); setSelProf(""); setSelSvc(""); setSelSlot(""); setSelDate(new Date()); }}
+            onClick={() => { setDone(false); setStep(0); setSelProf(""); setSelSvc(""); setSelSlot(""); setSelDate(new Date()); setLastCustomerId(""); }}
             variant="outline" className="rounded-xl"
           >
             Novo agendamento
