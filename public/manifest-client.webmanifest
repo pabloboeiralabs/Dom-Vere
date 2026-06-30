@@ -6,7 +6,7 @@
   "background_color": "#10162e",
   "display": "standalone",
   "orientation": "portrait",
-  "scope": "/cliente",
+  "scope": "/",
   "start_url": "/cliente",
   "icons": [
     {

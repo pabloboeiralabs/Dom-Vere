@@ -46,7 +46,17 @@ const PwaThemeSync = () => {
   const location = useLocation();
 
   useEffect(() => {
-    const isClient = location.pathname.startsWith('/cliente') || location.pathname.startsWith('/booking');
+    let isBarber = false;
+    if (window.location.hostname.includes('barber')) {
+      isBarber = true;
+    } else if (window.location.hostname.includes('app.domvere') || window.location.hostname.includes('cliente')) {
+      isBarber = false;
+    } else {
+      // Fallback para localhost/desenvolvimento
+      isBarber = !location.pathname.startsWith('/cliente') && !location.pathname.startsWith('/booking');
+    }
+    const isClient = !isBarber;
+
     const manifestHref = isClient ? '/manifest-client.webmanifest' : '/manifest-barber.webmanifest';
     const iconHref = isClient ? '/client-icon-192.png' : '/barber-icon-192.png';
     const faviconHref = isClient ? '/client-favicon.png' : '/barber-favicon.png';
@@ -96,6 +106,25 @@ const PwaThemeSync = () => {
   return null;
 };
 
+const RootRedirect = () => {
+  const isBarber = window.location.hostname.includes('barber');
+  const isClientDomain = window.location.hostname.includes('app.domvere') || window.location.hostname.includes('cliente');
+  
+  if (isClientDomain) {
+    return <Navigate to="/cliente" replace />;
+  }
+  if (isBarber) {
+    return <Navigate to="/reports" replace />;
+  }
+  
+  // Fallback para localhost baseado no caminho
+  const isLocalClient = window.location.pathname.startsWith('/cliente') || window.location.pathname.startsWith('/booking');
+  if (isLocalClient) {
+    return <Navigate to="/cliente" replace />;
+  }
+  return <Navigate to="/reports" replace />;
+};
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -113,8 +142,8 @@ const App = () => (
             <Route path="/booking/:userId" element={<SuspenseWrap><Booking /></SuspenseWrap>} />
             <Route path="/cliente" element={<SuspenseWrap><ClientPortal /></SuspenseWrap>} />
             <Route path="/professional-panel" element={<ProtectedRoute requiredRole="profissional"><SuspenseWrap><ProfessionalDashboard /></SuspenseWrap></ProtectedRoute>} />
-            <Route path="/" element={<Navigate to="/reports" replace />} />
-            <Route path="/home" element={<Navigate to="/reports" replace />} />
+            <Route path="/" element={<RootRedirect />} />
+            <Route path="/home" element={<RootRedirect />} />
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
               <Route path="/dashboard" element={<SuspenseWrap><Dashboard /></SuspenseWrap>} />
               <Route path="/clients" element={<SuspenseWrap><Clients /></SuspenseWrap>} />

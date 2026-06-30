@@ -9,7 +9,17 @@
     <meta name="theme-color" content="#ffffff" />
     <script>
       (function() {
-        var isClient = window.location.pathname.startsWith('/cliente') || window.location.pathname.startsWith('/booking');
+        var isBarber = false;
+        if (window.location.hostname.includes('barber')) {
+          isBarber = true;
+        } else if (window.location.hostname.includes('app.domvere') || window.location.hostname.includes('cliente')) {
+          isBarber = false;
+        } else {
+          // Fallback para localhost/desenvolvimento
+          isBarber = !window.location.pathname.startsWith('/cliente') && !window.location.pathname.startsWith('/booking');
+        }
+        var isClient = !isBarber;
+
         var manifestHref = isClient ? '/manifest-client.webmanifest' : '/manifest-barber.webmanifest';
         var iconHref = isClient ? '/client-icon-192.png' : '/barber-icon-192.png';
         var faviconHref = isClient ? '/client-favicon.png' : '/barber-favicon.png';
