@@ -11,13 +11,14 @@ import {
 } from "@/components/ui/sidebar";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
-import { Users, Settings, Shield, BarChart2, Clock, CreditCard, MessageSquare, Bot, CalendarClock, Megaphone, UserCheck, Kanban, Smartphone, Package, ShoppingCart } from "lucide-react";
+import { Users, Settings, Shield, BarChart2, Clock, CreditCard, MessageSquare, Bot, CalendarClock, Megaphone, UserCheck, Kanban, Smartphone, Package, ShoppingCart, Bell } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const dashboardItems = [
   { title: "Relatórios", url: "/reports", icon: BarChart2 },
   { title: "Agendas", url: "/scheduling", icon: CalendarClock },
   { title: "Vencimentos", url: "/expirations", icon: Clock },
+  { title: "Lembretes", url: "/reminders", icon: Bell },
 ];
 
 const clientItems = [
