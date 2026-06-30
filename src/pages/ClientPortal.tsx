@@ -15,7 +15,7 @@ import {
   Scissors, ChevronRight, ChevronLeft, Check, Plus, ArrowRight,
   Home, CalendarDays, Clock, User, Phone, Award, CreditCard,
   Calendar, History, LogOut, Sparkles, Package, AlertCircle,
-  X, MapPin,
+  X, MapPin, Bell,
 } from "lucide-react";
 
 /* ===================================================================
@@ -46,6 +46,8 @@ type Appointment = {
   professional_name: string;
   professional_photo?: string | null;
   notes: string | null;
+  reminder_hours: number | null;
+  reminder_sent: boolean;
 };
 
 type HistoryItem = {
@@ -263,6 +265,21 @@ function HomeScreen({ session, appointments, onTabChange }: {
                 {nextAppt.start_time.slice(0, 5)}h
               </span>
             </div>
+            {nextAppt.reminder_hours ? (
+              <div className="mt-2 flex items-center gap-1.5 text-xs text-white/70">
+                <Bell className="h-3 w-3" />
+                <span>Lembrete: {nextAppt.reminder_hours < 1
+                  ? Math.round(nextAppt.reminder_hours * 60) + "min"
+                  : nextAppt.reminder_hours + "h"} antes
+                  {nextAppt.reminder_sent ? " ✅ Enviado" : " ⏳ Pendente"}
+                </span>
+              </div>
+            ) : (
+              <div className="mt-2 flex items-center gap-1.5 text-xs text-white/50">
+                <Bell className="h-3 w-3" />
+                <span>Sem lembrete</span>
+              </div>
+            )}
             <Button
               size="sm" variant="secondary"
               className="mt-4 rounded-xl bg-white/20 text-white hover:bg-white/30 border-0"
