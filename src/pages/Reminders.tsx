@@ -16,6 +16,13 @@ interface Reminder {
   reminder_sent: boolean;
   customer_name: string;
   customer_phone: string;
+  reminder_at: string | null;
+}
+
+function calcReminderAt(date: string, time: string, hoursBefore: number): string {
+  const appt = new Date(`${date}T${time}:00`);
+  const remind = new Date(appt.getTime() - hoursBefore * 60 * 60 * 1000);
+  return format(remind, "dd/MM 'às' HH:mm");
 }
 
 export default function Reminders() {
@@ -54,6 +61,9 @@ export default function Reminders() {
             reminder_hours: a.customers?.reminder_hours || null,
             reminder_sent: lead?.reminder_sent || false,
             customer_name: a.customers?.name || "—",
+            reminder_at: a.customers?.reminder_hours
+              ? calcReminderAt(a.date, a.start_time, a.customers.reminder_hours)
+              : null,
             customer_phone: a.customers?.phone || "—",
           };
         }));
@@ -92,19 +102,19 @@ export default function Reminders() {
               </div>
               <div className="flex items-center gap-3 ml-4">
                 {r.reminder_hours ? (
-                  <div className="text-right">
+                  <div className="text-right min-w-[140px]">
                     <div className="flex items-center gap-1 text-xs font-medium">
-                      <Bell className="h-3 w-3 text-primary" />
-                      {r.reminder_hours < 1
-                        ? Math.round(r.reminder_hours * 60) + "min"
-                        : r.reminder_hours + "h"} antes
+                      <Bell className="h-3 w-3 text-primary flex-shrink-0" />
+                      <span>
+                        {r.reminder_at && <span className="text-muted-foreground font-normal">{r.reminder_at}</span>}
+                      </span>
                     </div>
                     {r.reminder_sent ? (
-                      <div className="flex items-center gap-1 text-[10px] text-green-600">
+                      <div className="flex items-center justify-end gap-1 text-[10px] text-green-600 mt-0.5">
                         <CheckCircle2 className="h-3 w-3" /> Enviado
                       </div>
                     ) : (
-                      <div className="flex items-center gap-1 text-[10px] text-amber-600">
+                      <div className="flex items-center justify-end gap-1 text-[10px] text-amber-600 mt-0.5">
                         <Clock className="h-3 w-3" /> Pendente
                       </div>
                     )}
