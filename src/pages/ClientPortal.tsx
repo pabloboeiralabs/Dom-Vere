@@ -1330,9 +1330,9 @@ export default function ClientPortal() {
   if (!session) return <LoginScreen onLogin={handleLogin} />;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-background/80 backdrop-blur-xl border-b border-border/40">
+      <header className="flex-shrink-0 bg-background/80 backdrop-blur-xl border-b border-border/40 z-20">
         <div className="max-w-lg mx-auto px-4 h-12 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -1359,7 +1359,7 @@ export default function ClientPortal() {
       </header>
 
       {/* Main content */}
-      <main className="flex-1 max-w-lg mx-auto w-full overflow-y-auto">
+      <main className={`flex-1 max-w-lg mx-auto w-full min-h-0 flex flex-col ${activeTab !== "agendar" ? "overflow-y-auto" : ""}`}>
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -1367,6 +1367,7 @@ export default function ClientPortal() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
             transition={{ duration: 0.15 }}
+            className={activeTab === "agendar" ? "flex-1 flex flex-col min-h-0" : ""}
           >
             {activeTab === "inicio" && <HomeScreen session={session} appointments={appointments} onTabChange={setActiveTab} />}
             {activeTab === "agendar" && <BookScreen session={session} onDone={fetchAppts} />}
