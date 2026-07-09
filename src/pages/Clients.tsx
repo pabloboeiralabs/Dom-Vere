@@ -5,10 +5,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Cake, Pencil, Plus, Search, Trash2, Upload, UserX, Send, MessageCircle } from "lucide-react";
+import { Bell, Cake, Pencil, Plus, Search, Trash2, Upload, UserX, Send, MessageCircle } from "lucide-react";
 import { useUazapi } from "@/hooks/useUazapi";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -67,6 +68,54 @@ export default function Clients() {
   const [anonSaleOpen, setAnonSaleOpen] = useState(false);
   const [anonCustomerId, setAnonCustomerId] = useState<string | null>(null);
   const [sendingBirthday, setSendingBirthday] = useState<Set<string>>(new Set());
+  // Push notification
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [notifyOpen, setNotifyOpen] = useState(false);
+  const [notifyTitle, setNotifyTitle] = useState("");
+  const [notifyBody, setNotifyBody] = useState("");
+  const [notifyUrl, setNotifyUrl] = useState("");
+  const [sendingPush, setSendingPush] = useState(false);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+  const toggleAll = () => {
+    if (selectedIds.size === filtered.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map(c => c.id)));
+    }
+  };
+
+  const handleSendPush = async () => {
+    if (!user || !notifyTitle || !notifyBody) return;
+    setSendingPush(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-push-notification", {
+        body: {
+          user_id: user.id,
+          customer_ids: selectedIds.size > 0 ? [...selectedIds] : undefined,
+          title: notifyTitle,
+          body: notifyBody,
+          url: notifyUrl || "https://agendar.zlabs.com.br",
+        },
+      });
+      if (error) { toast.error("Erro ao enviar notificação"); return; }
+      const count = (data as any)?.in_app || (data as any)?.sent || 0;
+      toast.success(`🔔 Notificação enviada!${count > 0 ? ` (${count} cliente(s))` : ""}`);
+      setNotifyOpen(false);
+      setNotifyTitle(""); setNotifyBody(""); setNotifyUrl("");
+      setSelectedIds(new Set());
+    } catch (e: any) {
+      toast.error("Erro ao enviar: " + (e.message || "desconhecido"));
+    } finally {
+      setSendingPush(false);
+    }
+  };
   const [selectedBirthdayMsg, setSelectedBirthdayMsg] = useState(0);
 
   const { sendText, config: waConfig } = useUazapi();
@@ -563,6 +612,9 @@ export default function Clients() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox checked={selectedIds.size > 0 && selectedIds.size === filtered.length} onCheckedChange={toggleAll} />
+                </TableHead>
                 <TableHead>Nome</TableHead>
                 <TableHead className="hidden md:table-cell">Telefone</TableHead>
                 <TableHead className="hidden sm:table-cell text-center">Plano</TableHead>
@@ -573,9 +625,12 @@ export default function Clients() {
               {filtered.map((c) => (
                 <TableRow
                   key={c.id}
-                  className="cursor-pointer hover:bg-accent/50"
+                  className={`cursor-pointer hover:bg-accent/50 ${selectedIds.has(c.id) ? "bg-primary/5" : ""}`}
                   onClick={() => navigate(`/clients/${c.id}`)}
                 >
+                  <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
+                    <Checkbox checked={selectedIds.has(c.id)} onCheckedChange={() => toggleSelect(c.id)} />
+                  </TableCell>
                   <TableCell className={`font-medium ${birthdayIds.has(c.id) ? "text-pink-400" : "text-foreground"}`}>
                     <span className="flex items-center gap-1.5">
                       {birthdayIds.has(c.id) && <Cake className="h-3.5 w-3.5 text-pink-400 shrink-0" />}
@@ -623,6 +678,42 @@ export default function Clients() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Floating action bar — aparece quando há itens selecionados */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-card border border-border shadow-xl rounded-2xl px-4 py-3 flex items-center gap-3 animate-in slide-in-from-bottom-4">
+          <span className="text-sm font-medium">{selectedIds.size} selecionado(s)</span>
+          <Button size="sm" variant="outline" onClick={() => setSelectedIds(new Set())}>Limpar</Button>
+          <Button size="sm" onClick={() => { setNotifyOpen(true); }}>
+            <Bell className="h-4 w-4 mr-1" /> Enviar push
+          </Button>
+        </div>
+      )}
+
+      {/* Send notification dialog */}
+      <Dialog open={notifyOpen} onOpenChange={setNotifyOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Enviar notificação push</DialogTitle>
+            <DialogDescription>
+              {selectedIds.size > 0
+                ? `Enviar para ${selectedIds.size} cliente(s) selecionado(s)`
+                : "Enviar para TODOS os clientes (marque clientes para enviar individualmente)"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input placeholder="Título" value={notifyTitle} onChange={e => setNotifyTitle(e.target.value)} />
+            <Input placeholder="Mensagem" value={notifyBody} onChange={e => setNotifyBody(e.target.value)} />
+            <Input placeholder="Link (opcional)" value={notifyUrl} onChange={e => setNotifyUrl(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNotifyOpen(false)}>Cancelar</Button>
+            <Button onClick={handleSendPush} disabled={sendingPush || !notifyTitle || !notifyBody}>
+              {sendingPush ? "Enviando..." : "Enviar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!editTarget} onOpenChange={(open) => !open && setEditTarget(null)}>
         <DialogContent>

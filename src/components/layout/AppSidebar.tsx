@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/sidebar";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
-import { Users, Settings, Shield, BarChart2, Clock, CreditCard, MessageSquare, Bot, CalendarClock, Megaphone, UserCheck, Kanban, Smartphone, Package, ShoppingCart, Bell } from "lucide-react";
+import { Users, Settings, Shield, BarChart2, Clock, CreditCard, MessageSquare, Bot, CalendarClock, Megaphone, UserCheck, Kanban, Smartphone, Package, ShoppingCart, Bell, DollarSign } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const dashboardItems = [
@@ -27,6 +27,7 @@ const clientItems = [
 ];
 
 const salesItems = [
+  { title: "Fluxo de Caixa", url: "/finance", icon: DollarSign },
   { title: "Vendas", url: "/sales", icon: ShoppingCart },
   { title: "Produtos", url: "/products", icon: Package },
 ];
@@ -61,8 +62,8 @@ export function AppSidebar() {
           <SidebarMenuButton asChild>
             <NavLink
               to={item.url}
-              className="hover:bg-accent/50"
-              activeClassName="bg-accent text-accent-foreground font-medium"
+              className="hover:bg-accent/40 rounded-lg transition-colors"
+              activeClassName="bg-primary/10 text-primary font-semibold rounded-lg shadow-sm"
             >
               <item.icon className="mr-2 h-4 w-4" />
               {!collapsed && <span>{item.title}</span>}
@@ -169,6 +170,11 @@ export function AppSidebar() {
             </SidebarGroup>
           )}
         </SidebarContent>
+        <div className="mt-auto px-3 pb-3">
+          <p className="text-[10px] text-muted-foreground/40 text-center">
+            v{import.meta.env.VITE_APP_VERSION || "1.0"}
+          </p>
+        </div>
       </Sidebar>
     </TooltipProvider>
   );

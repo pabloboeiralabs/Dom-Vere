@@ -800,6 +800,68 @@ Deno.serve(async (req) => {
     const cfg = await findWhatsappConfig(supabase, payloadToken, req.url);
     if (!cfg) return new Response(JSON.stringify({ error: "No config" }));
 
+    const apiUrl = cfg.api_url.replace(/\/$/, "");
+    const token = cfg.instance_token;
+    const suffix = isGroupMessage(body) ? "@g.us" : "@s.whatsapp.net";
+    const bookingUrl = "https://agendar.zlabs.com.br";
+
+    // ─── Reminder confirmation: SIM / NÃO (always check, even if bot disabled) ──
+    let replyText = "";
+    const lowerText = (text || "").toLowerCase().trim().replace(/[^a-z0-9]/g, "");
+    const isSim = ["sim", "s", "1", "ok", "yes", "confirmo", "confirmar", "quero", "claro"].includes(lowerText);
+    const isNao = ["nao", "não", "n", "2", "no", "cancelar", "cancelo"].includes(lowerText);
+    if ((isSim || isNao) && lowerText.length <= 12) {
+      // Check if this sender has a pending reminder (match by wa_chatid OR phone)
+      let { data: pendingLead } = await supabase
+        .from("crm_leads")
+        .select("id, name, appointment_id, user_id, wa_chatid")
+        .eq("wa_chatid", `${sender}${suffix}`)
+        .eq("stage", "agendado")
+        .eq("reminder_sent", true)
+        .maybeSingle();
+
+      // Fallback: match by phone number (try multiple formats)
+      if (!pendingLead) {
+        // Normalize: strip all non-digits, try last 10-11 digits (Brazil format)
+        const phoneDigits = sender.replace(/\D/g, "");
+        // Try matching with $suffix first (if wa_chatid is just phone without suffix)
+        const { data: byPhone } = await supabase
+          .from("crm_leads")
+          .select("id, name, appointment_id, user_id, wa_chatid, phone")
+          .eq("stage", "agendado")
+          .eq("reminder_sent", true)
+          .ilike("phone", `%${phoneDigits.slice(-8)}%`)
+          .maybeSingle();
+        pendingLead = byPhone;
+        // Update wa_chatid for future matches
+        if (byPhone?.id && !byPhone.wa_chatid) {
+          await supabase.from("crm_leads").update({ wa_chatid: `${sender}${suffix}` }).eq("id", byPhone.id);
+        }
+      }
+
+      if (pendingLead) {
+        if (isSim) {
+          // Confirm appointment
+          await supabase.from("crm_leads").update({ stage: "confirmado" }).eq("id", pendingLead.id);
+          if (pendingLead.appointment_id) {
+            await supabase.from("appointments").update({ status: "confirmado" }).eq("id", pendingLead.appointment_id);
+          }
+          replyText = `✅ *Presença confirmada, ${pendingLead.name?.split(" ")[0] || "Cliente"}!*\n\nSeu horário está garantido. Te esperamos! 💈`;
+        } else {
+          // Cancel appointment (use RPC that handles plan usage reversal)
+          await supabase.from("crm_leads").update({ stage: "cancelado", reminder_sent: false }).eq("id", pendingLead.id);
+          if (pendingLead.appointment_id) {
+            await supabase.rpc("client_portal_cancel_appointment", { p_appointment_id: pendingLead.appointment_id });
+          }
+          replyText = `✅ *Agendamento cancelado, ${pendingLead.name?.split(" ")[0] || "Cliente"}.*\n\nSeu horário foi liberado. Se precisar reagendar, é só acessar: ${bookingUrl}\n\nObrigado pelo aviso! 🙏`;
+        }
+
+        await sendWhatsappMessage(apiUrl, token, sender, replyText);
+        await supabase.from("whatsapp_messages").insert({ user_id: cfg.user_id, wa_chatid: `${sender}${suffix}`, text: replyText, from_me: true, wa_timestamp: Date.now() });
+        return new Response(JSON.stringify({ ok: true, handled: "reminder_confirmation", confirmed: isSim }));
+      }
+    }
+    // ─── Fim reminder confirmation ──────────────────────────────────────
     // Persistent deduplication using DB
     const { data: existingMsg } = await supabase
       .from("whatsapp_messages")
@@ -814,7 +876,6 @@ Deno.serve(async (req) => {
     }
 
     const isGroup = isGroupMessage(body);
-    const suffix = isGroup ? "@g.us" : "@s.whatsapp.net";
     const pushName = extractPushName(body);
 
     // Save inbound/outbound message immediately to prevent race conditions
@@ -863,11 +924,6 @@ Deno.serve(async (req) => {
       console.log("[webhook] Bot is disabled for user, saving message but skipping AI reply.");
       return new Response(JSON.stringify({ ok: true, message: "Bot disabled, message stored." }));
     }
-    const bookingUrl = `https://domvere.zlabs.com.br/booking/${cfg.user_id}`;
-    const apiUrl = cfg.api_url.replace(/\/$/, "");
-    const token = cfg.instance_token;
-
-    let replyText = "";
     
     // Check trigger responses (Mensagens Prontas mode)
     if (botMode === "menu" && triggerResponses.length > 0 && text) {
@@ -979,9 +1035,10 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ ok: true, ignored: "duplicate_reply" }));
       }
 
-      // Auto-create CRM lead
+      // Check if bot is paused for this lead
+      let botPaused = false;
       try {
-        const { data: existingLead } = await supabase.from("crm_leads").select("id").eq("user_id", cfg.user_id).eq("wa_chatid", `${sender}${suffix}`).maybeSingle();
+        const { data: existingLead } = await supabase.from("crm_leads").select("id, bot_paused").eq("user_id", cfg.user_id).eq("wa_chatid", `${sender}${suffix}`).maybeSingle();
         if (!existingLead) {
           await supabase.from("crm_leads").insert({
             user_id: cfg.user_id,
@@ -992,10 +1049,17 @@ Deno.serve(async (req) => {
             last_interaction_at: new Date().toISOString(),
           });
         } else {
+          botPaused = !!existingLead.bot_paused;
           await supabase.from("crm_leads").update({ last_interaction_at: new Date().toISOString() }).eq("id", existingLead.id);
         }
       } catch (e) {
         console.warn("[webhook] CRM lead error:", e);
+      }
+
+      // If bot is paused for this lead, do not respond
+      if (botPaused) {
+        console.log("[webhook] Bot paused for lead, skipping response");
+        return new Response(JSON.stringify({ ok: true, ignored: "bot_paused" }));
       }
 
       await sendWhatsappMessage(apiUrl, token, sender, replyText);

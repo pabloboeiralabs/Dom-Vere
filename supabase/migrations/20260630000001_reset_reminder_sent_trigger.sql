@@ -19,6 +19,7 @@ BEGIN
     WHEN 'confirmado' THEN 'confirmado'
     WHEN 'concluido'  THEN 'compareceu'
     WHEN 'cancelado'  THEN 'nao_compareceu'
+    WHEN 'no_show'    THEN 'nao_compareceu'
     ELSE 'agendado'
   END;
 

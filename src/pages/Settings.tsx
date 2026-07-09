@@ -43,7 +43,17 @@ export default function Settings() {
   const [selectedServices, setSelectedServices] = useState<Record<string, number>>({});
   const [newPlanPeriod, setNewPlanPeriod] = useState("mensal");
   const [newPlanUsageLimit, setNewPlanUsageLimit] = useState("4");
-  const [newPlanValidityDays, setNewPlanValidityDays] = useState("30");
+
+  const PERIOD_TO_DAYS: Record<string, number> = {
+    semanal: 7,
+    quinzenal: 15,
+    mensal: 30,
+    trimestral: 90,
+  };
+  // Derived — never set manually by user
+  const derivedValidityDays = PERIOD_TO_DAYS[newPlanPeriod] ?? 30;
+  const intervalDays = Math.round(derivedValidityDays / Math.max(1, parseInt(newPlanUsageLimit) || 1));
+  const frequencyLabel = intervalDays === 7 ? "1x por semana" : intervalDays === 15 ? "1x a cada 15 dias" : intervalDays === 30 ? "1x por mês" : `a cada ${intervalDays} dias`;
 
   // Reminder state
   const [reminderEnabled, setReminderEnabled] = useState(false);
@@ -155,13 +165,12 @@ export default function Settings() {
       setEditingPlan(plan);
       setNewPlanName(plan.name); setNewPlanPrice(String(plan.price));
       setNewPlanPeriod(plan.period); setNewPlanUsageLimit(String(plan.usage_limit));
-      setNewPlanValidityDays(String(plan.validity_days));
       const svcs: Record<string, number> = {};
       for (const ps of (plan.services || [])) svcs[ps.service_id] = ps.quantity;
       setSelectedServices(svcs);
     } else {
       setEditingPlan(null); setNewPlanName(""); setNewPlanPrice("");
-      setNewPlanPeriod("mensal"); setNewPlanUsageLimit("4"); setNewPlanValidityDays("30");
+      setNewPlanPeriod("mensal"); setNewPlanUsageLimit("4");
       setSelectedServices({});
     }
     setPlanDialogOpen(true);
@@ -173,7 +182,7 @@ export default function Settings() {
     const planData = {
       user_id: user.id, name: newPlanName.trim(), price: parseFloat(newPlanPrice) || 0,
       period: newPlanPeriod, usage_limit: parseInt(newPlanUsageLimit) || 1,
-      validity_days: parseInt(newPlanValidityDays) || 30,
+      validity_days: derivedValidityDays,
     };
     let planId: string;
     if (editingPlan) {
@@ -375,16 +384,23 @@ export default function Settings() {
           <div className="space-y-4">
             <div><Label>Nome do plano</Label><Input value={newPlanName} onChange={(e) => setNewPlanName(e.target.value)} placeholder="Ex: Corte e Barba 4x" /></div>
             <div><Label>Preço (R$)</Label><Input type="number" step="0.01" value={newPlanPrice} onChange={(e) => setNewPlanPrice(e.target.value)} /></div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div><Label>Período</Label>
                 <select value={newPlanPeriod} onChange={(e) => setNewPlanPeriod(e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-                  <option value="mensal">Mensal</option>
-                  <option value="semanal">Semanal</option>
-                  <option value="trimestral">Trimestral</option>
+                  <option value="semanal">Semanal (7 dias)</option>
+                  <option value="quinzenal">Quinzenal (15 dias)</option>
+                  <option value="mensal">Mensal (30 dias)</option>
+                  <option value="trimestral">Trimestral (90 dias)</option>
                 </select>
               </div>
-              <div><Label>Limite de usos</Label><Input type="number" value={newPlanUsageLimit} onChange={(e) => setNewPlanUsageLimit(e.target.value)} /></div>
-              <div><Label>Validade (dias)</Label><Input type="number" value={newPlanValidityDays} onChange={(e) => setNewPlanValidityDays(e.target.value)} /></div>
+              <div>
+                <Label>Nº de usos no período</Label>
+                <Input type="number" min={1} value={newPlanUsageLimit} onChange={(e) => setNewPlanUsageLimit(e.target.value)} />
+              </div>
+            </div>
+            <div className="rounded-lg bg-muted/50 border border-border/50 px-3 py-2 text-xs text-muted-foreground space-y-0.5">
+              <p>📅 <strong>Validade:</strong> {derivedValidityDays} dias (automático pelo período)</p>
+              <p>🔄 <strong>Frequência de retorno:</strong> {frequencyLabel}</p>
             </div>
             {services.length > 0 && (
               <div>

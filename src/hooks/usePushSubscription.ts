@@ -56,11 +56,24 @@ export function usePushSubscription(
         const registration = await navigator.serviceWorker.ready;
 
         // Check existing subscription
-        let subscription = await registration.pushManager.getSubscription();
+        const existing = await registration.pushManager.getSubscription();
+        const expectedKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
 
-        if (subscription) {
-          // Already subscribed — ensure it's in the database
-          const subJson = subscription.toJSON();
+        // Helper to check if the subscription matches the VAPID public key
+        const isSameKey = (existingKey: ArrayBuffer | null) => {
+          if (!existingKey) return false;
+          const current = new Uint8Array(existingKey);
+          if (current.length !== expectedKey.length) return false;
+          for (let i = 0; i < current.length; i++) {
+            if (current[i] !== expectedKey[i]) return false;
+          }
+          return true;
+        };
+
+        if (existing && isSameKey(existing.options.applicationServerKey)) {
+          // Key matches, reuse it and make sure it's in the DB
+          subRef.current = existing;
+          const subJson = existing.toJSON();
           if (subJson.endpoint) {
             await supabase.from("push_subscriptions").upsert(
               {
@@ -73,14 +86,26 @@ export function usePushSubscription(
               { onConflict: "endpoint" }
             );
           }
-          subRef.current = subscription;
           return;
         }
 
-        // Subscribe fresh
-        subscription = await registration.pushManager.subscribe({
+        // VAPID key mismatch or no subscription — unsubscribe existing first
+        if (existing) {
+          try {
+            await existing.unsubscribe();
+            const oldEndpoint = existing.toJSON().endpoint;
+            if (oldEndpoint) {
+              await supabase.from("push_subscriptions").delete().eq("endpoint", oldEndpoint);
+            }
+          } catch (unsubErr) {
+            console.warn("[Push] Error cleaning up old subscription:", unsubErr);
+          }
+        }
+
+        // Subscribe fresh with current VAPID key
+        const subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+          applicationServerKey: expectedKey,
         });
 
         if (cancelled) {

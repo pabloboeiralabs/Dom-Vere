@@ -60,15 +60,36 @@ export default function Expirations() {
         else if (daysRemaining <= 30) status = "warning";
 
         // --- Cálculo do retorno ---
+        // intervalDays: how many days between visits.
+        // Use Math.floor so 30/4 = 7 (weekly) not 8.
         const validityDays = Number(row.validity_days) || 30;
         const usageLimit = Number(row.usage_limit) || 1;
-        const intervalDays = Math.max(1, Math.floor(validityDays / Math.max(1, usageLimit)));
-        const baseDateStr = row.last_usage_at || row.plan_starts_at;
-        const baseDate = baseDateStr ? new Date(baseDateStr) : new Date();
+        const intervalDays = Math.floor(validityDays / Math.max(1, usageLimit));
+
+        // Primary: base off last usage (most accurate — preserves the exact weekday)
+        // Fallback: base off starts_at when no usage recorded yet
+        // IMPORTANT: last_usage_at is a UTC timestamp. Convert to BRT (UTC-3) before extracting date.
+        let baseDate: Date;
+        if (row.last_usage_at) {
+          const utcMs = new Date(row.last_usage_at).getTime();
+          const brtMs = utcMs - 3 * 60 * 60 * 1000; // BRT = UTC-3
+          const brt = new Date(brtMs);
+          baseDate = new Date(brt.getUTCFullYear(), brt.getUTCMonth(), brt.getUTCDate());
+        } else {
+          const startStr = row.plan_starts_at ? row.plan_starts_at + "T12:00:00" : null;
+          baseDate = startStr ? new Date(startStr) : new Date();
+          baseDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
+        }
+
+        // Next return = baseDate + intervalDays
+        // If still in the past (client missed a visit), keep advancing
         const returnDate = new Date(baseDate);
         returnDate.setDate(returnDate.getDate() + intervalDays);
-        const returnDay = new Date(returnDate.getFullYear(), returnDate.getMonth(), returnDate.getDate());
-        const diffDays = Math.round((returnDay.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        while (returnDate < today) {
+          returnDate.setDate(returnDate.getDate() + intervalDays);
+        }
+
+        const diffDays = Math.round((returnDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
         let returnStatus: ExpiringCredit["return_status"] = "on_time";
         if (diffDays < 0) returnStatus = "overdue";
         else if (diffDays === 0) returnStatus = "today";
@@ -242,9 +263,12 @@ export default function Expirations() {
                     <TableCell className="hidden md:table-cell text-center">
                       <div className="flex flex-col items-center gap-1">
                         <span className="text-muted-foreground text-sm">
-                          {new Date(item.return_date).toLocaleDateString("pt-BR")}
+                          {new Date(item.return_date).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" })}
                         </span>
                         {returnBadge(item)}
+                        <span className="text-[10px] text-muted-foreground/60">
+                          a cada {Math.round((Number(item.usage_limit) > 0 ? 30 / Number(item.usage_limit) : 30))} dias
+                        </span>
                       </div>
                     </TableCell>
                     <TableCell className="hidden sm:table-cell text-center text-muted-foreground">

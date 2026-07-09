@@ -41,12 +41,17 @@ self.addEventListener('push', (event) => {
   const options: NotificationOptions = {
     body: data.body || '',
     icon: data.icon || '/icon-192.png',
-    badge: data.icon || '/icon-192.png',
-    tag: data.tag || 'domvere-reminder',
+    // Badge: monochrome status bar icon (Android). Use dedicated badge if available
+    badge: data.badge || '/badge.png',
+    // Image: hero image for expanded notification (Android)
+    image: data.image || undefined,
+    tag: data.tag || 'zlabs-notificacao',
+    renotify: true,
     data: data.data || { url: data.url || '/' },
-    vibrate: [200, 100, 200],
+    vibrate: [200, 100, 200, 100, 200],
     requireInteraction: true,
     silent: false,
+    actions: data.actions || undefined,
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
@@ -54,23 +59,91 @@ self.addEventListener('push', (event) => {
 
 // ─── Notification Click Handler ───────────────────────────────────────
 self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
+  const data = event.notification.data || {};
+  const action = event.action;
 
-  const urlToOpen = (event.notification.data as { url?: string })?.url || '/';
+  // Helper: focus or open PWA at URL
+  const navigateTo = async (url: string) => {
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of clients) {
+      if (c.url.includes(self.location.origin) && 'focus' in c) {
+        await c.focus();
+        if ('navigate' in c) return c.navigate(url);
+        c.postMessage({ type: 'NOTIFICATION_CLICK', url });
+        return;
+      }
+    }
+    return self.clients.openWindow(url);
+  };
 
   event.waitUntil(
-    self.clients
-      .matchAll({ type: 'window', includeUncontrolled: true })
-      .then((windowClients) => {
-        // Focus existing tab if available
-        for (const client of windowClients) {
-          if (client.url.includes(self.location.origin) && 'focus' in client) {
-            return client.focus();
-          }
+    (async () => {
+      // ── Action: Confirmar Presença (silent background) ──
+      if (action === 'confirmar') {
+        event.notification.close();
+        const apptId = data.appointmentId;
+        if (apptId) {
+          try {
+            const apiUrl = self.location.origin + '/rest/v1/rpc/client_confirm_appointment';
+            const res = await fetch(apiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ p_appointment_id: apptId }),
+            });
+            if (res.ok) {
+              // Show success notification
+              await self.registration.showNotification('✅ Presença confirmada!', {
+                body: 'Seu horário está garantido. Te esperamos! 💈',
+                icon: '/icon-192.png',
+                badge: '/badge.png',
+                tag: 'confirmacao',
+                vibrate: [100, 50, 100],
+              });
+            }
+          } catch (_) { /* silent fail */ }
         }
-        // Otherwise open a new window
-        return self.clients.openWindow(urlToOpen);
-      })
+        return;
+      }
+
+      // ── Action: Cancelar Presença (silent background) ──
+      if (action === 'cancelar') {
+        event.notification.close();
+        const apptId = data.appointmentId;
+        if (apptId) {
+          try {
+            const apiUrl = self.location.origin + '/rest/v1/rpc/client_portal_cancel_appointment';
+            const res = await fetch(apiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ p_appointment_id: apptId }),
+            });
+            if (res.ok) {
+              // Show cancellation success notification
+              await self.registration.showNotification('❌ Horário cancelado', {
+                body: 'Seu agendamento foi cancelado com sucesso.',
+                icon: '/icon-192.png',
+                badge: '/badge.png',
+                tag: 'cancelamento-confirmado',
+                vibrate: [100, 50, 100],
+              });
+            }
+          } catch (_) { /* silent fail */ }
+        }
+        return;
+      }
+
+      // ── Action: Reagendar ──
+      if (action === 'reagendar') {
+        event.notification.close();
+        const reagendarUrl = data.reagendarUrl || data.url || '/';
+        return navigateTo(reagendarUrl);
+      }
+
+      // ── Default: clicou no corpo da notificação ──
+      event.notification.close();
+      const urlToOpen = data.url || '/';
+      return navigateTo(urlToOpen);
+    })()
   );
 });
 

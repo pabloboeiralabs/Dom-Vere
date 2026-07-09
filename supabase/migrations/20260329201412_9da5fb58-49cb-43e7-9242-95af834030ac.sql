@@ -95,7 +95,7 @@ CREATE TABLE public.settings (
   credit_price NUMERIC(10,2) DEFAULT 25.00,
   min_purchase INTEGER DEFAULT 5,
   validity_days INTEGER DEFAULT 90,
-  shop_name TEXT DEFAULT 'Minha Barbearia',
+  shop_name TEXT DEFAULT 'Dom Vere',
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;

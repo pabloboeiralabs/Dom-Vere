@@ -72,7 +72,7 @@ export function WhatsAppBotConfigTabs({ onBack }: { onBack?: () => void }) {
 
   // ---- Instruções
   const [prompt, setPrompt] = useState("");
-  const [shopName, setShopName] = useState("Minha Barbearia");
+  const [shopName, setShopName] = useState("Dom Vere");
   const [generating, setGenerating] = useState(false);
 
   // ---- Controles

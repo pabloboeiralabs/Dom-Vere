@@ -116,6 +116,8 @@ export default function Scheduling() {
     start_time: "09:00",
     end_time: "09:30",
     notes: "",
+    reminder_enabled: false,
+    reminder_hours: "24",
   });
 
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
@@ -180,6 +182,10 @@ export default function Scheduling() {
         notes: form.notes,
       });
       if (error) throw error;
+      // Set reminder if enabled
+      if (form.reminder_enabled && form.customer_id && form.reminder_hours) {
+        await supabase.from("customers").update({ reminder_hours: parseFloat(form.reminder_hours) }).eq("id", form.customer_id);
+      }
       toast.success("Agendamento criado");
       setDialogOpen(false);
       loadData();
@@ -225,6 +231,8 @@ export default function Scheduling() {
       start_time: time || "09:00",
       end_time: endTime,
       notes: "",
+      reminder_enabled: false,
+      reminder_hours: "24",
     });
     setDialogOpen(true);
   };
@@ -424,47 +432,92 @@ export default function Scheduling() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {/* Horários disponíveis */}
+            {form.professional_id && form.date && (
               <div>
-                <Label>Data *</Label>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  placeholder="dd/mm/aaaa"
-                  value={form.date_input}
-                  onChange={(e) => {
-                    const date_input = maskDateInput(e.target.value);
-                    setForm({ ...form, date_input, date: dateInputToIso(date_input) || form.date });
-                  }}
-                />
+                <Label className="mb-2 block">Horários disponíveis</Label>
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5 max-h-[180px] overflow-y-auto p-1">
+                  {(() => {
+                    const daySchs = schedules[form.professional_id]?.filter(
+                      (s) => s.day_of_week === new Date(form.date + "T00:00:00").getDay() && s.active
+                    ) || [];
+                    if (daySchs.length === 0) return <p className="text-xs text-muted-foreground col-span-full py-4 text-center">Sem horários neste dia</p>;
+                    const slots: string[] = [];
+                    for (const sch of daySchs) {
+                      let cur = Number(sch.start_time.slice(0, 2)) * 60 + Number(sch.start_time.slice(3, 5));
+                      const end = Number(sch.end_time.slice(0, 2)) * 60 + Number(sch.end_time.slice(3, 5));
+                      while (cur + 30 <= end) {
+                        const h = Math.floor(cur / 60), m = cur % 60;
+                        const time = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+                        slots.push(time);
+                        cur += 30;
+                      }
+                    }
+                    if (slots.length === 0) return <p className="text-xs text-muted-foreground col-span-full py-4 text-center">Sem horários neste dia</p>;
+                    return slots.map(t => {
+                      const [th, tm] = t.split(":").map(Number);
+                      const slotMin = th * 60 + tm;
+                      const occupied = appointments.some(a => {
+                        if (a.professional_id !== form.professional_id || a.date !== form.date || a.status === "cancelado") return false;
+                        const [sh, sm] = (a.start_time || "").split(":").map(Number);
+                        const [eh, em] = (a.end_time || "").split(":").map(Number);
+                        return slotMin >= sh * 60 + (sm || 0) && slotMin < eh * 60 + (em || 0);
+                      });
+                      const isSelected = form.start_time === t;
+                      return (
+                        <button
+                          key={t}
+                          disabled={occupied}
+                          onClick={() => {
+                            const endMin = slotMin + 30;
+                            const eh = Math.floor(endMin / 60), em = endMin % 60;
+                            setForm({ ...form, start_time: t, end_time: `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}` });
+                          }}
+                          className={`text-xs py-1.5 px-2 rounded-lg border transition-all ${
+                            occupied ? "bg-muted text-muted-foreground/30 border-border/20 cursor-not-allowed line-through" :
+                            isSelected ? "bg-primary text-primary-foreground border-primary font-medium" :
+                            "bg-card border-border/30 hover:border-primary/40 hover:bg-primary/5"
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      );
+                    });
+                  })()}
+                </div>
               </div>
-              <div>
-                <Label>Início *</Label>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  placeholder="hh:mm"
-                  value={form.start_time}
-                  onChange={(e) => setForm({ ...form, start_time: maskTimeInput(e.target.value) })}
-                />
-              </div>
-              <div>
-                <Label>Fim</Label>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  placeholder="hh:mm"
-                  value={form.end_time}
-                  onChange={(e) => setForm({ ...form, end_time: maskTimeInput(e.target.value) })}
-                />
-              </div>
-            </div>
+            )}
             <div>
               <Label>Observações</Label>
               <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Observações (opcional)" />
+            </div>
+            {/* Reminder */}
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/30">
+              <input
+                type="checkbox"
+                id="reminder_cb"
+                checked={form.reminder_enabled}
+                onChange={(e) => setForm({ ...form, reminder_enabled: e.target.checked })}
+                className="h-4 w-4 rounded accent-primary"
+              />
+              <div className="flex-1">
+                <Label htmlFor="reminder_cb" className="text-sm cursor-pointer">🔔 Enviar lembrete</Label>
+              </div>
+              {form.reminder_enabled && (
+                <Select value={form.reminder_hours} onValueChange={(v) => setForm({ ...form, reminder_hours: v })}>
+                  <SelectTrigger className="w-28 h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0.166">10 min antes</SelectItem>
+                    <SelectItem value="0.5">30 min antes</SelectItem>
+                    <SelectItem value="1">1 hora antes</SelectItem>
+                    <SelectItem value="3">3 horas antes</SelectItem>
+                    <SelectItem value="24">1 dia antes</SelectItem>
+                    <SelectItem value="48">2 dias antes</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <Button onClick={handleCreateAppointment} className="w-full">Agendar</Button>
           </div>

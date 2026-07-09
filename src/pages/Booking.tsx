@@ -96,8 +96,13 @@ const slideVariants = {
   }),
 };
 
-export default function Booking() {
-  const { userId } = useParams<{ userId: string }>();
+export default function Booking({ userId: propUserId }: { userId?: string } = {}) {
+  const { userId: paramUserId } = useParams<{ userId: string }>();
+  const userId = propUserId || paramUserId;
+
+  // Validate UUID format early
+  const isValidUserId = userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+
   const [shopName, setShopName] = useState("Barbearia");
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -197,12 +202,18 @@ export default function Booking() {
       setAvailableSlots([]);
       return;
     }
-    const daySchedule = schedules[selectedProf]?.find(
-      (s) => s.day_of_week === selectedDate.getDay()
+    let daySchedules = (schedules[selectedProf] || []).filter(
+      (s) => s.day_of_week === selectedDate.getDay() && s.active
     );
-    if (!daySchedule || !daySchedule.active) {
-      setAvailableSlots([]);
-      return;
+    // Fallback: if no schedules configured at all, use default 08:00-18:00
+    if (daySchedules.length === 0) {
+      const allSchedules = schedules[selectedProf] || [];
+      if (allSchedules.length === 0) {
+        daySchedules = [{ day_of_week: selectedDate.getDay(), start_time: "08:00", end_time: "18:00", active: true }];
+      } else {
+        setAvailableSlots([]);
+        return;
+      }
     }
 
     const loadSlots = async () => {
@@ -227,24 +238,22 @@ export default function Booking() {
       }
 
       const slots: SlotInfo[] = [];
-      const [sh, sm] = daySchedule.start_time.split(":").map(Number);
-      const [eh, em] = daySchedule.end_time.split(":").map(Number);
-      let current = sh * 60 + (sm || 0);
-      const endMin = eh * 60 + (em || 0);
       const now = new Date();
       const isToday = isSameDay(selectedDate, now);
-
-      while (current < endMin) {
-        const h = Math.floor(current / 60);
-        const m = current % 60;
-        const timeStr = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-        const isPast =
-          isToday && h * 60 + m <= now.getHours() * 60 + now.getMinutes();
-        slots.push({
-          time: timeStr,
-          available: !occupiedMinutes.has(current) && !isPast,
-        });
-        current += 30;
+      // Iterate ALL schedule blocks for this day
+      for (const daySchedule of daySchedules) {
+        const [sh, sm] = daySchedule.start_time.split(":").map(Number);
+        const [eh, em] = daySchedule.end_time.split(":").map(Number);
+        let current = sh * 60 + (sm || 0);
+        const endMin = eh * 60 + (em || 0);
+        while (current < endMin) {
+          const h = Math.floor(current / 60);
+          const m = current % 60;
+          const timeStr = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+          const isPast = isToday && h * 60 + m <= now.getHours() * 60 + now.getMinutes();
+          slots.push({ time: timeStr, available: !occupiedMinutes.has(current) && !isPast });
+          current += 30;
+        }
       }
       setAvailableSlots(slots);
       setSelectedSlot("");
@@ -399,6 +408,23 @@ export default function Booking() {
     onRefresh: () => window.location.reload(),
     disabled: booked,
   });
+
+  // Invalid or missing user ID
+  if (!isValidUserId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
+        <div className="text-center max-w-sm">
+          <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+            <span className="text-3xl">🔗</span>
+          </div>
+          <h1 className="text-xl font-bold mb-2">Link inválido</h1>
+          <p className="text-muted-foreground text-sm">
+            O link de agendamento está incorreto ou incompleto. Peça um novo link para a barbearia.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (booked) {
     const selectedProfObj = professionals.find((p) => p.id === selectedProf);

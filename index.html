@@ -10,9 +10,14 @@
     <script>
       (function() {
         var isBarber = false;
-        if (window.location.hostname.includes('barber')) {
+        // Domain-based PWA mode:
+        //   cliente.zlabs.com.br  → Client PWA
+        //   agendar.zlabs.com.br  → Client PWA (booking)
+        //   barber.zlabs.com.br   → Barber/Profissional PWA
+        //   painel.zlabs.com.br   → Admin/Sistema
+        if (window.location.hostname.includes('barber') || window.location.hostname.includes('painel')) {
           isBarber = true;
-        } else if (window.location.hostname.includes('app.domvere') || window.location.hostname.includes('cliente')) {
+        } else if (window.location.hostname.includes('cliente') || window.location.hostname.includes('agendar') || window.location.hostname.includes('domvere')) {
           isBarber = false;
         } else {
           // Fallback para localhost/desenvolvimento
@@ -63,7 +68,7 @@
   
   
   
-  <meta name="build-version" content="20260628.2">
+  <meta name="build-version" content="%VITE_APP_VERSION%">
   <meta property="og:title" content="DON VERE BARBEARIA">
   <meta name="twitter:title" content="DON VERE BARBEARIA">
   <meta property="og:description" content="VOCÊ MERECE O MELHOR!">

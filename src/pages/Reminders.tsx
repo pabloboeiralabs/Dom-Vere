@@ -20,7 +20,10 @@ interface Reminder {
 }
 
 function calcReminderAt(date: string, time: string, hoursBefore: number): string {
-  const appt = new Date(`${date}T${time}:00`);
+  // Normalize time: take only HH:MM portion (ignore seconds, timezone, etc)
+  const cleanTime = (time || "00:00").slice(0, 5);
+  const appt = new Date(`${date}T${cleanTime}:00`);
+  if (isNaN(appt.getTime())) return "—";
   const remind = new Date(appt.getTime() - hoursBefore * 60 * 60 * 1000);
   return format(remind, "dd/MM 'às' HH:mm");
 }
@@ -29,47 +32,36 @@ export default function Reminders() {
   const { user } = useAuth();
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) { setLoading(false); setError("Usuário não autenticado"); return; }
     (async () => {
-      const { data } = await supabase
-        .from("appointments")
-        .select(`
-          id, date, start_time,
-          services(name),
-          professionals(name),
-          customers!inner(id, name, phone, reminder_hours)
-        `)
-        .eq("user_id", user.id)
-        .order("date", { ascending: false })
-        .limit(50);
-
-      if (data) {
-        const formatted: Reminder[] = await Promise.all((data as any[]).map(async (a: any) => {
-          const { data: lead } = await supabase
-            .from("crm_leads")
-            .select("reminder_sent")
-            .eq("appointment_id", a.id)
-            .maybeSingle();
-          return {
-            id: a.id,
-            date: a.date,
-            start_time: a.start_time,
-            service_name: a.services?.name || "—",
-            professional_name: a.professionals?.name || "—",
-            reminder_hours: a.customers?.reminder_hours || null,
-            reminder_sent: lead?.reminder_sent || false,
-            customer_name: a.customers?.name || "—",
-            reminder_at: a.customers?.reminder_hours
-              ? calcReminderAt(a.date, a.start_time, a.customers.reminder_hours)
-              : null,
-            customer_phone: a.customers?.phone || "—",
-          };
-        }));
+      setLoading(true);
+      setError("");
+      try {
+        const { data, error: rpcError } = await (supabase as any).rpc("get_reminders", { p_user_id: user.id });
+        if (rpcError) { setError(rpcError.message || "Erro na consulta"); setLoading(false); return; }
+        const formatted: Reminder[] = (data || [])
+          .filter((r: any) => r.status !== "cancelado")
+          .map((r: any) => {
+            try {
+              return {
+                id: r.id, date: r.date, start_time: r.start_time,
+                service_name: r.service_name, professional_name: r.professional_name,
+                reminder_hours: r.reminder_hours, reminder_sent: r.reminder_sent,
+                customer_name: r.customer_name, customer_phone: r.customer_phone,
+                reminder_at: r.reminder_hours ? calcReminderAt(r.date, r.start_time, r.reminder_hours) : null,
+              };
+            } catch { return null; }
+          })
+          .filter(Boolean) as Reminder[];
         setReminders(formatted);
+      } catch (e: any) {
+        setError(e.message || "Erro desconhecido");
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     })();
   }, [user]);
 
@@ -82,11 +74,20 @@ export default function Reminders() {
       </div>
       <p className="text-sm text-muted-foreground">Acompanhe os lembretes de agendamentos dos clientes.</p>
 
+      {error && (
+        <div className="text-center py-8 text-destructive bg-destructive/5 rounded-xl">
+          <p className="text-sm font-medium">Erro ao carregar</p>
+          <p className="text-xs mt-1 opacity-70">{error}</p>
+        </div>
+      )}
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin" /></div>
-      ) : reminders.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">Nenhum agendamento encontrado</div>
-      ) : (
+      ) : !error && reminders.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <p className="text-sm">Nenhum agendamento encontrado</p>
+          {user && <p className="text-[10px] mt-1 opacity-50">User: {user.id?.slice(0,8)}...</p>}
+        </div>
+      ) : !error && (
         <div className="space-y-2">
           {reminders.map((r) => (
             <div key={r.id} className="rounded-xl border border-border p-4 flex items-center justify-between bg-card">

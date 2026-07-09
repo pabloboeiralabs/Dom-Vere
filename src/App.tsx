@@ -15,6 +15,7 @@ const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const Clients = lazy(() => import("@/pages/Clients"));
 const ClientDetail = lazy(() => import("@/pages/ClientDetail"));
 const Sales = lazy(() => import("@/pages/Sales"));
+const Finance = lazy(() => import("@/pages/Finance"));
 const Products = lazy(() => import("@/pages/Products"));
 const Expirations = lazy(() => import("@/pages/Expirations"));
 const Settings = lazy(() => import("@/pages/Settings"));
@@ -27,6 +28,8 @@ const Campaigns = lazy(() => import("@/pages/Campaigns"));
 const Professionals = lazy(() => import("@/pages/Professionals"));
 const ProfessionalDetail = lazy(() => import("@/pages/ProfessionalDetail"));
 const Booking = lazy(() => import("@/pages/Booking"));
+const BarberLogin = lazy(() => import("@/pages/BarberLogin"));
+const BarberHome = lazy(() => import("@/pages/BarberHome"));
 const CrmKanban = lazy(() => import("@/pages/CrmKanban"));
 const ProfessionalDashboard = lazy(() => import("@/pages/ProfessionalDashboard"));
 const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
@@ -47,10 +50,11 @@ const PwaThemeSync = () => {
 
   useEffect(() => {
     let isBarber = false;
-    if (window.location.hostname.includes('barber')) {
-      isBarber = true;
-    } else if (window.location.hostname.includes('app.domvere') || window.location.hostname.includes('cliente')) {
+    // Domain-based: cliente/agendar→Client, barber/painel→Barber/Admin
+    if (window.location.hostname.includes('cliente') || window.location.hostname.includes('agendar')) {
       isBarber = false;
+    } else if (window.location.hostname.includes('barber') || window.location.hostname.includes('painel')) {
+      isBarber = true;
     } else {
       // Fallback para localhost/desenvolvimento
       isBarber = !location.pathname.startsWith('/cliente') && !location.pathname.startsWith('/booking');
@@ -106,17 +110,38 @@ const PwaThemeSync = () => {
   return null;
 };
 
+const BookingRedirect = () => {
+  // Agendar link — renderiza Booking direto na / sem redirect
+  const SHOP_USER_ID = "3ec3d3cd-4788-4d8d-bd70-837fc4eff887";
+  return <SuspenseWrap><Booking userId={SHOP_USER_ID} /></SuspenseWrap>;
+};
+
+// Redirect to appropriate login based on domain
+const LoginRouter = () => {
+  const isBarberDomain = window.location.hostname.includes('barber');
+  return isBarberDomain ? <SuspenseWrap><BarberLogin /></SuspenseWrap> : <Login />;
+};
+
 const RootRedirect = () => {
-  const isBarber = window.location.hostname.includes('barber');
-  const isClientDomain = window.location.hostname.includes('app.domvere') || window.location.hostname.includes('cliente');
-  
+  // Domain-based routing
+  const isAgendar = window.location.hostname.includes('agendar');
+  const isClientDomain = window.location.hostname.includes('cliente');
+  const isBarberDomain = window.location.hostname.includes('barber');
+  const isPainel = window.location.hostname.includes('painel');
+
+  if (isAgendar) {
+    return <BookingRedirect />;
+  }
   if (isClientDomain) {
     return <Navigate to="/cliente" replace />;
   }
-  if (isBarber) {
+  if (isBarberDomain) {
+    return <Navigate to="/barber-panel" replace />;
+  }
+  if (isPainel) {
     return <Navigate to="/reports" replace />;
   }
-  
+
   // Fallback para localhost baseado no caminho
   const isLocalClient = window.location.pathname.startsWith('/cliente') || window.location.pathname.startsWith('/booking');
   if (isLocalClient) {
@@ -136,11 +161,12 @@ const App = () => (
         <BrowserRouter>
           <PwaThemeSync />
           <Routes>
-            <Route path="/login" element={<Login />} />
+            <Route path="/login" element={<LoginRouter />} />
             <Route path="/change-password" element={<SuspenseWrap><ChangePassword /></SuspenseWrap>} />
             <Route path="/reset-password" element={<SuspenseWrap><ResetPassword /></SuspenseWrap>} />
             <Route path="/booking/:userId" element={<SuspenseWrap><Booking /></SuspenseWrap>} />
             <Route path="/cliente" element={<SuspenseWrap><ClientPortal /></SuspenseWrap>} />
+            <Route path="/barber-panel" element={<ProtectedRoute><SuspenseWrap><BarberHome /></SuspenseWrap></ProtectedRoute>} />
             <Route path="/professional-panel" element={<ProtectedRoute requiredRole="profissional"><SuspenseWrap><ProfessionalDashboard /></SuspenseWrap></ProtectedRoute>} />
             <Route path="/" element={<RootRedirect />} />
             <Route path="/home" element={<RootRedirect />} />
@@ -149,6 +175,7 @@ const App = () => (
               <Route path="/clients" element={<SuspenseWrap><Clients /></SuspenseWrap>} />
               <Route path="/clients/:id" element={<SuspenseWrap><ClientDetail /></SuspenseWrap>} />
               <Route path="/sales" element={<SuspenseWrap><Sales /></SuspenseWrap>} />
+              <Route path="/finance" element={<SuspenseWrap><Finance /></SuspenseWrap>} />
               <Route path="/products" element={<SuspenseWrap><Products /></SuspenseWrap>} />
               <Route path="/expirations" element={<SuspenseWrap><Expirations /></SuspenseWrap>} />
               <Route path="/reminders" element={<SuspenseWrap><Reminders /></SuspenseWrap>} />

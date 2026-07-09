@@ -7,6 +7,8 @@ services:
       args:
         - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
         - VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY}
+        - VITE_VAPID_PUBLIC_KEY=${VITE_VAPID_PUBLIC_KEY}
+        - VITE_APP_VERSION=${VITE_APP_VERSION}
     container_name: domvere-frontend-app
     restart: always
     expose:

@@ -67,28 +67,36 @@ export default defineConfig(({ mode }) => ({
     react(),
     mode === "development" && componentTagger(),
     VitePWA({
+      // Use custom service worker with push/notification handlers
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'placeholder.svg'],
+      injectRegister: 'auto',
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest,json,woff2}'],
+      },
+      includeAssets: ['favicon.ico', 'placeholder.svg', 'client-icon-192.png', 'client-icon-512.png', 'barber-icon-192.png', 'barber-icon-512.png'],
       manifest: {
-        name: 'Dom Vere',
+        name: 'Dom Vere - Cliente',
         short_name: 'DomVere',
         description: 'App do Cliente - Dom Vere Barbearia',
-        theme_color: '#000000',
-        background_color: '#ffffff',
+        theme_color: '#10162e',
+        background_color: '#10162e',
         display: 'standalone',
-        scope: '/cliente',
-        start_url: '/cliente',
+        scope: '/',
+        start_url: '/',
         icons: [
           {
-            src: 'placeholder.svg',
+            src: 'client-icon-192.png',
             sizes: '192x192',
-            type: 'image/svg+xml',
+            type: 'image/png',
             purpose: 'any maskable'
           },
           {
-            src: 'placeholder.svg',
+            src: 'client-icon-512.png',
             sizes: '512x512',
-            type: 'image/svg+xml',
+            type: 'image/png',
             purpose: 'any maskable'
           }
         ]

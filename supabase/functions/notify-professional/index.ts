@@ -30,15 +30,87 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get professional phone
-    const { data: prof } = await adminClient
-      .from("professionals")
-      .select("name, phone")
-      .eq("id", professional_id)
-      .maybeSingle();
+    // Get professional phone and user profile in parallel
+    const [profRes, profProfileRes] = await Promise.all([
+      adminClient.from("professionals").select("name, phone").eq("id", professional_id).maybeSingle(),
+      adminClient.from("profiles").select("id").eq("professional_id", professional_id).maybeSingle(),
+    ]);
+    const prof = profRes.data;
+    const profProfile = profProfileRes.data;
+
+    // Build message (always, even without WhatsApp)
+    const dateFormatted = date ? new Date(date + "T00:00:00").toLocaleDateString("pt-BR") : "hoje";
+    const timeFormatted = start_time ? start_time.slice(0, 5) : "";
+    const message = `📅 *Novo Agendamento!*\n\n👤 Cliente: ${customer_name || "Não informado"}\n💇 Serviço: ${service_name || "Não informado"}\n📆 Data: ${dateFormatted}\n🕐 Horário: ${timeFormatted}\n\nAcesse seu painel para mais detalhes.`;
+
+    const notificationBody = `Cliente: ${customer_name}\nServiço: ${service_name}\nData: ${dateFormatted}${timeFormatted ? ` às ${timeFormatted}` : ""}`;
+
+    // Always create in-app notification (bell) for the professional and shop owner
+    try {
+      const inserts = [
+        {
+          customer_id: null,
+          user_id,
+          title: "📅 Novo Agendamento!",
+          body: notificationBody,
+          url: "https://barber.zlabs.com.br",
+        }
+      ];
+
+      if (profProfile?.id && profProfile.id !== user_id) {
+        inserts.push({
+          customer_id: null,
+          user_id: profProfile.id,
+          title: "📅 Novo Agendamento!",
+          body: notificationBody,
+          url: "https://barber.zlabs.com.br",
+        });
+      }
+
+      await adminClient.from("client_notifications").insert(inserts);
+    } catch (_) {}
+
+    // Send Web Push notification to the professional and the shop owner
+    try {
+      const pushPayload = {
+        title: "📅 Novo Agendamento!",
+        body: notificationBody,
+        url: "https://barber.zlabs.com.br",
+      };
+
+      // 1. Send to shop owner (user_id)
+      await fetch(`${supabaseUrl}/functions/v1/send-push-notification`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${serviceRoleKey}`,
+        },
+        body: JSON.stringify({
+          user_id,
+          ...pushPayload,
+        }),
+      }).catch((e) => console.error("[Notify Professional] Owner push error:", e));
+
+      // 2. Send to specific professional (profProfile.id)
+      if (profProfile?.id && profProfile.id !== user_id) {
+        await fetch(`${supabaseUrl}/functions/v1/send-push-notification`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${serviceRoleKey}`,
+          },
+          body: JSON.stringify({
+            user_id: profProfile.id,
+            ...pushPayload,
+          }),
+        }).catch((e) => console.error("[Notify Professional] Professional push error:", e));
+      }
+    } catch (pushErr) {
+      console.error("[Notify Professional] Push notification failed:", pushErr);
+    }
 
     if (!prof?.phone) {
-      return new Response(JSON.stringify({ sent: false, reason: "Profissional sem telefone cadastrado" }), {
+      return new Response(JSON.stringify({ sent: false, reason: "Profissional sem telefone cadastrado", in_app: true }), {
         status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -51,7 +123,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (!waConfig?.instance_token) {
-      return new Response(JSON.stringify({ sent: false, reason: "WhatsApp não configurado" }), {
+      return new Response(JSON.stringify({ sent: false, reason: "WhatsApp não configurado", in_app: true }), {
         status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -60,10 +132,6 @@ Deno.serve(async (req) => {
     const phone = prof.phone.replace(/\D/g, "");
     const chatId = phone.length <= 11 ? `55${phone}@c.us` : `${phone}@c.us`;
 
-    // Build message
-    const dateFormatted = date ? new Date(date + "T00:00:00").toLocaleDateString("pt-BR") : "hoje";
-    const timeFormatted = start_time ? start_time.slice(0, 5) : "";
-    const message = `📅 *Novo Agendamento!*\n\n👤 Cliente: ${customer_name || "Não informado"}\n💇 Serviço: ${service_name || "Não informado"}\n📆 Data: ${dateFormatted}\n🕐 Horário: ${timeFormatted}\n\nAcesse seu painel para mais detalhes.`;
 
     // Send via uazapi
     const apiUrl = waConfig.api_url.replace(/\/$/, "");
@@ -84,7 +152,7 @@ Deno.serve(async (req) => {
 
     const result = await response.json().catch(() => ({}));
 
-    return new Response(JSON.stringify({ sent: response.ok, result }), {
+    return new Response(JSON.stringify({ sent: response.ok, in_app: true, result }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 

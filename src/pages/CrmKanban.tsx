@@ -48,6 +48,11 @@ export default function CrmKanban() {
   const [draggedLead, setDraggedLead] = useState<string | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const didAutoScrollRef = useRef(false);
+  const [isTouch, setIsTouch] = useState(false);
+
+  useEffect(() => {
+    setIsTouch('ontouchstart' in window || navigator.maxTouchPoints > 0);
+  }, []);
 
   const loadLeads = useCallback(async () => {
     if (!user) return;
@@ -206,9 +211,9 @@ export default function CrmKanban() {
                   {stageLeads.map(lead => (
                     <Card
                       key={lead.id}
-                      draggable
+                      draggable={!isTouch}
                       onDragStart={(e) => handleDragStart(e, lead.id)}
-                      className={`cursor-grab active:cursor-grabbing transition-all duration-200 ${stage.cardBg} border-l-4 ${stage.borderColor} hover:shadow-md hover:scale-[1.02]`}
+                      className={`${!isTouch ? 'cursor-grab active:cursor-grabbing' : ''} transition-all duration-200 ${stage.cardBg} border-l-4 ${stage.borderColor} hover:shadow-md hover:scale-[1.02]`}
                     >
                       <CardContent className="p-3 space-y-2">
                         <div className="flex items-start justify-between">
@@ -256,6 +261,17 @@ export default function CrmKanban() {
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
+                          <select
+                            value={lead.stage}
+                            onChange={(e) => moveLead(lead.id, e.target.value)}
+                            className="h-7 px-1.5 rounded-lg border border-border bg-card text-[10px] text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring shrink-0 ml-auto max-w-[100px] cursor-pointer"
+                          >
+                            {STAGES.map((s) => (
+                              <option key={s.key} value={s.key}>
+                                {s.label}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                       </CardContent>
                     </Card>

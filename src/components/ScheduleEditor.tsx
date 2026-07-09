@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -78,9 +78,12 @@ function dayToRows(profId: string, day: DaySchedule): Omit<ScheduleRow, "id">[] 
 
 interface Props {
   professionalId: string;
+  hideSaveButton?: boolean;
+  triggerSave?: number;
 }
 
-export function ScheduleEditor({ professionalId }: Props) {
+export function ScheduleEditor({ professionalId, hideSaveButton, triggerSave }: Props) {
+  const saveRef = useRef<() => void>(() => {});
   const [days, setDays] = useState<DaySchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -122,7 +125,12 @@ export function ScheduleEditor({ professionalId }: Props) {
     );
   };
 
+  // Trigger save from parent (bottom bar button)
+  useEffect(() => { if (triggerSave && triggerSave > 0) save(); }, [triggerSave]);
+
   const save = async () => {
+    saveRef.current = save;
+    // ... rest of save
     setSaving(true);
     try {
       const { error: delErr } = await supabase
@@ -136,6 +144,7 @@ export function ScheduleEditor({ professionalId }: Props) {
         if (error) throw error;
       }
       toast.success("Disponibilidade salva");
+      (window as any).__scheduleSaved?.();
     } catch (e: any) {
       toast.error(e.message || "Erro ao salvar");
     } finally {
@@ -153,45 +162,33 @@ export function ScheduleEditor({ professionalId }: Props) {
 
   return (
     <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold">Horários de trabalho</h3>
+        <span className="text-[10px] text-muted-foreground">Ative os turnos e defina os horários</span>
+      </div>
       {days.map((d, idx) => (
-        <Card key={d.dayIndex} className="border-border/50">
-          <CardContent className="py-3 px-4 space-y-3">
-            <div className="font-semibold text-foreground">{DAYS[d.dayIndex]}</div>
+        <Card key={d.dayIndex} className={`border-border/30 rounded-2xl overflow-hidden transition-all ${d.manha.enabled || d.tarde.enabled || d.noturno.enabled ? "border-l-[3px] border-l-primary" : ""}`}>
+          <CardContent className="py-3 px-4 space-y-2.5">
+            <p className="text-sm font-bold">{DAYS[d.dayIndex]}</p>
             {(["manha", "tarde", "noturno"] as const).map((shift) => (
-              <div key={shift} className="flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-2 w-24">
-                  <Switch
-                    checked={d[shift].enabled}
-                    onCheckedChange={(v) => updateShift(idx, shift, "enabled", v)}
-                  />
-                  <Label className="capitalize text-sm">{shift}</Label>
-                </div>
-                <Input
-                  type="time"
-                  value={d[shift].start_time}
-                  onChange={(e) => updateShift(idx, shift, "start_time", e.target.value)}
-                  disabled={!d[shift].enabled}
-                  className="w-28"
-                />
-                <span className="text-muted-foreground text-sm">até</span>
-                <Input
-                  type="time"
-                  value={d[shift].end_time}
-                  onChange={(e) => updateShift(idx, shift, "end_time", e.target.value)}
-                  disabled={!d[shift].enabled}
-                  className="w-28"
-                />
+              <div key={shift} className={`flex items-center gap-2 p-2 rounded-xl transition-colors ${d[shift].enabled ? "bg-muted/30" : "opacity-40"}`}>
+                <Switch checked={d[shift].enabled} onCheckedChange={(v) => updateShift(idx, shift, "enabled", v)} />
+                <span className="text-xs font-medium capitalize w-14">{shift}</span>
+                <Input type="time" value={d[shift].start_time} onChange={(e) => updateShift(idx, shift, "start_time", e.target.value)} disabled={!d[shift].enabled} className="h-8 text-xs w-28 rounded-lg" />
+                <span className="text-[10px] text-muted-foreground">até</span>
+                <Input type="time" value={d[shift].end_time} onChange={(e) => updateShift(idx, shift, "end_time", e.target.value)} disabled={!d[shift].enabled} className="h-8 text-xs w-28 rounded-lg" />
               </div>
             ))}
           </CardContent>
         </Card>
       ))}
-      <div className="sticky bottom-0 bg-background pt-3 pb-1">
-        <Button onClick={save} disabled={saving} className="w-full">
-          {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-          Salvar disponibilidade
-        </Button>
-      </div>
+      {!hideSaveButton && (
+        <div className="sticky bottom-0 z-20 bg-background/95 backdrop-blur-xl pt-3 pb-6">
+          <Button onClick={save} disabled={saving} className="w-full h-12 rounded-2xl text-sm font-semibold shadow-lg shadow-primary/20">
+            {saving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Salvando...</> : "Salvar disponibilidade"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

@@ -6,12 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { UserCheck, Plus, Pencil, Trash2, Clock, Camera, KeyRound, Loader2, MoreVertical, Eye, Power } from "lucide-react";
+import { UserCheck, Plus, Pencil, Trash2, Camera, KeyRound, Loader2, MoreVertical, ClipboardList } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
 import { ScheduleEditor } from "@/components/ScheduleEditor";
@@ -25,97 +25,26 @@ interface Professional {
   photo_url: string | null;
 }
 
-interface Shift {
-  enabled: boolean;
-  start_time: string;
-  end_time: string;
-}
-
-interface DaySchedule {
-  dayIndex: number;
-  manha: Shift;
-  tarde: Shift;
-  noturno: Shift;
-}
-
-interface ScheduleRow {
-  id: string;
-  professional_id: string;
-  day_of_week: number;
-  start_time: string;
-  end_time: string;
-  active: boolean;
-}
-
-const DAYS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
-
-const DEFAULT_SHIFTS: Omit<DaySchedule, 'dayIndex'> = {
-  manha: { enabled: false, start_time: "08:00", end_time: "12:00" },
-  tarde: { enabled: false, start_time: "13:00", end_time: "18:00" },
-  noturno: { enabled: false, start_time: "18:00", end_time: "22:00" },
-};
-
-function rowsToDay(dayIndex: number, rows: ScheduleRow[]): DaySchedule {
-  const dayRows = rows.filter(r => r.day_of_week === dayIndex && r.active);
-  const day: DaySchedule = {
-    dayIndex,
-    manha: { ...DEFAULT_SHIFTS.manha },
-    tarde: { ...DEFAULT_SHIFTS.tarde },
-    noturno: { ...DEFAULT_SHIFTS.noturno },
-  };
-  for (const r of dayRows) {
-    const start = r.start_time.substring(0, 5);
-    const end = r.end_time.substring(0, 5);
-    if (start < "12:00" && end <= "13:00") {
-      day.manha = { enabled: true, start_time: start, end_time: end };
-    } else if (start >= "12:00" && start < "18:00" && end <= "19:00") {
-      day.tarde = { enabled: true, start_time: start, end_time: end };
-    } else if (start >= "17:00") {
-      day.noturno = { enabled: true, start_time: start, end_time: end };
-    } else {
-      // Legacy single-range: try to map
-      if (start < "12:00") day.manha = { enabled: true, start_time: start, end_time: end < "13:00" ? end : "12:00" };
-      if (end > "12:00" && start < "18:00") day.tarde = { enabled: true, start_time: start >= "12:00" ? start : "13:00", end_time: end <= "18:00" ? end : "18:00" };
-      if (end > "18:00") day.noturno = { enabled: true, start_time: "18:00", end_time: end };
-    }
-  }
-  return day;
-}
-
-function dayToRows(profId: string, day: DaySchedule): Omit<ScheduleRow, 'id'>[] {
-  const rows: Omit<ScheduleRow, 'id'>[] = [];
-  const shifts = [day.manha, day.tarde, day.noturno];
-  for (const s of shifts) {
-    if (s.enabled) {
-      rows.push({ professional_id: profId, day_of_week: day.dayIndex, start_time: s.start_time, end_time: s.end_time, active: true });
-    }
-  }
-  return rows;
-}
-
 export default function Professionals() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Professional | null>(null);
-  const [scheduleProfId, setScheduleProfId] = useState<string | null>(null);
-  const [daySchedules, setDaySchedules] = useState<DaySchedule[]>([]);
   const [zoomPhoto, setZoomPhoto] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "", phone: "", commission_percent: 0 });
+  const [form, setForm] = useState({ name: "", phone: "", commission_percent: 0, active: true });
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
-  const [inviteProfId, setInviteProfId] = useState<string | null>(null);
+
+  // Login creation / credentials states
+  const [createLoginToggle, setCreateLoginToggle] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteLoading, setInviteLoading] = useState(false);
   const [profAccounts, setProfAccounts] = useState<Record<string, { email: string }>>({});
-  const [viewProf, setViewProf] = useState<Professional | null>(null);
-  const [resetProfId, setResetProfId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState("profile");
 
   const loadProfessionals = useCallback(async () => {
     if (!user) return;
@@ -131,10 +60,10 @@ export default function Professionals() {
 
   useEffect(() => { loadProfessionals(); }, [loadProfessionals]);
 
-  // Check which professionals already have accounts
-  useEffect(() => {
+  // Fetch accounts mapped to professionals
+  const checkAccounts = useCallback(async () => {
     if (!user || professionals.length === 0) return;
-    const checkAccounts = async () => {
+    try {
       const { data } = await supabase
         .from("profiles")
         .select("professional_id, email")
@@ -142,39 +71,14 @@ export default function Professionals() {
       const map: Record<string, { email: string }> = {};
       (data || []).forEach((p: any) => { if (p.professional_id) map[p.professional_id] = { email: p.email }; });
       setProfAccounts(map);
-    };
-    checkAccounts();
+    } catch (e) {
+      console.error(e);
+    }
   }, [user, professionals]);
 
-  const handleInvite = async () => {
-    if (!inviteProfId || !inviteEmail.trim()) return;
-    const loginClean = inviteEmail.trim().toLowerCase().replace(/\s+/g, ".");
-    if (loginClean.length < 3) {
-      toast.error("Login deve ter pelo menos 3 caracteres");
-      return;
-    }
-    setInviteLoading(true);
-    try {
-      // Garante token de sessão válido (evita 401 com token revogado)
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData.session) {
-        await supabase.auth.refreshSession();
-      }
-      const { data, error } = await supabase.functions.invoke("create-professional-account", {
-        body: { professional_id: inviteProfId, login: loginClean },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      toast.success(data?.message || "Conta criada!");
-      setProfAccounts(prev => ({ ...prev, [inviteProfId]: { email: `${loginClean}@barber.local` } }));
-      setInviteDialogOpen(false);
-      setInviteEmail("");
-    } catch (e: any) {
-      toast.error(e.message || "Erro ao criar conta");
-    } finally {
-      setInviteLoading(false);
-    }
-  };
+  useEffect(() => {
+    checkAccounts();
+  }, [checkAccounts]);
 
   const compressImage = (file: File, maxSizeMB = 5): Promise<File> => {
     return new Promise((resolve, reject) => {
@@ -223,7 +127,6 @@ export default function Professionals() {
       toast.error("Selecione uma imagem válida");
       return;
     }
-    // Sempre normalizar para JPEG (WhatsApp Carousel só renderiza JPG/PNG)
     let finalFile: File;
     try {
       finalFile = await compressImage(file);
@@ -237,7 +140,6 @@ export default function Professionals() {
 
   const uploadPhoto = async (professionalId: string): Promise<string | null> => {
     if (!photoFile) return null;
-    // Forçar .jpg para compatibilidade com WhatsApp Carousel
     const path = `${professionalId}.jpg`;
     
     const { error } = await supabase.storage
@@ -258,7 +160,10 @@ export default function Professionals() {
     if (!user || !form.name.trim()) return;
     setUploading(true);
     try {
+      let finalProfId = "";
+      
       if (editing) {
+        finalProfId = editing.id;
         let photoUrl = editing.photo_url;
         if (photoFile) {
           const uploaded = await uploadPhoto(editing.id);
@@ -269,6 +174,7 @@ export default function Professionals() {
           phone: form.phone.trim(), 
           commission_percent: form.commission_percent,
           photo_url: photoUrl,
+          active: form.active,
         }).eq("id", editing.id).eq("user_id", user.id);
         if (error) throw error;
         toast.success("Profissional atualizado");
@@ -277,24 +183,88 @@ export default function Professionals() {
           user_id: user.id, 
           name: form.name.trim(), 
           phone: form.phone.trim(), 
-          commission_percent: form.commission_percent 
+          commission_percent: form.commission_percent,
+          active: true
         }).select("id").single();
         if (error) throw error;
+        finalProfId = inserted.id;
         
-        if (photoFile && inserted) {
-          const photoUrl = await uploadPhoto(inserted.id);
+        if (photoFile) {
+          const photoUrl = await uploadPhoto(finalProfId);
           if (photoUrl) {
-            await supabase.from("professionals").update({ photo_url: photoUrl }).eq("id", inserted.id);
+            await supabase.from("professionals").update({ photo_url: photoUrl }).eq("id", finalProfId);
           }
         }
-        toast.success("Profissional cadastrado");
+
+        // Insert default schedule (Segunda a Sexta 08h-12h e 13h-18h, Sábado 08h-12h)
+        const defaultSchedules = [
+          ...[1, 2, 3, 4, 5].flatMap(day => [
+            { professional_id: finalProfId, day_of_week: day, start_time: "08:00:00", end_time: "12:00:00", active: true },
+            { professional_id: finalProfId, day_of_week: day, start_time: "13:00:00", end_time: "18:00:00", active: true }
+          ]),
+          { professional_id: finalProfId, day_of_week: 6, start_time: "08:00:00", end_time: "12:00:00", active: true }
+        ];
+        await supabase.from("professional_schedules").insert(defaultSchedules);
+        
+        toast.success("Profissional cadastrado com horários padrão!");
       }
-      setDialogOpen(false);
-      setEditing(null);
-      setForm({ name: "", phone: "", commission_percent: 0 });
-      setPhotoFile(null);
-      setPhotoPreview(null);
-      loadProfessionals();
+
+      // Create login account if input is filled and they don't have an account yet
+      if (!profAccounts[finalProfId] && inviteEmail.trim()) {
+        const loginClean = inviteEmail.trim().toLowerCase().replace(/\s+/g, ".");
+        if (loginClean.length < 3) {
+          toast.error("O login deve ter pelo menos 3 caracteres.");
+        } else {
+          setInviteLoading(true);
+          const { data, error: inviteErr } = await supabase.functions.invoke("create-professional-account", {
+            body: { professional_id: finalProfId, login: loginClean },
+          });
+          if (inviteErr) {
+            toast.error("Erro ao criar conta de acesso: " + inviteErr.message);
+          } else if (data?.error) {
+            toast.error("Erro ao criar conta de acesso: " + data.error);
+          } else {
+            toast.success(`Conta de acesso criada: ${loginClean}@barber.local`);
+            setProfAccounts(prev => ({ ...prev, [finalProfId]: { email: `${loginClean}@barber.local` } }));
+          }
+          setInviteLoading(false);
+        }
+      }
+
+      if (!editing) {
+        // Load the new list of professionals
+        await loadProfessionals();
+        
+        // Find the new professional to load their details in edit view
+        const response = await supabase.from("professionals").select("id, name, phone, commission_percent, active, photo_url").eq("id", finalProfId).maybeSingle();
+        if (response.data) {
+          setEditing(response.data as Professional);
+        } else {
+          setEditing({
+            id: finalProfId,
+            name: form.name.trim(),
+            phone: form.phone.trim(),
+            commission_percent: form.commission_percent,
+            active: true,
+            photo_url: null
+          });
+        }
+        
+        // Switch dialog to schedule tab
+        setForm(prev => ({ ...prev, active: true }));
+        setCreateLoginToggle(false);
+        setInviteEmail("");
+        setActiveTab("schedule");
+      } else {
+        setDialogOpen(false);
+        setEditing(null);
+        setForm({ name: "", phone: "", commission_percent: 0, active: true });
+        setPhotoFile(null);
+        setPhotoPreview(null);
+        setCreateLoginToggle(false);
+        setInviteEmail("");
+        loadProfessionals();
+      }
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -302,48 +272,64 @@ export default function Professionals() {
     }
   };
 
-  const handleToggleActive = async (p: Professional) => {
-    if (!user) return;
-    await supabase.from("professionals").update({ active: !p.active }).eq("id", p.id).eq("user_id", user.id);
-    loadProfessionals();
+  const handleResetPassword = async (pid: string) => {
+    if (!confirm("Deseja realmente resetar a senha deste profissional para 123456? Ele será obrigado a alterá-la no próximo acesso.")) return;
+    setInviteLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("reset-professional-password", {
+        body: { professional_id: pid },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast.success("Senha resetada para 123456!");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao resetar senha");
+    } finally {
+      setInviteLoading(false);
+    }
   };
 
   const handleDelete = async (id: string) => {
     if (!user || !confirm("Excluir este profissional?")) return;
-    await supabase.from("professionals").delete().eq("id", id).eq("user_id", user.id);
-    toast.success("Profissional excluído");
-    loadProfessionals();
+    try {
+      await supabase.from("professionals").delete().eq("id", id).eq("user_id", user.id);
+      toast.success("Profissional excluído");
+      loadProfessionals();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
   };
 
   const openEdit = (p: Professional) => {
     setEditing(p);
-    setForm({ name: p.name, phone: p.phone || "", commission_percent: p.commission_percent });
+    setForm({ name: p.name, phone: p.phone || "", commission_percent: p.commission_percent, active: p.active });
     setPhotoPreview(p.photo_url || null);
     setPhotoFile(null);
+    setCreateLoginToggle(false);
+    setInviteEmail("");
+    setActiveTab("profile");
     setDialogOpen(true);
   };
 
   const openNew = () => {
     setEditing(null);
-    setForm({ name: "", phone: "", commission_percent: 0 });
+    setForm({ name: "", phone: "", commission_percent: 0, active: true });
     setPhotoPreview(null);
     setPhotoFile(null);
+    setCreateLoginToggle(false);
+    setInviteEmail("");
+    setActiveTab("profile");
     setDialogOpen(true);
-  };
-
-  // Schedule management
-  const openSchedule = (profId: string) => {
-    setScheduleProfId(profId);
-    setScheduleDialogOpen(true);
   };
 
   const getInitials = (name: string) => name.split(" ").map((n) => n[0]).join("").substring(0, 2).toUpperCase();
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-foreground">Profissionais</h1>
-        <Button onClick={openNew} size="sm" className="gap-2">
+        <Button onClick={openNew} size="sm" className="gap-2 rounded-xl">
           <Plus className="h-4 w-4" /><span className="hidden sm:inline">Novo Profissional</span><span className="sm:hidden">Novo</span>
         </Button>
       </div>
@@ -353,75 +339,58 @@ export default function Professionals() {
           <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
         </div>
       ) : professionals.length === 0 ? (
-        <Card>
+        <Card className="border-border/50">
           <CardContent className="py-12 text-center">
             <UserCheck className="h-10 w-10 text-muted-foreground/40 mx-auto mb-2" />
             <p className="text-muted-foreground">Nenhum profissional cadastrado</p>
-            <Button className="mt-4" onClick={openNew}>Cadastrar Profissional</Button>
+            <Button className="mt-4 rounded-xl" onClick={openNew}>Cadastrar Profissional</Button>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-3">
           {professionals.map((p) => (
-            <Card key={p.id} className={`border-border/50 ${!p.active ? "opacity-60" : ""}`}>
-              <CardContent className="flex flex-row items-center justify-between py-4 px-4 sm:px-5 gap-3 cursor-pointer" onClick={() => navigate(`/professionals/${p.id}`)}>
+            <Card key={p.id} className={`border-border/50 transition-all ${!p.active ? "opacity-60 bg-muted/20" : ""}`}>
+              <CardContent className="flex flex-row items-center justify-between py-4 px-4 sm:px-5 gap-3 cursor-pointer" onClick={() => openEdit(p)}>
                 <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <Avatar className="h-10 w-10 shrink-0 cursor-zoom-in" onClick={(e) => { e.stopPropagation(); if (p.photo_url) setZoomPhoto(p.photo_url); }}>
+                  <Avatar className="h-12 w-12 shrink-0 cursor-zoom-in" onClick={(e) => { e.stopPropagation(); if (p.photo_url) setZoomPhoto(p.photo_url); }}>
                     <AvatarImage src={p.photo_url || undefined} alt={p.name} className="object-cover" />
                     <AvatarFallback className="bg-primary/10 text-primary text-sm font-semibold">
                       {getInitials(p.name)}
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-foreground">{p.name}</span>
-                      <Badge variant={p.active ? "default" : "secondary"} className="text-[10px] px-1.5 py-0">
+                      <Badge variant={p.active ? "default" : "secondary"} className="text-[10px] px-1.5 py-0.5 rounded-md font-medium">
                         {p.active ? "Ativo" : "Inativo"}
                       </Badge>
                     </div>
-                    <div className="flex items-center gap-3 text-sm text-muted-foreground mt-0.5">
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
                       {p.phone && <span>📱 {p.phone}</span>}
-                      <span>💰 {p.commission_percent}%</span>
+                      <span>💰 {p.commission_percent}% comissão</span>
                     </div>
                   </div>
                 </div>
+                
+                {/* 3 dots action menu */}
                 <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
                   {profAccounts[p.id] && (
-                    <Badge variant="outline" className="text-xs gap-1 hidden sm:inline-flex">
-                      <KeyRound className="h-3 w-3" /> Login
+                    <Badge variant="outline" className="text-[10px] gap-1 hidden sm:inline-flex bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900 text-emerald-600 dark:text-emerald-400">
+                      <KeyRound className="h-3 w-3" /> Acesso Ativo
                     </Badge>
                   )}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button size="icon" variant="ghost" className="h-8 w-8">
+                      <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg">
                         <MoreVertical className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
-                      <DropdownMenuItem onClick={() => setViewProf(p)}>
-                        <Eye className="h-4 w-4 mr-2" /> Visualizar
+                    <DropdownMenuContent align="end" className="w-48 rounded-xl">
+                      <DropdownMenuItem onClick={() => openEdit(p)}>
+                        <Pencil className="h-4 w-4 mr-2" /> Editar / Acesso
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => navigate(`/professionals/${p.id}`)}>
-                        <UserCheck className="h-4 w-4 mr-2" /> Detalhes
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => openEdit(p)}>
-                        <Pencil className="h-4 w-4 mr-2" /> Editar
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => openSchedule(p.id)}>
-                        <Clock className="h-4 w-4 mr-2" /> Horários
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      {profAccounts[p.id] ? (
-                        <DropdownMenuItem onClick={() => setResetProfId(p.id)}>
-                          <KeyRound className="h-4 w-4 mr-2" /> Resetar senha
-                        </DropdownMenuItem>
-                      ) : (
-                        <DropdownMenuItem onClick={() => { setInviteProfId(p.id); setInviteEmail(""); setInviteDialogOpen(true); }}>
-                          <KeyRound className="h-4 w-4 mr-2" /> Criar login
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem onClick={() => handleToggleActive(p)}>
-                        <Power className="h-4 w-4 mr-2" /> {p.active ? "Desativar" : "Ativar"}
+                        <ClipboardList className="h-4 w-4 mr-2" /> Atendimentos e Histórico
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={() => handleDelete(p.id)} className="text-destructive focus:text-destructive">
@@ -436,171 +405,6 @@ export default function Professionals() {
         </div>
       )}
 
-      {/* Visualizar profissional */}
-      <Dialog open={!!viewProf} onOpenChange={(o) => !o && setViewProf(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Informações do Profissional</DialogTitle>
-          </DialogHeader>
-          {viewProf && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-4">
-                <Avatar className="h-20 w-20">
-                  <AvatarImage src={viewProf.photo_url || undefined} alt={viewProf.name} className="object-cover" />
-                  <AvatarFallback className="bg-primary/10 text-primary text-xl font-semibold">
-                    {getInitials(viewProf.name)}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <div className="text-lg font-semibold text-foreground">{viewProf.name}</div>
-                  <Badge variant={viewProf.active ? "default" : "secondary"} className="mt-1">
-                    {viewProf.active ? "Ativo" : "Inativo"}
-                  </Badge>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 gap-2 text-sm">
-                <div className="flex justify-between border-b border-border/50 py-2">
-                  <span className="text-muted-foreground">Telefone</span>
-                  <span className="text-foreground">{viewProf.phone || "—"}</span>
-                </div>
-                <div className="flex justify-between border-b border-border/50 py-2">
-                  <span className="text-muted-foreground">Comissão</span>
-                  <span className="text-foreground">{viewProf.commission_percent}%</span>
-                </div>
-                <div className="flex justify-between border-b border-border/50 py-2">
-                  <span className="text-muted-foreground">Login de acesso</span>
-                  <span className="text-foreground font-mono text-xs">
-                    {profAccounts[viewProf.id]?.email
-                      ? profAccounts[viewProf.id].email.replace(/@barber\.local$/, "")
-                      : "Sem login"}
-                  </span>
-                </div>
-                <div className="flex justify-between py-2">
-                  <span className="text-muted-foreground">Status do login</span>
-                  <span className="text-foreground">
-                    {profAccounts[viewProf.id] ? "Ativo" : "Não criado"}
-                  </span>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2 pt-2">
-                <Button size="sm" variant="outline" onClick={() => { setViewProf(null); openEdit(viewProf); }}>
-                  <Pencil className="h-3 w-3 mr-1" /> Editar
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => { const id = viewProf.id; setViewProf(null); openSchedule(id); }}>
-                  <Clock className="h-3 w-3 mr-1" /> Horários
-                </Button>
-                {!profAccounts[viewProf.id] && (
-                  <Button size="sm" variant="outline" onClick={() => { setInviteProfId(viewProf.id); setInviteEmail(""); setViewProf(null); setInviteDialogOpen(true); }}>
-                    <KeyRound className="h-3 w-3 mr-1" /> Criar login
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Reset password confirmation */}
-      <AlertDialog open={!!resetProfId} onOpenChange={(o) => !o && setResetProfId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Resetar senha?</AlertDialogTitle>
-            <AlertDialogDescription>
-              A senha será redefinida para <strong>123456</strong>. O profissional será obrigado a alterar no próximo acesso.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={async () => {
-              const pid = resetProfId;
-              setResetProfId(null);
-              if (!pid) return;
-              try {
-                const { data, error } = await supabase.functions.invoke("reset-professional-password", {
-                  body: { professional_id: pid },
-                });
-                if (error) throw error;
-                if (data?.error) throw new Error(data.error);
-                toast.success("Senha resetada para 123456");
-              } catch (err: any) {
-                toast.error(err.message || "Erro ao resetar senha");
-              }
-            }}>Confirmar</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-
-      {/* Create/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editing ? "Editar Profissional" : "Novo Profissional"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            {/* Photo Upload */}
-            <div className="flex flex-col items-center gap-3">
-              <div 
-                className="relative cursor-pointer group"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Avatar className="h-24 w-24 border-2 border-dashed border-muted-foreground/30 group-hover:border-primary transition-colors">
-                  <AvatarImage src={photoPreview || undefined} alt="Foto" className="object-cover" />
-                  <AvatarFallback className="bg-muted text-muted-foreground text-2xl">
-                    {form.name ? getInitials(form.name) : <Camera className="h-8 w-8" />}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Camera className="h-6 w-6 text-white" />
-                </div>
-              </div>
-              <button 
-                type="button"
-                className="text-xs text-primary hover:underline"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {photoPreview ? "Trocar foto" : "Adicionar foto"}
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handlePhotoSelect}
-              />
-            </div>
-
-            <div>
-              <Label>Nome *</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nome do profissional" />
-            </div>
-            <div>
-              <Label>Telefone</Label>
-              <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="(00) 00000-0000" />
-            </div>
-            <div>
-              <Label>Comissão (%)</Label>
-              <Input type="number" min={0} max={100} value={form.commission_percent} onChange={(e) => setForm({ ...form, commission_percent: Number(e.target.value) })} />
-            </div>
-            <Button onClick={handleSave} className="w-full" disabled={uploading}>
-              {uploading ? "Salvando..." : editing ? "Salvar" : "Cadastrar"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Schedule Dialog */}
-      <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Horários de Trabalho</DialogTitle>
-          </DialogHeader>
-          <div className="max-h-[70vh] overflow-y-auto">
-            {scheduleProfId && <ScheduleEditor professionalId={scheduleProfId} />}
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {/* Photo Zoom Dialog */}
       <Dialog open={!!zoomPhoto} onOpenChange={() => setZoomPhoto(null)}>
         <DialogContent className="max-w-md p-2 bg-black/90 border-none">
@@ -608,33 +412,231 @@ export default function Professionals() {
         </DialogContent>
       </Dialog>
 
-      {/* Invite Professional Dialog */}
-      <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
-        <DialogContent>
+      {/* Create/Edit Unified Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className={editing ? "max-w-2xl rounded-2xl" : "max-w-md rounded-2xl"}>
           <DialogHeader>
-            <DialogTitle>Criar Login do Profissional</DialogTitle>
+            <DialogTitle className="text-lg font-bold">
+              {editing ? `Editar Profissional: ${editing.name}` : "Novo Profissional"}
+            </DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Defina um login para o profissional. A senha padrão será <strong>123456</strong> e ele será obrigado a alterar no primeiro acesso.
-          </p>
-          <div className="space-y-4">
-            <div>
-              <Label>Login do Profissional</Label>
-              <Input
-                type="text"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="ex: pablo.boeira"
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Use nome.sobrenome ou apelido (sem espaços)
-              </p>
+
+          {editing ? (
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="grid grid-cols-2 mb-4 bg-muted/50 p-1 rounded-xl">
+                <TabsTrigger value="profile" className="rounded-lg py-1.5 font-semibold text-sm">Dados e Acesso</TabsTrigger>
+                <TabsTrigger value="schedule" className="rounded-lg py-1.5 font-semibold text-sm">Horários de Trabalho</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="profile" className="space-y-4 pt-1">
+                {/* Photo Upload */}
+                <div className="flex flex-col items-center gap-2">
+                  <div 
+                    className="relative cursor-pointer group"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Avatar className="h-20 w-20 border border-border group-hover:border-primary transition-colors">
+                      <AvatarImage src={photoPreview || undefined} alt="Foto" className="object-cover" />
+                      <AvatarFallback className="bg-muted text-muted-foreground text-xl font-bold">
+                        {form.name ? getInitials(form.name) : <Camera className="h-6 w-6" />}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Camera className="h-5 w-5 text-white" />
+                    </div>
+                  </div>
+                  <button 
+                    type="button"
+                    className="text-xs text-primary hover:underline"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {photoPreview ? "Trocar foto" : "Adicionar foto"}
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handlePhotoSelect}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase">Nome *</Label>
+                    <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nome do profissional" className="rounded-xl mt-1 h-10" />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase">Telefone</Label>
+                    <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="(00) 00000-0000" className="rounded-xl mt-1 h-10" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 items-center">
+                  <div>
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase">Comissão (%)</Label>
+                    <Input type="number" min={0} max={100} value={form.commission_percent} onChange={(e) => setForm({ ...form, commission_percent: Number(e.target.value) })} className="rounded-xl mt-1 h-10" />
+                  </div>
+                  <div className="flex items-center justify-between border border-border/50 rounded-xl p-3 bg-muted/20 h-11 mt-5">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase cursor-pointer" htmlFor="edit-active">Profissional Ativo</Label>
+                    <Switch
+                      id="edit-active"
+                      checked={form.active}
+                      onCheckedChange={(checked) => setForm({ ...form, active: checked })}
+                    />
+                  </div>
+                </div>
+
+                {/* Account Access sub-section */}
+                <div className="border-t border-border/30 pt-4 mt-2">
+                  <h3 className="text-sm font-bold text-foreground mb-3">E-Mail de Acesso para o PWA</h3>
+                  {profAccounts[editing.id] ? (
+                    <div className="bg-muted/40 border border-border/30 rounded-xl p-3.5 flex items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <p className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">E-mail de acesso para o PWA</p>
+                        <p className="text-sm font-mono text-foreground font-semibold">{profAccounts[editing.id].email}</p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleResetPassword(editing.id)}
+                        disabled={inviteLoading}
+                        className="rounded-lg text-xs gap-1.5 h-9 shrink-0 border-border"
+                      >
+                        {inviteLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
+                        Resetar Senha
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 bg-muted/20 border border-border/30 rounded-xl p-4">
+                      <div>
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase">Criar E-mail de Acesso (Login / Usuário)</Label>
+                        <Input
+                          type="text"
+                          value={inviteEmail}
+                          onChange={(e) => setInviteEmail(e.target.value)}
+                          placeholder="ex: nome.sobrenome"
+                          className="rounded-xl mt-1.5 h-10 bg-background"
+                        />
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          Insira um nome de usuário (ex: fulano.silva) para gerar o e-mail de acesso.
+                        </p>
+                        {inviteEmail.trim() && (
+                          <div className="mt-3 p-3 bg-background rounded-lg text-xs space-y-1.5 border border-border/30">
+                            <p className="font-semibold text-foreground">Credenciais que serão criadas:</p>
+                            <p className="text-muted-foreground">
+                              📧 <strong>E-mail de acesso:</strong> <span className="font-mono text-primary font-bold">{inviteEmail.trim().toLowerCase().replace(/\s+/g, ".")}@barber.local</span>
+                            </p>
+                            <p className="text-muted-foreground">
+                              🔑 <strong>Senha padrão:</strong> <span className="font-mono font-bold">123456</span>
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-2">
+                  <Button onClick={handleSave} className="w-full rounded-xl h-11 text-base font-semibold" disabled={uploading || inviteLoading}>
+                    {uploading ? "Salvando..." : "Salvar Alterações"}
+                  </Button>
+                </div>
+              </TabsContent>
+              
+              <TabsContent value="schedule" className="pt-1">
+                <div className="max-h-[60vh] overflow-y-auto pr-1">
+                  <ScheduleEditor professionalId={editing.id} />
+                </div>
+              </TabsContent>
+            </Tabs>
+          ) : (
+            <div className="space-y-4 pt-1">
+              {/* Photo Upload */}
+              <div className="flex flex-col items-center gap-2">
+                <div 
+                  className="relative cursor-pointer group"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Avatar className="h-20 w-20 border border-border group-hover:border-primary transition-colors">
+                    <AvatarImage src={photoPreview || undefined} alt="Foto" className="object-cover" />
+                    <AvatarFallback className="bg-muted text-muted-foreground text-xl font-bold">
+                      <Camera className="h-6 w-6" />
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Camera className="h-5 w-5 text-white" />
+                  </div>
+                </div>
+                <button 
+                  type="button"
+                  className="text-xs text-primary hover:underline"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  Adicionar foto
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handlePhotoSelect}
+                />
+              </div>
+
+              <div>
+                <Label className="text-xs font-semibold text-muted-foreground uppercase">Nome *</Label>
+                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nome do profissional" className="rounded-xl mt-1 h-10" />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase">Telefone</Label>
+                  <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="(00) 00000-0000" className="rounded-xl mt-1 h-10" />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold text-muted-foreground uppercase">Comissão (%)</Label>
+                  <Input type="number" min={0} max={100} value={form.commission_percent} onChange={(e) => setForm({ ...form, commission_percent: Number(e.target.value) })} className="rounded-xl mt-1 h-10" />
+                </div>
+              </div>
+
+              {/* Login creation panel (Always visible) */}
+              <div className="space-y-3 bg-muted/20 border border-border/30 rounded-xl p-4">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">E-mail de Acesso para o PWA (Opcional)</h3>
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase">Nome de Usuário / Login</Label>
+                  <Input
+                    type="text"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="ex: nome.sobrenome"
+                    className="rounded-xl mt-1.5 h-10 bg-background"
+                  />
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Insira um nome de usuário (ex: fulano.silva) para gerar o e-mail de acesso.
+                  </p>
+                  {inviteEmail.trim() && (
+                    <div className="mt-3 p-3 bg-background rounded-lg text-xs space-y-1.5 border border-border/30">
+                      <p className="font-semibold text-foreground">Credenciais para login no aplicativo PWA:</p>
+                      <p className="text-muted-foreground">
+                        📧 <strong>E-mail de acesso:</strong> <span className="font-mono text-primary font-bold">{inviteEmail.trim().toLowerCase().replace(/\s+/g, ".")}@barber.local</span>
+                      </p>
+                      <p className="text-muted-foreground">
+                        🔑 <strong>Senha padrão:</strong> <span className="font-mono font-bold">123456</span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <Button onClick={handleSave} className="w-full rounded-xl h-11 text-base font-semibold" disabled={uploading || inviteLoading}>
+                  {uploading ? "Salvando..." : "Cadastrar Profissional"}
+                </Button>
+              </div>
             </div>
-            <Button onClick={handleInvite} disabled={inviteLoading || !inviteEmail.trim()} className="w-full">
-              {inviteLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Criar Login
-            </Button>
-          </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
