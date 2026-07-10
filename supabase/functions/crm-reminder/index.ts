@@ -88,6 +88,9 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const force = body?.force === true;
+    const now = new Date();
+    const brtHour = (now.getUTCHours() - 3 + 24) % 24;
+    const isBusinessHours = brtHour >= 9 && brtHour < 18;
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -316,142 +319,139 @@ Deno.serve(async (req) => {
     // BLOCO 3: Lembretes de RETORNO para clientes com plano
     // ══════════════════════════════════════════════════════════
     let returnSent = 0;
-    try {
-      // Busca todos os user_ids que têm whatsapp_config configurado
-      const { data: waConfigs } = await supabase
-        .from("whatsapp_config")
-        .select("user_id, api_url, instance_token");
+    if (isBusinessHours || force) {
+      try {
+        // Busca todos os user_ids que têm whatsapp_config configurado
+        const { data: waConfigs } = await supabase
+          .from("whatsapp_config")
+          .select("user_id, api_url, instance_token");
 
-      if (waConfigs && waConfigs.length > 0) {
-        for (const waCfg of waConfigs) {
-          const { data: targets } = await supabase.rpc("get_plan_notification_targets", {
-            p_user_id: waCfg.user_id,
-            p_notif_type: "return",
-            p_expiry_days_threshold: 3,
-          });
+        if (waConfigs && waConfigs.length > 0) {
+          for (const waCfg of waConfigs) {
+            const { data: targets } = await supabase.rpc("get_plan_notification_targets", {
+              p_user_id: waCfg.user_id,
+              p_notif_type: "return",
+              p_expiry_days_threshold: 1,
+            });
 
-          if (!targets || targets.length === 0) continue;
+            if (!targets || targets.length === 0) continue;
 
-          const apiUrl = waCfg.api_url.replace(/\/$/, "");
+            const apiUrl = waCfg.api_url.replace(/\/$/, "");
 
-          for (const t of targets) {
-            const phone = normalizePhone(t.customer_phone);
-            if (!phone) continue;
+            for (const t of targets) {
+              const phone = normalizePhone(t.customer_phone);
+              if (!phone) continue;
 
-            const overdueText = t.days_overdue === 0
-              ? "hoje"
-              : `há ${t.days_overdue} dia${t.days_overdue > 1 ? "s" : ""}`;
+              const msg = `Olá ${t.customer_name}! 😊
 
-            const msg = `Olá ${t.customer_name}! 😊
+💈 Passando para lembrar que amanhã é o dia do seu retorno!
 
-💈 Está na hora do seu retorno!
+Você tem o plano *${t.plan_name}* ativo.
 
-Você tem o plano *${t.plan_name}* ativo e sua data de retorno era ${overdueText}.
-
-Agende agora para não perder seu horário:
+Agende seu horário agora para garantir o melhor atendimento amanhã:
 👉 https://agendar.zlabs.com.br`;
 
-            try {
-              const res = await fetch(`${apiUrl}/send/text?token=${waCfg.instance_token}`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "apikey": waCfg.instance_token,
-                },
-                body: JSON.stringify({ number: phone, text: msg }),
-              });
+              try {
+                const res = await fetch(`${apiUrl}/send/text?token=${waCfg.instance_token}`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "apikey": waCfg.instance_token,
+                  },
+                  body: JSON.stringify({ number: phone, text: msg }),
+                });
 
-              if (res.ok) {
-                // Registra para não reenviar hoje
-                await supabase.from("plan_notifications").insert({
-                  customer_plan_id: t.customer_plan_id,
-                  type: "return",
-                }).catch(() => {});
-                returnSent++;
-                console.log(`[crm-reminder] Return notif sent to ${t.customer_name} (${phone})`);
-              } else {
-                const errText = await res.text().catch(() => "");
-                console.error(`[crm-reminder] Return notif failed for ${t.customer_name}: ${res.status} ${errText}`);
+                if (res.ok) {
+                  // Registra para não reenviar hoje
+                  await supabase.from("plan_notifications").insert({
+                    customer_plan_id: t.customer_plan_id,
+                    type: "return",
+                  }).catch(() => {});
+                  returnSent++;
+                  console.log(`[crm-reminder] Return notif sent to ${t.customer_name} (${phone})`);
+                } else {
+                  const errText = await res.text().catch(() => "");
+                  console.error(`[crm-reminder] Return notif failed for ${t.customer_name}: ${res.status} ${errText}`);
+                }
+              } catch (waErr) {
+                console.error(`[crm-reminder] Return notif fetch error for ${t.customer_name}:`, waErr);
               }
-            } catch (waErr) {
-              console.error(`[crm-reminder] Return notif fetch error for ${t.customer_name}:`, waErr);
             }
           }
         }
+      } catch (e) {
+        console.error("[crm-reminder] Return notification block error:", e);
       }
-    } catch (e) {
-      console.error("[crm-reminder] Return notification block error:", e);
     }
 
     // ══════════════════════════════════════════════════════════
-    // BLOCO 4: Avisos de VENCIMENTO de plano (3 dias antes)
+    // BLOCO 4: Avisos de VENCIMENTO de plano (1 dia antes)
     // ══════════════════════════════════════════════════════════
     let expirySent = 0;
-    try {
-      const { data: waConfigs2 } = await supabase
-        .from("whatsapp_config")
-        .select("user_id, api_url, instance_token");
+    if (isBusinessHours || force) {
+      try {
+        const { data: waConfigs2 } = await supabase
+          .from("whatsapp_config")
+          .select("user_id, api_url, instance_token");
 
-      if (waConfigs2 && waConfigs2.length > 0) {
-        for (const waCfg of waConfigs2) {
-          const { data: targets } = await supabase.rpc("get_plan_notification_targets", {
-            p_user_id: waCfg.user_id,
-            p_notif_type: "expiry",
-            p_expiry_days_threshold: 3,
-          });
+        if (waConfigs2 && waConfigs2.length > 0) {
+          for (const waCfg of waConfigs2) {
+            const { data: targets } = await supabase.rpc("get_plan_notification_targets", {
+              p_user_id: waCfg.user_id,
+              p_notif_type: "expiry",
+              p_expiry_days_threshold: 1,
+            });
 
-          if (!targets || targets.length === 0) continue;
+            if (!targets || targets.length === 0) continue;
 
-          const apiUrl = waCfg.api_url.replace(/\/$/, "");
+            const apiUrl = waCfg.api_url.replace(/\/$/, "");
 
-          for (const t of targets) {
-            const phone = normalizePhone(t.customer_phone);
-            if (!phone) continue;
+            for (const t of targets) {
+              const phone = normalizePhone(t.customer_phone);
+              if (!phone) continue;
 
-            const expiresDate = new Date(t.expires_at + "T12:00:00");
-            const dd = String(expiresDate.getDate()).padStart(2, "0");
-            const mm = String(expiresDate.getMonth() + 1).padStart(2, "0");
-            const expiryLabel = t.days_until_expiry === 0
-              ? "hoje"
-              : `em ${t.days_until_expiry} dia${t.days_until_expiry > 1 ? "s" : ""} (${dd}/${mm})`;
+              const expiresDate = new Date(t.expires_at + "T12:00:00");
+              const dd = String(expiresDate.getDate()).padStart(2, "0");
+              const mm = String(expiresDate.getMonth() + 1).padStart(2, "0");
 
-            const msg = `Olá ${t.customer_name}! ⚠️
+              const msg = `Olá ${t.customer_name}! ⚠️
 
-Seu plano *${t.plan_name}* vence ${expiryLabel}.
+Passando para lembrar que seu plano *${t.plan_name}* vence amanhã (${dd}/${mm}).
 
-Renove agora para continuar aproveitando todos os benefícios! 💈
+Renove hoje para continuar aproveitando todos os seus benefícios! 💈
 
-Entre em contato com a gente para renovar.`;
+Fale conosco para realizar a renovação.`;
 
-            try {
-              const res = await fetch(`${apiUrl}/send/text?token=${waCfg.instance_token}`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "apikey": waCfg.instance_token,
-                },
-                body: JSON.stringify({ number: phone, text: msg }),
-              });
+              try {
+                const res = await fetch(`${apiUrl}/send/text?token=${waCfg.instance_token}`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "apikey": waCfg.instance_token,
+                  },
+                  body: JSON.stringify({ number: phone, text: msg }),
+                });
 
-              if (res.ok) {
-                await supabase.from("plan_notifications").insert({
-                  customer_plan_id: t.customer_plan_id,
-                  type: "expiry",
-                }).catch(() => {});
-                expirySent++;
-                console.log(`[crm-reminder] Expiry notif sent to ${t.customer_name} (${phone})`);
-              } else {
-                const errText = await res.text().catch(() => "");
-                console.error(`[crm-reminder] Expiry notif failed for ${t.customer_name}: ${res.status} ${errText}`);
+                if (res.ok) {
+                  await supabase.from("plan_notifications").insert({
+                    customer_plan_id: t.customer_plan_id,
+                    type: "expiry",
+                  }).catch(() => {});
+                  expirySent++;
+                  console.log(`[crm-reminder] Expiry notif sent to ${t.customer_name} (${phone})`);
+                } else {
+                  const errText = await res.text().catch(() => "");
+                  console.error(`[crm-reminder] Expiry notif failed for ${t.customer_name}: ${res.status} ${errText}`);
+                }
+              } catch (waErr) {
+                console.error(`[crm-reminder] Expiry notif fetch error for ${t.customer_name}:`, waErr);
               }
-            } catch (waErr) {
-              console.error(`[crm-reminder] Expiry notif fetch error for ${t.customer_name}:`, waErr);
             }
           }
         }
+      } catch (e) {
+        console.error("[crm-reminder] Expiry notification block error:", e);
       }
-    } catch (e) {
-      console.error("[crm-reminder] Expiry notification block error:", e);
     }
 
     return new Response(JSON.stringify({ ok: true, reminders: sent, return_notifs: returnSent, expiry_notifs: expirySent }), {
