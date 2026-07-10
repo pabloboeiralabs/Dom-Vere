@@ -27,8 +27,10 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            echo "=== Rebuilding container ==="
-            docker compose down --remove-orphans
+            echo "=== Parando e removendo container antigo ==="
+            docker rm -f domvere-frontend-app || true
+
+            echo "=== Rebuilding e iniciando container ==="
             docker compose up -d --build
 
             echo "=== Deploy concluído com sucesso! ==="
