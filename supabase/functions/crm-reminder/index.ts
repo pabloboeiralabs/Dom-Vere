@@ -105,14 +105,9 @@ Deno.serve(async (req) => {
     if (!force) query = query.eq("reminder_sent", false);
     const { data: leads } = await query;
 
-    if (!leads || leads.length === 0) {
-      return new Response(JSON.stringify({ ok: true, reminders: 0 }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     let sent = 0;
-    for (const lead of leads) {
+    if (leads && leads.length > 0) {
+      for (const lead of leads) {
       if (!lead.phone) continue;
 
       // Get appointment details
@@ -233,6 +228,7 @@ Deno.serve(async (req) => {
         sent++;
       }
     }
+  }
 
     // Second: Check for appointments starting in exactly 30 minutes to send client push reminders
     try {
