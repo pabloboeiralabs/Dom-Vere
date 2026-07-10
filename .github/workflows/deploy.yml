@@ -27,6 +27,10 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
+            echo "=== Sincronizando Edge Functions ==="
+            cp -r /root/domvere-frontend/supabase/functions/* /root/supabase-domvere/docker/volumes/functions/
+            docker restart supabase-edge-functions-domvere
+
             echo "=== Buildando nova imagem (sem derrubar o atual) ==="
             docker compose build web
 
