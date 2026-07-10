@@ -27,11 +27,12 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            echo "=== Parando e removendo container antigo ==="
-            docker rm -f domvere-frontend-app || true
+            echo "=== Buildando nova imagem (sem derrubar o atual) ==="
+            docker compose build web
 
-            echo "=== Rebuilding e iniciando container ==="
-            docker compose up -d --build
+            echo "=== Trocando container (downtime mínimo) ==="
+            docker compose up -d --no-build --force-recreate
 
-            echo "=== Deploy concluído com sucesso! ==="
+            echo "=== Deploy concluído! ==="
             docker ps --filter "name=domvere-frontend-app" --format "table {{.Names}}\t{{.Status}}"
+
