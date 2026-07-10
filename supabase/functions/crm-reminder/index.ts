@@ -342,11 +342,14 @@ Deno.serve(async (req) => {
               ? "hoje"
               : `há ${t.days_overdue} dia${t.days_overdue > 1 ? "s" : ""}`;
 
-            const msg =
-              `Olá ${t.customer_name}! 😊\n\n` +
-              `💈 Está na hora do seu retorno!\n\n` +
-              `Você tem o plano *${t.plan_name}* ativo e sua data de retorno era ${overdueText}.\n\n` +
-              `Agende agora para não perder seu horário:\n👉 https://agendar.zlabs.com.br`;
+            const msg = `Olá ${t.customer_name}! 😊
+
+💈 Está na hora do seu retorno!
+
+Você tem o plano *${t.plan_name}* ativo e sua data de retorno era ${overdueText}.
+
+Agende agora para não perder seu horário:
+👉 https://agendar.zlabs.com.br`;
 
             try {
               const res = await fetch(`${apiUrl}/send/text?token=${waCfg.instance_token}`, {
@@ -412,11 +415,13 @@ Deno.serve(async (req) => {
               ? "hoje"
               : `em ${t.days_until_expiry} dia${t.days_until_expiry > 1 ? "s" : ""} (${dd}/${mm})`;
 
-            const msg =
-              `Olá ${t.customer_name}! ⚠️\n\n` +
-              `Seu plano *${t.plan_name}* vence ${expiryLabel}.\n\n` +
-              `Renove agora para continuar aproveitando todos os benefícios! 💈\n\n` +
-              `Entre em contato com a gente para renovar.`;
+            const msg = `Olá ${t.customer_name}! ⚠️
+
+Seu plano *${t.plan_name}* vence ${expiryLabel}.
+
+Renove agora para continuar aproveitando todos os benefícios! 💈
+
+Entre em contato com a gente para renovar.`;
 
             try {
               const res = await fetch(`${apiUrl}/send/text?token=${waCfg.instance_token}`, {
