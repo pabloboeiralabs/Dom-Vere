@@ -109,6 +109,10 @@ Deno.serve(async (req) => {
     const { data: leads } = await query;
 
     let sent = 0;
+    const configCache = new Map<string, any>();
+    const settingsCache = new Map<string, number>();
+    const professionalsCache = new Map<string, string>();
+
     if (leads && leads.length > 0) {
       for (const lead of leads) {
       if (!lead.phone) continue;
@@ -124,13 +128,18 @@ Deno.serve(async (req) => {
 
       // Get default reminder hours from settings
       let defaultReminderHours = 24;
-      const { data: shopSettings } = await supabase
-        .from("settings")
-        .select("reminder_hours")
-        .eq("user_id", lead.user_id)
-        .maybeSingle();
-      if (shopSettings?.reminder_hours !== undefined && shopSettings?.reminder_hours !== null) {
-        defaultReminderHours = Number(shopSettings.reminder_hours);
+      if (settingsCache.has(lead.user_id)) {
+        defaultReminderHours = settingsCache.get(lead.user_id)!;
+      } else {
+        const { data: shopSettings } = await supabase
+          .from("settings")
+          .select("reminder_hours")
+          .eq("user_id", lead.user_id)
+          .maybeSingle();
+        if (shopSettings?.reminder_hours !== undefined && shopSettings?.reminder_hours !== null) {
+          defaultReminderHours = Number(shopSettings.reminder_hours);
+        }
+        settingsCache.set(lead.user_id, defaultReminderHours);
       }
 
       // Get customer's reminder_hours preference
@@ -189,12 +198,17 @@ Deno.serve(async (req) => {
       // Get professional name
       let profName = "";
       if (appt.professional_id) {
-        const { data: prof } = await supabase
-          .from("professionals")
-          .select("name")
-          .eq("id", appt.professional_id)
-          .single();
-        profName = prof?.name || "";
+        if (professionalsCache.has(appt.professional_id)) {
+          profName = professionalsCache.get(appt.professional_id)!;
+        } else {
+          const { data: prof } = await supabase
+            .from("professionals")
+            .select("name")
+            .eq("id", appt.professional_id)
+            .single();
+          profName = prof?.name || "";
+          professionalsCache.set(appt.professional_id, profName);
+        }
       }
 
       const dd = appt.date.slice(8, 10);
@@ -204,11 +218,18 @@ Deno.serve(async (req) => {
 
       // 1. Send WhatsApp reminder
       let waSent = false;
-      const { data: config } = await supabase
-        .from("whatsapp_config")
-        .select("api_url, instance_token")
-        .eq("user_id", appt.user_id)
-        .maybeSingle();
+      let config = null;
+      if (configCache.has(appt.user_id)) {
+        config = configCache.get(appt.user_id);
+      } else {
+        const { data: cfg } = await supabase
+          .from("whatsapp_config")
+          .select("api_url, instance_token")
+          .eq("user_id", appt.user_id)
+          .maybeSingle();
+        config = cfg;
+        configCache.set(appt.user_id, cfg);
+      }
 
       if (config) {
         const apiUrl = config.api_url.replace(/\/$/, "");
