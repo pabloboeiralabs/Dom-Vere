@@ -122,16 +122,27 @@ Deno.serve(async (req) => {
 
       if (!appt) continue;
 
+      // Get default reminder hours from settings
+      let defaultReminderHours = 24;
+      const { data: shopSettings } = await supabase
+        .from("settings")
+        .select("reminder_hours")
+        .eq("user_id", lead.user_id)
+        .maybeSingle();
+      if (shopSettings?.reminder_hours !== undefined && shopSettings?.reminder_hours !== null) {
+        defaultReminderHours = Number(shopSettings.reminder_hours);
+      }
+
       // Get customer's reminder_hours preference
-      let reminderHours = 24; // default: 1 day before
+      let reminderHours = defaultReminderHours;
       if (appt.customer_id) {
         const { data: customer } = await supabase
           .from("customers")
           .select("reminder_hours")
           .eq("id", appt.customer_id)
           .maybeSingle();
-        if (customer?.reminder_hours) {
-          reminderHours = customer.reminder_hours;
+        if (customer?.reminder_hours !== undefined && customer?.reminder_hours !== null) {
+          reminderHours = Number(customer.reminder_hours);
         }
       }
 
@@ -147,6 +158,32 @@ Deno.serve(async (req) => {
       if (!force) {
         // Send if hoursUntilAppt is less than or equal to reminderHours, and not past the appointment
         if (hoursUntilAppt > reminderHours || hoursUntilAppt < 0) continue;
+      }
+
+      // Check if we already sent an appointment reminder today to avoid duplicates
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayStartTs = todayStart.getTime();
+
+      const normalizedPhone = normalizePhone(lead.phone);
+      const suffix = "@s.whatsapp.net";
+      const waChatId = `${normalizedPhone}${suffix}`;
+
+      const { data: sentReminders } = await supabase
+        .from("whatsapp_messages")
+        .select("id")
+        .eq("user_id", appt.user_id)
+        .eq("wa_chatid", waChatId)
+        .eq("from_me", true)
+        .ilike("text", "%Seu agendamento%")
+        .gt("wa_timestamp", todayStartTs)
+        .limit(1);
+
+      if (sentReminders && sentReminders.length > 0) {
+        console.log(`[crm-reminder] Appointment reminder already sent today to ${lead.phone}, skipping.`);
+        // Mark as sent in crm_leads to stay in sync
+        await supabase.from("crm_leads").update({ reminder_sent: true }).eq("id", lead.id);
+        continue;
       }
 
       // Get professional name
@@ -227,7 +264,15 @@ Deno.serve(async (req) => {
 
       // Mark as sent if either WhatsApp or Push succeeded (or if no WhatsApp config exists, mark it so we don't loop forever)
       if (waSent || pushSent || !config) {
-        await supabase.from("crm_leads").update({ reminder_sent: true }).eq("id", lead.id);
+        const { error: updateErr } = await supabase
+          .from("crm_leads")
+          .update({ reminder_sent: true })
+          .eq("id", lead.id);
+        if (updateErr) {
+          console.error(`[crm-reminder] Failed to update crm_leads reminder_sent for lead ${lead.id}:`, updateErr);
+        } else {
+          console.log(`[crm-reminder] Successfully set reminder_sent = true for lead ${lead.id}`);
+        }
         sent++;
       }
     }
@@ -288,7 +333,7 @@ Deno.serve(async (req) => {
               title: "⏰ Seu horário é daqui a pouco!",
               body: bodyText,
               url: "https://cliente.zlabs.com.br",
-            }).catch(() => {});
+            });
 
             // Send Push Notification
             try {
@@ -342,6 +387,31 @@ Deno.serve(async (req) => {
               const phone = normalizePhone(t.customer_phone);
               if (!phone) continue;
 
+              // Check if we already sent a plan return reminder today
+              const todayStart = new Date();
+              todayStart.setHours(0, 0, 0, 0);
+              const todayStartTs = todayStart.getTime();
+
+              const { data: sentPlans } = await supabase
+                .from("whatsapp_messages")
+                .select("id")
+                .eq("user_id", waCfg.user_id)
+                .eq("wa_chatid", phone)
+                .eq("from_me", true)
+                .ilike("text", "%dia do seu retorno%")
+                .gt("wa_timestamp", todayStartTs)
+                .limit(1);
+
+              if (sentPlans && sentPlans.length > 0) {
+                console.log(`[crm-reminder] Plan return reminder already sent today to ${phone}, skipping.`);
+                // Insert into plan_notifications to stay in sync
+                await supabase.from("plan_notifications").insert({
+                  customer_plan_id: t.customer_plan_id,
+                  type: "return",
+                });
+                continue;
+              }
+
               const msg = `Olá ${t.customer_name}! 😊
 
 💈 Passando para lembrar que amanhã é o dia do seu retorno!
@@ -363,10 +433,15 @@ Agende seu horário agora para garantir o melhor atendimento amanhã:
 
                 if (res.ok) {
                   // Registra para não reenviar hoje
-                  await supabase.from("plan_notifications").insert({
+                  const { error: insertErr } = await supabase.from("plan_notifications").insert({
                     customer_plan_id: t.customer_plan_id,
                     type: "return",
-                  }).catch(() => {});
+                  });
+                  if (insertErr) {
+                    console.error(`[crm-reminder] Failed to insert plan_notification for return to ${t.customer_name}:`, insertErr);
+                  } else {
+                    console.log(`[crm-reminder] Registered return notification for ${t.customer_name}`);
+                  }
                   returnSent++;
                   console.log(`[crm-reminder] Return notif sent to ${t.customer_name} (${phone})`);
                 } else {
@@ -410,6 +485,31 @@ Agende seu horário agora para garantir o melhor atendimento amanhã:
               const phone = normalizePhone(t.customer_phone);
               if (!phone) continue;
 
+              // Check if we already sent a plan expiry reminder today
+              const todayStart = new Date();
+              todayStart.setHours(0, 0, 0, 0);
+              const todayStartTs = todayStart.getTime();
+
+              const { data: sentExpirations } = await supabase
+                .from("whatsapp_messages")
+                .select("id")
+                .eq("user_id", waCfg.user_id)
+                .eq("wa_chatid", phone)
+                .eq("from_me", true)
+                .ilike("text", "%vence amanhã%")
+                .gt("wa_timestamp", todayStartTs)
+                .limit(1);
+
+              if (sentExpirations && sentExpirations.length > 0) {
+                console.log(`[crm-reminder] Plan expiry reminder already sent today to ${phone}, skipping.`);
+                // Insert into plan_notifications to stay in sync
+                await supabase.from("plan_notifications").insert({
+                  customer_plan_id: t.customer_plan_id,
+                  type: "expiry",
+                });
+                continue;
+              }
+
               const expiresDate = new Date(t.expires_at + "T12:00:00");
               const dd = String(expiresDate.getDate()).padStart(2, "0");
               const mm = String(expiresDate.getMonth() + 1).padStart(2, "0");
@@ -433,10 +533,15 @@ Fale conosco para realizar a renovação.`;
                 });
 
                 if (res.ok) {
-                  await supabase.from("plan_notifications").insert({
+                  const { error: insertErr } = await supabase.from("plan_notifications").insert({
                     customer_plan_id: t.customer_plan_id,
                     type: "expiry",
-                  }).catch(() => {});
+                  });
+                  if (insertErr) {
+                    console.error(`[crm-reminder] Failed to insert plan_notification for expiry to ${t.customer_name}:`, insertErr);
+                  } else {
+                    console.log(`[crm-reminder] Registered expiry notification for ${t.customer_name}`);
+                  }
                   expirySent++;
                   console.log(`[crm-reminder] Expiry notif sent to ${t.customer_name} (${phone})`);
                 } else {
