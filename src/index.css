@@ -52,42 +52,50 @@
   }
 
   .dark {
-    --background: 224 71% 4%;
-    --foreground: 210 40% 98%;
+    /* === FUNDO (Deep Navy) === */
+    --background: 216 60% 10%;          /* #0a1628 */
+    --foreground: 42 100% 96%;          /* #fff9eb */
 
-    --card: 224 71% 4%;
-    --card-foreground: 210 40% 98%;
+    /* === SUPERFÍCIES (Navy elevado) === */
+    --card: 209 65% 18%;                /* #102f4c */
+    --card-foreground: 42 100% 96%;
+    --popover: 211 61% 21%;             /* #153557 */
+    --popover-foreground: 42 100% 96%;
 
-    --popover: 224 71% 4%;
-    --popover-foreground: 210 40% 98%;
+    /* === PRIMÁRIO (Steel Blue) === */
+    --primary: 210 27% 52%;             /* #6485a6 */
+    --primary-foreground: 42 100% 96%;
 
-    --primary: 225 73% 57%;
-    --primary-foreground: 210 40% 98%;
+    /* === SECUNDÁRIO === */
+    --secondary: 209 65% 18%;           /* #102f4c */
+    --secondary-foreground: 44 13% 77%; /* #ccc8bd */
 
-    --secondary: 224 71% 12%;
-    --secondary-foreground: 210 40% 98%;
+    /* === MUTED (superfícies sutis) === */
+    --muted: 208 50% 14%;
+    --muted-foreground: 212 8% 57%;     /* #889099 */
 
-    --muted: 224 71% 12%;
-    --muted-foreground: 215 20% 65%;
+    /* === ACCENT (destaque navy com texto azul claro) === */
+    --accent: 210 51% 24%;              /* #1e3d5c */
+    --accent-foreground: 206 50% 87%;   /* #ccdfee */
 
-    --accent: 224 71% 12%;
-    --accent-foreground: 210 40% 98%;
+    /* === DESTRUTIVO === */
+    --destructive: 0 57% 60%;
+    --destructive-foreground: 42 100% 96%;
 
-    --destructive: 0 63% 31%;
-    --destructive-foreground: 210 40% 98%;
+    /* === BORDAS & INPUTS === */
+    --border: 210 51% 24%;              /* #1e3d5c */
+    --input: 210 51% 24%;
+    --ring: 210 27% 52%;                /* #6485a6 */
 
-    --border: 224 71% 12%;
-    --input: 224 71% 12%;
-    --ring: 225 73% 57%;
-
-    --sidebar-background: 224 71% 2%;
-    --sidebar-foreground: 220 14% 90%;
-    --sidebar-primary: 225 73% 57%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 224 71% 10%;
-    --sidebar-accent-foreground: 220 14% 96%;
-    --sidebar-border: 224 71% 15%;
-    --sidebar-ring: 225 73% 57%;
+    /* === SIDEBAR (tom mais profundo que o fundo) === */
+    --sidebar-background: 208 80% 10%;  /* #051a2d */
+    --sidebar-foreground: 44 13% 77%;   /* #ccc8bd */
+    --sidebar-primary: 210 27% 52%;     /* #6485a6 */
+    --sidebar-primary-foreground: 42 100% 96%;
+    --sidebar-accent: 211 66% 15%;      /* #0d2640 */
+    --sidebar-accent-foreground: 206 50% 87%;
+    --sidebar-border: 210 51% 24%;
+    --sidebar-ring: 210 27% 52%;
   }
 }
 
