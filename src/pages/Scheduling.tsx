@@ -190,9 +190,10 @@ export default function Scheduling() {
       setDialogOpen(false);
       loadData();
 
-      // Notify professional via WhatsApp (fire and forget)
+      // Notify professional via WhatsApp and push (fire and forget with error logging)
       const customer = customers.find(c => c.id === form.customer_id);
       const service = services.find(s => s.id === form.service_id);
+      const prof = professionals.find(p => p.id === form.professional_id);
       supabase.functions.invoke("notify-professional", {
         body: {
           professional_id: form.professional_id,
@@ -202,7 +203,12 @@ export default function Scheduling() {
           date: form.date,
           start_time: form.start_time,
         },
-      }).catch(() => {/* silent */});
+      }).then(({ error: notifyErr }) => {
+        if (notifyErr) console.error("[Scheduling] Erro ao notificar profissional:", notifyErr);
+        else console.log("[Scheduling] Profissional notificado:", prof?.name);
+      }).catch((err) => {
+        console.error("[Scheduling] Falha ao chamar notify-professional:", err);
+      });
     } catch (e: any) {
       toast.error(e.message);
     }
@@ -435,11 +441,15 @@ export default function Scheduling() {
             {/* Horários disponíveis */}
             {form.professional_id && form.date && (
               <div>
-                <Label className="mb-2 block">Horários disponíveis</Label>
+                <Label className="mb-2 block">
+                  Horários disponíveis — {professionals.find(p => p.id === form.professional_id)?.name}
+                </Label>
                 <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5 max-h-[180px] overflow-y-auto p-1">
                   {(() => {
+                    const selectedDay = parseLocalDate(form.date);
+                    const dayOfWeek = selectedDay.getDay();
                     const daySchs = schedules[form.professional_id]?.filter(
-                      (s) => s.day_of_week === new Date(form.date + "T00:00:00").getDay() && s.active
+                      (s) => s.day_of_week === dayOfWeek && s.active
                     ) || [];
                     if (daySchs.length === 0) return <p className="text-xs text-muted-foreground col-span-full py-4 text-center">Sem horários neste dia</p>;
                     const slots: string[] = [];
