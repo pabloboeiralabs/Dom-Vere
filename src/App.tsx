@@ -24,7 +24,6 @@ const Reports = lazy(() => import("@/pages/Reports"));
 const WhatsApp = lazy(() => import("@/pages/WhatsApp"));
 const WhatsAppBotFlow = lazy(() => import("@/components/whatsapp/WhatsAppBotFlow"));
 const Scheduling = lazy(() => import("@/pages/Scheduling"));
-const Campaigns = lazy(() => import("@/pages/Campaigns"));
 const Professionals = lazy(() => import("@/pages/Professionals"));
 const ProfessionalDetail = lazy(() => import("@/pages/ProfessionalDetail"));
 const Booking = lazy(() => import("@/pages/Booking"));
@@ -183,7 +182,6 @@ const App = () => (
               <Route path="/whatsapp" element={<PremiumRoute><SuspenseWrap><WhatsApp /></SuspenseWrap></PremiumRoute>} />
               <Route path="/whatsapp/flow" element={<PremiumRoute><SuspenseWrap><WhatsAppBotFlow /></SuspenseWrap></PremiumRoute>} />
                <Route path="/scheduling" element={<PremiumRoute><SuspenseWrap><Scheduling /></SuspenseWrap></PremiumRoute>} />
-               <Route path="/campaigns" element={<PremiumRoute><SuspenseWrap><Campaigns /></SuspenseWrap></PremiumRoute>} />
                <Route path="/crm" element={<PremiumRoute><SuspenseWrap><CrmKanban /></SuspenseWrap></PremiumRoute>} />
               <Route path="/professionals" element={<SuspenseWrap><Professionals /></SuspenseWrap>} />
               <Route path="/professionals/:id" element={<SuspenseWrap><ProfessionalDetail /></SuspenseWrap>} />
