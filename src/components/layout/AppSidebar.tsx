@@ -42,7 +42,6 @@ const communicationItems = [
 
 const settingsItems = [
   { title: "Configurações", url: "/settings", icon: Settings },
-  { title: "Página do Cliente", url: "/client-preview", icon: Smartphone },
 ];
 
 const adminItems = [

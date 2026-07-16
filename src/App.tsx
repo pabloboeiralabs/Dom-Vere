@@ -34,7 +34,6 @@ const ProfessionalDashboard = lazy(() => import("@/pages/ProfessionalDashboard")
 const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
 const ChangePassword = lazy(() => import("@/pages/ChangePassword"));
 const AdminCredentials = lazy(() => import("@/pages/AdminCredentials"));
-const ClientLayoutPreview = lazy(() => import("@/pages/ClientLayoutPreview"));
 const ClientPortal = lazy(() => import("@/pages/ClientPortal"));
 const Reminders = lazy(() => import("@/pages/Reminders"));
 
@@ -188,7 +187,6 @@ const App = () => (
               <Route path="/settings" element={<SuspenseWrap><Settings /></SuspenseWrap>} />
               <Route path="/admin" element={<ProtectedRoute requiredRole="admin"><SuspenseWrap><Admin /></SuspenseWrap></ProtectedRoute>} />
               <Route path="/admin-credentials" element={<SuspenseWrap><AdminCredentials /></SuspenseWrap>} />
-              <Route path="/client-preview" element={<SuspenseWrap><ClientLayoutPreview /></SuspenseWrap>} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
