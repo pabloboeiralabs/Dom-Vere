@@ -569,6 +569,35 @@ export function useUazapi() {
     });
   }, [apiCall]);
 
+  // Fetch profile picture for a contact (Evolution API or Standard)
+  const fetchProfilePicture = useCallback(async (chatId: string): Promise<string | null> => {
+    try {
+      const isEvolution = configRef.current?.api_url.includes("evolution");
+      const phone = chatId.replace("@s.whatsapp.net", "").replace("@g.us", "");
+      if (!phone) return null;
+
+      if (isEvolution) {
+        // Evolution API: POST /chat/fetchProfilePicture/{instance}/{phone}
+        const data = await apiCall("POST", `/chat/fetchProfilePicture/${phone}`, {});
+        // Response can be base64 image or URL
+        if (data?.data?.profilePicUrl) return data.data.profilePicUrl;
+        if (data?.profilePicUrl) return data.profilePicUrl;
+        // If it's a base64 string
+        if (typeof data === "string" && data.startsWith("data:image")) return data;
+        return null;
+      }
+
+      // Standard Uazapi: try to get profile pic
+      const data = await apiCall("POST", `/chat/fetchProfilePicture/${phone}`, {});
+      if (data?.profilePicUrl) return data.profilePicUrl;
+      if (data?.image) return data.image;
+      if (typeof data === "string" && data.startsWith("http")) return data;
+      return null;
+    } catch {
+      return null;
+    }
+  }, [apiCall]);
+
   return {
     config,
     instanceStatus,
@@ -590,5 +619,6 @@ export function useUazapi() {
     loadConfig,
     apiCall,
     provisionInstance,
+    fetchProfilePicture,
   };
 }

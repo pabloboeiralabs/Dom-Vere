@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -7,6 +7,7 @@ import { Send, ArrowLeft, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUazapi } from "@/hooks/useUazapi";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { UazapiChat, UazapiMessage } from "@/hooks/useUazapi";
 
@@ -76,8 +77,26 @@ export function WhatsAppConversation({ chat, messages, onSendMessage, onBack, se
     }
   };
 
+  const { fetchProfilePicture } = useUazapi();
+  const [loadedPicUrl, setLoadedPicUrl] = useState<string | null>(null);
+
+  // Fetch profile picture on demand
+  useEffect(() => {
+    if (!chat.wa_chatid) return;
+    // Use existing URL if available
+    const existing = chat.profilePicUrl || chat.imagePreview || chat.image;
+    if (existing) {
+      setLoadedPicUrl(existing);
+      return;
+    }
+    // Fetch from WhatsApp API
+    fetchProfilePicture(chat.wa_chatid).then(url => {
+      if (url) setLoadedPicUrl(url);
+    }).catch(() => {});
+  }, [chat.wa_chatid, chat.profilePicUrl, chat.imagePreview, chat.image, fetchProfilePicture]);
+
   const name = chat.customerName || chat.name || chat.wa_contactName || chat.wa_name || chat.phone || chat.wa_chatid;
-  const avatarUrl = chat.profilePicUrl || chat.imagePreview || chat.image;
+  const avatarUrl = loadedPicUrl || chat.profilePicUrl || chat.imagePreview || chat.image;
 
   return (
     <div className="flex flex-col h-full">

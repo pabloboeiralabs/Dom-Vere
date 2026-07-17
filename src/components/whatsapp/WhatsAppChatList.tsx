@@ -34,9 +34,9 @@ export function WhatsAppChatList({ chats, activeChatId, onSelectChat, selectionM
     .sort((a, b) => (b.wa_lastMsgTimestamp || 0) - (a.wa_lastMsgTimestamp || 0));
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       {/* Search */}
-      <div className="p-2">
+      <div className="p-2 flex-shrink-0">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -49,7 +49,7 @@ export function WhatsAppChatList({ chats, activeChatId, onSelectChat, selectionM
       </div>
 
       {/* Chat list */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
         {filtered.map(chat => {
           const name = chat.customerName || chat.name || chat.wa_contactName || chat.wa_name || chat.phone || chat.wa_chatid;
           const avatarUrl = chat.profilePicUrl || chat.imagePreview || chat.image;
