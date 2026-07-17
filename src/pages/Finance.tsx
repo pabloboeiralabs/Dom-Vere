@@ -82,6 +82,18 @@ export default function Finance() {
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [cashOpen, setCashOpen] = useState(false);
+
+  // Check cash register status
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("cash_register_sessions")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("status", "open")
+      .maybeSingle()
+      .then(({ data }) => setCashOpen(!!data));
+  }, [user]);
 
   // Filters state
   const [filterType, setFilterType] = useState<string>("all");
@@ -287,6 +299,12 @@ export default function Finance() {
           <p className="text-sm text-muted-foreground">Monitore as movimentações de entrada e saída da sua barbearia.</p>
         </div>
         <div className="flex items-center gap-2">
+          <a href="/caixa" className={`text-[11px] px-2.5 py-1 rounded-full border transition-colors ${
+            cashOpen ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20" :
+            "bg-muted/30 text-muted-foreground border-border/30 hover:bg-muted/50"
+          }`}>
+            {cashOpen ? "🔓 Caixa Aberto" : "🔒 Caixa Fechado"}
+          </a>
           <Button variant="outline" size="icon" onClick={loadData} title="Recarregar dados" className="rounded-xl h-10 w-10">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>

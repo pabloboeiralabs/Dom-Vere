@@ -36,6 +36,7 @@ const ChangePassword = lazy(() => import("@/pages/ChangePassword"));
 const AdminCredentials = lazy(() => import("@/pages/AdminCredentials"));
 const ClientPortal = lazy(() => import("@/pages/ClientPortal"));
 const Reminders = lazy(() => import("@/pages/Reminders"));
+const Caixa = lazy(() => import("@/pages/Caixa"));
 
 const SuspenseWrap = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<div className="flex-1 flex items-center justify-center p-8"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>}>
@@ -173,6 +174,7 @@ const App = () => (
               <Route path="/clients" element={<SuspenseWrap><Clients /></SuspenseWrap>} />
               <Route path="/clients/:id" element={<SuspenseWrap><ClientDetail /></SuspenseWrap>} />
               <Route path="/sales" element={<SuspenseWrap><Sales /></SuspenseWrap>} />
+              <Route path="/caixa" element={<SuspenseWrap><Caixa /></SuspenseWrap>} />
               <Route path="/finance" element={<SuspenseWrap><Finance /></SuspenseWrap>} />
               <Route path="/products" element={<SuspenseWrap><Products /></SuspenseWrap>} />
               <Route path="/expirations" element={<SuspenseWrap><Expirations /></SuspenseWrap>} />

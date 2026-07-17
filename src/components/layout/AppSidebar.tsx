@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/sidebar";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
-import { Users, Settings, Shield, BarChart2, Clock, CreditCard, MessageSquare, Bot, CalendarClock, UserCheck, Kanban, Smartphone, Package, ShoppingCart, Bell, DollarSign } from "lucide-react";
+import { Users, Settings, Shield, BarChart2, Clock, CreditCard, MessageSquare, Bot, CalendarClock, UserCheck, Kanban, Smartphone, Package, ShoppingCart, Bell, DollarSign, Receipt } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const dashboardItems = [
@@ -27,6 +27,7 @@ const clientItems = [
 ];
 
 const salesItems = [
+  { title: "Caixa", url: "/caixa", icon: Receipt },
   { title: "Fluxo de Caixa", url: "/finance", icon: DollarSign },
   { title: "Vendas", url: "/sales", icon: ShoppingCart },
   { title: "Produtos", url: "/products", icon: Package },

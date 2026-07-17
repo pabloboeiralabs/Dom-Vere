@@ -55,6 +55,7 @@ export default function Sales() {
   const [selectedCustomer, setSelectedCustomer] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [saleType, setSaleType] = useState<'venda' | 'consumo_colaborador'>('venda');
+  const [salePaymentMethod, setSalePaymentMethod] = useState<string>('pix');
   const [loading, setLoading] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -147,7 +148,8 @@ export default function Sales() {
         unit_price: product.price,
         total_price: totalPrice,
         commission_amount: commissionAmount,
-        sale_type: saleType
+        sale_type: saleType,
+        payment_method: saleType === 'venda' ? salePaymentMethod : 'pix',
       });
 
       if (error) throw error;
@@ -341,6 +343,23 @@ export default function Sales() {
                     {customers.map(c => (
                       <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {saleType === 'venda' && (
+              <div>
+                <Label>Forma de Pagamento</Label>
+                <Select value={salePaymentMethod} onValueChange={setSalePaymentMethod}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pix">📱 Pix</SelectItem>
+                    <SelectItem value="dinheiro">💵 Dinheiro</SelectItem>
+                    <SelectItem value="cartao_credito">💳 Cartão de Crédito</SelectItem>
+                    <SelectItem value="cartao_debito">🏧 Cartão de Débito</SelectItem>
+                    <SelectItem value="outro">📋 Outro</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

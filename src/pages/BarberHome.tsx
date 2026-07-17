@@ -14,6 +14,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { ScheduleEditor } from "@/components/ScheduleEditor";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { SplitPaymentForm } from "@/components/SplitPaymentForm";
 
 // ── Helpers ──
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -293,6 +294,7 @@ export default function BarberHome() {
   const [checkoutAppt, setCheckoutAppt] = useState<any | null>(null);
   const [checkoutPrice, setCheckoutPrice] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("pix");
+  const [checkoutSplits, setCheckoutSplits] = useState<import("@/types/cash-register").SplitPaymentInput[]>([]);
   const [additionalSelected, setAdditionalSelected] = useState<Set<string>>(new Set());
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
@@ -1580,21 +1582,14 @@ export default function BarberHome() {
               />
             </div>
 
-            {/* Payment Method Selector */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-400">Forma de Pagamento</label>
-              <select
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-                className="w-full h-10 px-3 rounded-xl border border-white/[0.08] bg-[#131B2E] text-white text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
-              >
-                <option value="pix" className="bg-[#0e1322]">Pix</option>
-                <option value="dinheiro" className="bg-[#0e1322]">Dinheiro</option>
-                <option value="cartao_credito" className="bg-[#0e1322]">Cartão de Crédito</option>
-                <option value="cartao_debito" className="bg-[#0e1322]">Cartão de Débito</option>
-                <option value="outro" className="bg-[#0e1322]">Outro</option>
-              </select>
-            </div>
+            {/* Split Payment Form */}
+            <SplitPaymentForm
+              totalAmount={Number(checkoutPrice) || 0}
+              onChange={(splits) => {
+                setCheckoutSplits(splits);
+                if (splits.length > 0) setPaymentMethod(splits[0].payment_method);
+              }}
+            />
 
             {/* Additional Services Checkbox list */}
             {services.length > 1 && (
