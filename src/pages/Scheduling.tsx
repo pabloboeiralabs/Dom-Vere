@@ -477,9 +477,38 @@ export default function Scheduling() {
                 }}
               />
               {dayName && (
-                <p className="text-xs text-muted-foreground mt-1 capitalize">{dayName}</p>
+                <p className="text-sm font-medium text-primary mt-1.5 capitalize">{dayName}</p>
               )}
             </div>
+            {/* Dias da semana que o profissional trabalha */}
+            {form.professional_id && schedules[form.professional_id] && (
+              <div>
+                <Label className="mb-1.5 block">Dias de trabalho</Label>
+                <div className="flex gap-1 flex-wrap">
+                  {(() => {
+                    const DAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+                    const profSchedules = schedules[form.professional_id] || [];
+                    const workingDays = profSchedules.filter(s => s.active).map(s => s.day_of_week);
+                    return DAY_LABELS.map((label, idx) => {
+                      const works = workingDays.includes(idx);
+                      const selectedDay = form.date ? parseLocalDate(form.date).getDay() : null;
+                      const isSelected = selectedDay === idx;
+                      return (
+                        <span key={idx} className={`text-[10px] px-2 py-0.5 rounded-full border transition-all ${
+                          works
+                            ? isSelected
+                              ? "bg-primary text-primary-foreground border-primary font-medium"
+                              : "bg-primary/10 text-primary border-primary/20"
+                            : "bg-muted/30 text-muted-foreground/40 border-border/20"
+                        }`}>
+                          {label}
+                        </span>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            )}
             {/* Horários disponíveis */}
             {form.professional_id && form.date && (
               <div>
