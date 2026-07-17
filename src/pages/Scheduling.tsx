@@ -114,12 +114,6 @@ export default function Scheduling() {
       : customers,
     [customers, customerSearch]
   );
-  const dayName = useMemo(() => {
-    if (!form.date) return null;
-    try {
-      return format(parseLocalDate(form.date), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR });
-    } catch { return null; }
-  }, [form.date]);
   const [form, setForm] = useState({
     professional_id: "",
     customer_id: "",
@@ -134,6 +128,12 @@ export default function Scheduling() {
   });
 
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
+  const dayName = useMemo(() => {
+    if (!form.date) return null;
+    try {
+      return format(parseLocalDate(form.date), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+    } catch { return null; }
+  }, [form.date]);
 
   const loadData = useCallback(async () => {
     if (!user) return;
