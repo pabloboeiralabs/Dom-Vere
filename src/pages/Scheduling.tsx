@@ -438,6 +438,22 @@ export default function Scheduling() {
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <Label>Data *</Label>
+              <Input
+                placeholder="dd/mm/aaaa"
+                value={form.date_input}
+                onChange={(e) => {
+                  const masked = maskDateInput(e.target.value);
+                  const iso = dateInputToIso(masked);
+                  setForm({
+                    ...form,
+                    date_input: masked,
+                    date: iso || form.date,
+                  });
+                }}
+              />
+            </div>
             {/* Horários disponíveis */}
             {form.professional_id && form.date && (
               <div>
