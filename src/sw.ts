@@ -7,8 +7,7 @@ import { NavigationRoute } from 'workbox-routing';
 
 declare const self: ServiceWorkerGlobalScope;
 
-// Immediately take control of all pages
-skipWaiting();
+// Take control of all pages (only after user allows via SKIP_WAITING message)
 clientsClaim();
 
 // Precache all static assets (self.__WB_MANIFEST is injected by vite-plugin-pwa at build time)
