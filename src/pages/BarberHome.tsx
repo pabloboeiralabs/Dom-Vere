@@ -200,9 +200,9 @@ const NotifItem = ({
         <div className="flex items-start gap-3">
           {!n.read && <div className="h-2 w-2 rounded-full bg-[#D4AF37] mt-1.5 flex-shrink-0 animate-pulse" />}
           <div className={`flex-1 min-w-0 ${n.read ? "ml-5" : ""}`}>
-            <p className="text-[13px] font-bold leading-snug text-white">{n.title}</p>
-            <p className="text-xs text-slate-400 mt-0.5 line-clamp-2">{n.body}</p>
-            <p className="text-[10px] text-slate-500 mt-1.5 font-medium">{format(new Date(n.created_at), "dd/MM 'às' HH:mm")}</p>
+            <p className="text-[13px] font-bold leading-snug text-foreground">{n.title}</p>
+            <p className="text-xs text-foreground/70 mt-0.5 line-clamp-2">{n.body}</p>
+            <p className="text-[10px] text-foreground/50 mt-1.5 font-medium">{format(new Date(n.created_at), "dd/MM 'às' HH:mm")}</p>
           </div>
         </div>
       </motion.div>
