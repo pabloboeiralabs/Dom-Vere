@@ -49,6 +49,9 @@ export interface UazapiMessage {
   wa_timestamp: number;
   wa_pushName?: string;
   msg_type?: string;
+  media_url?: string;
+  media_type?: string;
+  media_mimetype?: string;
 }
 
 function normalizeUazapiUrl(url: string): string {
@@ -423,10 +426,13 @@ export function useUazapi() {
         wa_chatid: m.wa_chatid,
         wa_fromMe: m.from_me ?? false,
         wa_text: m.text || "",
-        wa_type: m.msg_type || "text",
+        wa_type: m.msg_type || m.media_type || "text",
         msg_type: m.msg_type || undefined,
         wa_timestamp: Number(m.wa_timestamp) || 0,
         wa_pushName: m.push_name || "",
+        media_url: m.media_url || null,
+        media_type: m.media_type || null,
+        media_mimetype: m.media_mimetype || null,
       }));
       normalized.sort((a: any, b: any) => a.wa_timestamp - b.wa_timestamp);
       return normalized;
@@ -452,6 +458,36 @@ export function useUazapi() {
 
   const sendText = useCallback(async (number: string, text: string) => {
     return apiCall("POST", "/send/text", { number, text });
+  }, [apiCall]);
+
+  const sendMedia = useCallback(async (number: string, mediaUrl: string, mediaType: string, caption?: string, mimetype?: string) => {
+    const isEvolution = configRef.current?.api_url.includes("evolution");
+    if (isEvolution) {
+      // Evolution API: POST /message/sendMedia
+      return apiCall("POST", "/message/sendMedia", {
+        number,
+        mediatype: mediaType,
+        media: mediaUrl,
+        caption: caption || undefined,
+        mimetype: mimetype || undefined,
+      });
+    }
+    // Standard Uazapi
+    return apiCall("POST", "/message/sendMedia", {
+      number,
+      mediatype: mediaType,
+      media: mediaUrl,
+      caption: caption || undefined,
+      mimetype: mimetype || undefined,
+    });
+  }, [apiCall]);
+
+  const sendAudio = useCallback(async (number: string, audioUrl: string) => {
+    const isEvolution = configRef.current?.api_url.includes("evolution");
+    if (isEvolution) {
+      return apiCall("POST", "/message/sendWhatsAppAudio", { number, audio: audioUrl });
+    }
+    return apiCall("POST", "/message/sendWhatsAppAudio", { number, audio: audioUrl });
   }, [apiCall]);
 
   const updateChatbotSettings = useCallback(async (settings: Record<string, any>) => {
@@ -577,21 +613,22 @@ export function useUazapi() {
       if (!phone) return null;
 
       if (isEvolution) {
-        // Evolution API: POST /chat/fetchProfilePicture/{instance}/{phone}
-        const data = await apiCall("POST", `/chat/fetchProfilePicture/${phone}`, {});
-        // Response can be base64 image or URL
-        if (data?.data?.profilePicUrl) return data.data.profilePicUrl;
+        // Evolution API: POST /chat/fetchProfilePictureUrl/{number}
+        const data = await apiCall("POST", `/chat/fetchProfilePictureUrl/${phone}`, { number: phone });
+        // Response: { profilePicUrl: "..." } or { data: { profilePicUrl: "..." } }
+        if (typeof data === "string" && data.startsWith("http")) return data;
         if (data?.profilePicUrl) return data.profilePicUrl;
-        // If it's a base64 string
-        if (typeof data === "string" && data.startsWith("data:image")) return data;
+        if (data?.data?.profilePicUrl) return data.data.profilePicUrl;
+        if (data?.url) return data.url;
         return null;
       }
 
-      // Standard Uazapi: try to get profile pic
-      const data = await apiCall("POST", `/chat/fetchProfilePicture/${phone}`, {});
+      // Standard Uazapi
+      const data = await apiCall("POST", `/chat/fetchProfilePictureUrl/${phone}`, { number: phone });
+      if (typeof data === "string" && data.startsWith("http")) return data;
       if (data?.profilePicUrl) return data.profilePicUrl;
       if (data?.image) return data.image;
-      if (typeof data === "string" && data.startsWith("http")) return data;
+      if (data?.url) return data.url;
       return null;
     } catch {
       return null;
@@ -610,6 +647,8 @@ export function useUazapi() {
     getChats,
     getMessages,
     sendText,
+    sendMedia,
+    sendAudio,
     updateChatbotSettings,
     saveBotConfig,
     getAgents,

@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, ArrowLeft, Pencil } from "lucide-react";
+import { Send, ArrowLeft, Pencil, Image, Mic, Paperclip, X, Play, Pause } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -77,8 +77,11 @@ export function WhatsAppConversation({ chat, messages, onSendMessage, onBack, se
     }
   };
 
-  const { fetchProfilePicture } = useUazapi();
+  const { fetchProfilePicture, sendMedia, sendAudio } = useUazapi();
   const [loadedPicUrl, setLoadedPicUrl] = useState<string | null>(null);
+  const [fullImage, setFullImage] = useState<string | null>(null);
+  const [audioPlayer, setAudioPlayer] = useState<string | null>(null);
+  const fileInputRef = useState<HTMLInputElement | null>(null);
 
   // Fetch profile picture on demand
   useEffect(() => {
@@ -176,6 +179,27 @@ export function WhatsAppConversation({ chat, messages, onSendMessage, onBack, se
                     })()}
                   </div>
                 </div>
+              ) : msg.media_url && msg.media_type === "image" ? (
+                <div className="cursor-pointer" onClick={() => setFullImage(msg.media_url || null)}>
+                  <img src={msg.media_url} alt="" className="max-w-[250px] max-h-[250px] rounded-lg object-cover" loading="lazy" />
+                  {msg.wa_text && <p className="text-xs mt-1 opacity-70 whitespace-pre-wrap break-words">{msg.wa_text}</p>}
+                </div>
+              ) : msg.media_url && msg.media_type === "video" ? (
+                <div className="max-w-[250px]">
+                  <video src={msg.media_url} controls className="max-w-[250px] max-h-[250px] rounded-lg" preload="metadata" />
+                  {msg.wa_text && <p className="text-xs mt-1 opacity-70 whitespace-pre-wrap break-words">{msg.wa_text}</p>}
+                </div>
+              ) : msg.media_url && msg.media_type === "audio" ? (
+                <div className="flex items-center gap-2 min-w-[180px]">
+                  <button onClick={() => setAudioPlayer(msg.media_url || null)} className="h-8 w-8 rounded-full bg-primary flex items-center justify-center">
+                    <Play className="h-4 w-4 text-primary-foreground" />
+                  </button>
+                  <div className="flex-1 h-2 bg-muted-foreground/20 rounded-full overflow-hidden">
+                    <audio src={msg.media_url} controls className="h-8 w-full" preload="metadata" />
+                  </div>
+                </div>
+              ) : msg.media_url && msg.media_type === "sticker" ? (
+                <img src={msg.media_url} alt="Sticker" className="max-w-[150px] max-h-[150px]" />
               ) : (
                 <p className="whitespace-pre-wrap break-words">{msg.wa_text || `[${msg.wa_type}]`}</p>
               )}
@@ -205,7 +229,44 @@ export function WhatsAppConversation({ chat, messages, onSendMessage, onBack, se
       </div>
 
       {/* Input */}
-      <div className="flex items-center gap-2 p-3 border-t border-border bg-muted/30">
+      <div className="flex items-center gap-1.5 p-3 border-t border-border bg-muted/30">
+        <input
+          type="file"
+          accept="image/*,video/*,audio/*"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file || !chat?.phone) return;
+            try {
+              // Convert to base64 data URL for sending
+              const reader = new FileReader();
+              reader.onload = async () => {
+                const base64 = reader.result as string;
+                const mediaType = file.type.startsWith("image/") ? "image" :
+                  file.type.startsWith("video/") ? "video" :
+                  file.type.startsWith("audio/") ? "audio" : "document";
+                try {
+                  if (mediaType === "audio") {
+                    await sendAudio(chat.phone, base64);
+                  } else {
+                    await sendMedia(chat.phone, base64, mediaType, undefined, file.type);
+                  }
+                  toast.success("Mídia enviada!");
+                } catch (err: any) {
+                  toast.error("Erro ao enviar: " + (err?.message || ""));
+                }
+              };
+              reader.readAsDataURL(file);
+            } catch (err: any) {
+              toast.error("Erro: " + (err?.message || ""));
+            }
+            e.target.value = "";
+          }}
+          className="hidden"
+          id="media-upload"
+        />
+        <label htmlFor="media-upload" className="h-9 w-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors">
+          <Paperclip className="h-5 w-5" />
+        </label>
         <Input
           value={text}
           onChange={e => setText(e.target.value)}
@@ -223,6 +284,16 @@ export function WhatsAppConversation({ chat, messages, onSendMessage, onBack, se
           <Send className="h-4 w-4" />
         </Button>
       </div>
+
+      {/* Full image viewer */}
+      {fullImage && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center cursor-pointer" onClick={() => setFullImage(null)}>
+          <img src={fullImage} alt="" className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg" />
+          <button className="absolute top-4 right-4 text-white bg-black/50 rounded-full p-2" onClick={() => setFullImage(null)}>
+            <X className="h-6 w-6" />
+          </button>
+        </div>
+      )}
 
       {/* Edit dialog */}
       <Dialog open={editDialogOpen} onOpenChange={(o) => { setEditDialogOpen(o); if (!o) setEditingResponse(null); }}>

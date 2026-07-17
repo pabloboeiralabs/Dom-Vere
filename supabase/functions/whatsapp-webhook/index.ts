@@ -101,13 +101,64 @@ function extractMessageText(body: any): string {
     body?.wa_text ||
     msg?.wa_text ||
     msg?.text ||
-    msg?.text ||
-    // Fallback for button/carousel clicks (TemplateButtonReplyMessage)
+    // Caption from media messages
+    msg?.imageMessage?.caption ||
+    msg?.videoMessage?.caption ||
+    msg?.documentMessage?.caption ||
+    msg?.audioMessage?.caption ||
+    // Fallback for button/carousel clicks
     msg?.content?.selectedDisplayText ||
     msg?.selectedDisplayText ||
     msg?.buttonOrListid ||
     "";
   return text.trim();
+}
+
+function extractMediaInfo(body: any): { media_url?: string; media_type?: string; media_mimetype?: string } {
+  const msg = body?.data?.Message || body?.data?.message || body?.message || body;
+
+  // Image
+  if (msg?.imageMessage) {
+    return {
+      media_url: msg.imageMessage.url || msg.imageMessage.jpegThumbnail || "",
+      media_type: "image",
+      media_mimetype: msg.imageMessage.mimetype || "image/jpeg",
+    };
+  }
+  // Video
+  if (msg?.videoMessage) {
+    return {
+      media_url: msg.videoMessage.url || "",
+      media_type: "video",
+      media_mimetype: msg.videoMessage.mimetype || "video/mp4",
+    };
+  }
+  // Audio (voice note)
+  if (msg?.audioMessage || msg?.pttMessage) {
+    const audio = msg.audioMessage || msg.pttMessage || {};
+    return {
+      media_url: audio.url || "",
+      media_type: "audio",
+      media_mimetype: audio.mimetype || "audio/ogg",
+    };
+  }
+  // Document
+  if (msg?.documentMessage) {
+    return {
+      media_url: msg.documentMessage.url || "",
+      media_type: "document",
+      media_mimetype: msg.documentMessage.mimetype || "application/octet-stream",
+    };
+  }
+  // Sticker
+  if (msg?.stickerMessage) {
+    return {
+      media_url: msg.stickerMessage.url || "",
+      media_type: "sticker",
+      media_mimetype: msg.stickerMessage.mimetype || "image/webp",
+    };
+  }
+  return {};
 }
 
 function extractButtonId(body: any): string {
@@ -877,6 +928,7 @@ Deno.serve(async (req) => {
 
     const isGroup = isGroupMessage(body);
     const pushName = extractPushName(body);
+    const mediaInfo = extractMediaInfo(body);
 
     // Save inbound/outbound message immediately to prevent race conditions
     await supabase.from("whatsapp_messages").insert({
@@ -886,7 +938,10 @@ Deno.serve(async (req) => {
       text: text || `[Button: ${buttonId}]`,
       from_me: isMe,
       wa_timestamp: Date.now(),
-      push_name: isMe ? "Você" : pushName || null
+      push_name: isMe ? "Você" : pushName || null,
+      media_url: mediaInfo.media_url || null,
+      media_type: mediaInfo.media_type || null,
+      media_mimetype: mediaInfo.media_mimetype || null,
     });
 
     const phoneDigits = sender.replace(/\D/g, "");
