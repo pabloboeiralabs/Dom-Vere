@@ -480,29 +480,56 @@ export default function Scheduling() {
                 <p className="text-sm font-medium text-primary mt-1.5 capitalize">{dayName}</p>
               )}
             </div>
-            {/* Dias da semana que o profissional trabalha */}
+            {/* Dias da semana — clicáveis para escolher data */}
             {form.professional_id && schedules[form.professional_id] && (
               <div>
-                <Label className="mb-1.5 block">Dias de trabalho</Label>
+                <Label className="mb-1.5 block">Escolha o dia</Label>
                 <div className="flex gap-1 flex-wrap">
                   {(() => {
                     const DAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
                     const profSchedules = schedules[form.professional_id] || [];
                     const workingDays = profSchedules.filter(s => s.active).map(s => s.day_of_week);
+                    const today = new Date();
                     return DAY_LABELS.map((label, idx) => {
                       const works = workingDays.includes(idx);
                       const selectedDay = form.date ? parseLocalDate(form.date).getDay() : null;
                       const isSelected = selectedDay === idx;
+                      // Calcular próxima ocorrência deste dia da semana
+                      const getNextDate = () => {
+                        const d = new Date(today);
+                        const currentDay = d.getDay();
+                        let daysUntil = idx - currentDay;
+                        if (daysUntil < 0) daysUntil += 7;
+                        if (daysUntil === 0) return d; // hoje
+                        d.setDate(d.getDate() + daysUntil);
+                        return d;
+                      };
+                      const nextDate = getNextDate();
+                      const dateLabel = works ? format(nextDate, "dd/MM") : "";
                       return (
-                        <span key={idx} className={`text-[10px] px-2 py-0.5 rounded-full border transition-all ${
-                          works
-                            ? isSelected
-                              ? "bg-primary text-primary-foreground border-primary font-medium"
-                              : "bg-primary/10 text-primary border-primary/20"
-                            : "bg-muted/30 text-muted-foreground/40 border-border/20"
-                        }`}>
-                          {label}
-                        </span>
+                        <button
+                          key={idx}
+                          type="button"
+                          disabled={!works}
+                          onClick={() => {
+                            const iso = format(nextDate, "yyyy-MM-dd");
+                            setForm({
+                              ...form,
+                              date: iso,
+                              date_input: formatDateForInput(iso),
+                            });
+                          }}
+                          className={`text-[10px] px-2 py-1 rounded-full border transition-all ${
+                            works
+                              ? isSelected
+                                ? "bg-primary text-primary-foreground border-primary font-medium cursor-default"
+                                : "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20 cursor-pointer"
+                              : "bg-muted/30 text-muted-foreground/40 border-border/20 cursor-not-allowed"
+                          }`}
+                          title={works ? `${label} ${dateLabel}` : `${label} — folga`}
+                        >
+                          {label} {works && <span className="opacity-70 ml-0.5">{dateLabel}</span>}
+                        </button>
                       );
                     });
                   })()}
