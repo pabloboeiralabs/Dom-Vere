@@ -107,6 +107,19 @@ export default function Scheduling() {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("weekly");
   const [linkCopied, setLinkCopied] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const filteredCustomers = useMemo(() =>
+    customerSearch.trim()
+      ? customers.filter(c => c.name.toLowerCase().includes(customerSearch.toLowerCase()))
+      : customers,
+    [customers, customerSearch]
+  );
+  const dayName = useMemo(() => {
+    if (!form.date) return null;
+    try {
+      return format(parseLocalDate(form.date), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+    } catch { return null; }
+  }, [form.date]);
   const [form, setForm] = useState({
     professional_id: "",
     customer_id: "",
@@ -418,12 +431,22 @@ export default function Scheduling() {
             </div>
             <div>
               <Label>Cliente</Label>
-              <Select value={form.customer_id} onValueChange={(v) => setForm({ ...form, customer_id: v })}>
+              <Input
+                placeholder="🔍 Buscar cliente..."
+                value={customerSearch}
+                onChange={(e) => setCustomerSearch(e.target.value)}
+                className="mb-1.5 h-8 text-sm"
+              />
+              <Select value={form.customer_id} onValueChange={(v) => { setForm({ ...form, customer_id: v }); setCustomerSearch(""); }}>
                 <SelectTrigger><SelectValue placeholder="Selecione (opcional)" /></SelectTrigger>
-                <SelectContent>
-                  {customers.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
+                <SelectContent className="max-h-[200px]">
+                  {filteredCustomers.length === 0 ? (
+                    <div className="text-xs text-muted-foreground py-2 px-2 text-center">Nenhum cliente encontrado</div>
+                  ) : (
+                    filteredCustomers.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -453,6 +476,9 @@ export default function Scheduling() {
                   });
                 }}
               />
+              {dayName && (
+                <p className="text-xs text-muted-foreground mt-1 capitalize">{dayName}</p>
+              )}
             </div>
             {/* Horários disponíveis */}
             {form.professional_id && form.date && (
