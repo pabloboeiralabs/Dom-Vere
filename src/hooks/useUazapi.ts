@@ -31,6 +31,8 @@ export interface UazapiChat {
   wa_name: string;
   image: string;
   imagePreview: string;
+  profilePicUrl?: string;
+  customerName?: string;
   wa_lastMessageTextVote: string;
   wa_lastMsgTimestamp: number;
   wa_unreadCount: number;
@@ -200,7 +202,7 @@ export function useUazapi() {
         qrcode: qrcodeBase64,
         paircode: paircode,
         profileName: data?.data?.Name || undefined,
-        profilePicUrl: undefined,
+        profilePicUrl: data?.data?.profilePicUrl || data?.data?.profilePictureUrl || undefined,
       };
       setInstanceStatus(normalized);
       return normalized;
@@ -278,6 +280,56 @@ export function useUazapi() {
     return { providerDeleted: isEvolution };
   }, [apiCall, user]);
 
+  // Enrich chats with customer names and profile photos
+  const enrichChatsWithCustomerData = useCallback(async (chats: UazapiChat[]): Promise<UazapiChat[]> => {
+    if (!user || chats.length === 0) return chats;
+    try {
+      // Build a map of phone -> customer data
+      const phones = chats.map(c => c.phone).filter(Boolean);
+      if (phones.length === 0) return chats;
+
+      // Query customers matching any of the phone numbers
+      const { data: customers } = await supabase
+        .from("customers")
+        .select("name, phone, photo_url")
+        .eq("user_id", user.id);
+
+      const customerMap = new Map<string, { name: string; photo_url?: string }>();
+      for (const cust of (customers || [])) {
+        if (!cust.phone) continue;
+        const normalizedPhone = cust.phone.replace(/\D/g, "");
+        // Store by raw digits for matching
+        customerMap.set(normalizedPhone, { name: cust.name, photo_url: cust.photo_url });
+        // Also store with 55 prefix
+        customerMap.set("55" + normalizedPhone, { name: cust.name, photo_url: cust.photo_url });
+        // Also store without 55 prefix
+        if (normalizedPhone.startsWith("55") && normalizedPhone.length > 11) {
+          customerMap.set(normalizedPhone.slice(2), { name: cust.name, photo_url: cust.photo_url });
+        }
+      }
+
+      // Try to fetch profile pictures from Evolution API (bulk)
+      const isEvolution = configRef.current?.api_url.includes("evolution");
+
+      return chats.map(chat => {
+        const cleanPhone = chat.phone.replace(/\D/g, "");
+        const customer = customerMap.get(cleanPhone);
+        // Update with customer data if available
+        if (customer) {
+          chat.customerName = customer.name;
+          // Use customer's photo_url if available and chat has no image
+          if (!chat.profilePicUrl && customer.photo_url) {
+            chat.profilePicUrl = customer.photo_url;
+          }
+        }
+        return chat;
+      });
+    } catch (e) {
+      console.error("Erro ao enriquecer chats com dados de clientes:", e);
+      return chats;
+    }
+  }, [user]);
+
   const getChats = useCallback(async (): Promise<UazapiChat[]> => {
     const isEvolution = configRef.current?.api_url.includes("evolution");
     if (isEvolution) {
@@ -305,6 +357,8 @@ export function useUazapi() {
             wa_name: m.push_name || phone,
             image: "",
             imagePreview: "",
+            profilePicUrl: undefined,
+            customerName: undefined,
             wa_lastMessageTextVote: m.text || "",
             wa_lastMsgTimestamp: Number(m.wa_timestamp) || 0,
             wa_unreadCount: 0,
@@ -313,23 +367,39 @@ export function useUazapi() {
           });
         }
       }
-      return Array.from(chatsMap.values());
+      const chats = Array.from(chatsMap.values());
+      return await enrichChatsWithCustomerData(chats);
     }
 
-    const method = isEvolution ? "GET" : "POST";
-    const data = await apiCall(method, "/chat/find", {});
+    const data = await apiCall("POST", "/chat/find", {});
     const arr = Array.isArray(data) ? data : (data?.chats || []);
 
-    return arr.map((c: any) => {
-      return c;
-    }).filter((c: any) => {
-      const chatId = c.wa_chatid;
-      if (!chatId) return false;
-      const isValidType = chatId.endsWith("@s.whatsapp.net") || chatId.endsWith("@g.us");
-      const baseId = chatId.replace("@s.whatsapp.net", "").replace("@g.us", "").trim();
+    const chats = arr.map((c: any) => {
+      const phone = (c.wa_chatid || c.chatId || "").replace("@s.whatsapp.net", "").replace("@g.us", "");
+      return {
+        wa_chatid: c.wa_chatid || c.chatId || "",
+        name: c.pushName || c.name || c.wa_name || phone,
+        wa_contactName: c.pushName || c.name || c.wa_name || phone,
+        wa_name: c.pushName || c.name || c.wa_name || phone,
+        image: c.profilePicUrl || c.image || "",
+        imagePreview: c.profilePicUrl || c.imagePreview || c.image || "",
+        profilePicUrl: c.profilePicUrl || c.image || "",
+        customerName: undefined,
+        wa_lastMessageTextVote: c.wa_lastMessageTextVote || c.lastMessage || "",
+        wa_lastMsgTimestamp: Number(c.wa_lastMsgTimestamp || c.lastMsgTimestamp || 0),
+        wa_unreadCount: c.wa_unreadCount || c.unreadCount || 0,
+        wa_isGroup: (c.wa_chatid || c.chatId || "").endsWith("@g.us"),
+        phone: phone,
+      } as UazapiChat;
+    }).filter((c: UazapiChat) => {
+      if (!c.wa_chatid) return false;
+      const isValidType = c.wa_chatid.endsWith("@s.whatsapp.net") || c.wa_chatid.endsWith("@g.us");
+      const baseId = c.wa_chatid.replace("@s.whatsapp.net", "").replace("@g.us", "").trim();
       return isValidType && !!baseId && baseId !== "0";
     });
-  }, [apiCall, user]);
+
+    return await enrichChatsWithCustomerData(chats);
+  }, [apiCall, user, enrichChatsWithCustomerData]);
 
   const getMessages = useCallback(async (chatid: string, limit = 50): Promise<UazapiMessage[]> => {
     const isEvolution = configRef.current?.api_url.includes("evolution");

@@ -76,7 +76,8 @@ export function WhatsAppConversation({ chat, messages, onSendMessage, onBack, se
     }
   };
 
-  const name = chat.name || chat.wa_contactName || chat.wa_name || chat.phone || chat.wa_chatid;
+  const name = chat.customerName || chat.name || chat.wa_contactName || chat.wa_name || chat.phone || chat.wa_chatid;
+  const avatarUrl = chat.profilePicUrl || chat.imagePreview || chat.image;
 
   return (
     <div className="flex flex-col h-full">
@@ -88,14 +89,19 @@ export function WhatsAppConversation({ chat, messages, onSendMessage, onBack, se
           </Button>
         )}
         <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
-          {chat.imagePreview || chat.image ? (
-            <img src={chat.imagePreview || chat.image} alt="" className="h-full w-full object-cover rounded-full" />
-          ) : (
-            <span className="text-sm font-medium text-muted-foreground">{name.charAt(0).toUpperCase()}</span>
-          )}
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="" className="h-full w-full object-cover rounded-full" onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+              (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+            }} />
+          ) : null}
+          <span className={`text-sm font-medium text-muted-foreground ${avatarUrl ? 'hidden' : ''}`}>{name.charAt(0).toUpperCase()}</span>
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-medium text-sm text-foreground truncate">{name}</p>
+          {chat.customerName && chat.customerName !== chat.name && (
+            <p className="text-[10px] text-muted-foreground truncate">{chat.name}</p>
+          )}
         </div>
       </div>
 

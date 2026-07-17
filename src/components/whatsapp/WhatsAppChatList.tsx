@@ -28,7 +28,7 @@ export function WhatsAppChatList({ chats, activeChatId, onSelectChat, selectionM
 
   const filtered = chats
     .filter(c => {
-      const name = c.name || c.wa_contactName || c.wa_name || c.phone || "";
+      const name = c.customerName || c.name || c.wa_contactName || c.wa_name || c.phone || "";
       return name.toLowerCase().includes(search.toLowerCase());
     })
     .sort((a, b) => (b.wa_lastMsgTimestamp || 0) - (a.wa_lastMsgTimestamp || 0));
@@ -51,7 +51,8 @@ export function WhatsAppChatList({ chats, activeChatId, onSelectChat, selectionM
       {/* Chat list */}
       <div className="flex-1 overflow-y-auto">
         {filtered.map(chat => {
-          const name = chat.name || chat.wa_contactName || chat.wa_name || chat.phone || chat.wa_chatid;
+          const name = chat.customerName || chat.name || chat.wa_contactName || chat.wa_name || chat.phone || chat.wa_chatid;
+          const avatarUrl = chat.profilePicUrl || chat.imagePreview || chat.image;
           const isActive = chat.wa_chatid === activeChatId;
           const isSelected = selectedChats?.has(chat.wa_chatid);
 
@@ -71,13 +72,15 @@ export function WhatsAppChatList({ chats, activeChatId, onSelectChat, selectionM
                 </div>
               )}
               <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
-                {chat.imagePreview || chat.image ? (
-                  <img src={chat.imagePreview || chat.image} alt="" className="h-full w-full object-cover rounded-full" />
-                ) : (
-                  <span className="text-lg font-medium text-muted-foreground">
-                    {name.charAt(0).toUpperCase()}
-                  </span>
-                )}
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="" className="h-full w-full object-cover rounded-full" onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                    (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                  }} />
+                ) : null}
+                <span className={`text-lg font-medium text-muted-foreground ${avatarUrl ? 'hidden' : ''}`}>
+                  {name.charAt(0).toUpperCase()}
+                </span>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between">
