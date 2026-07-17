@@ -200,9 +200,9 @@ const NotifItem = ({
         <div className="flex items-start gap-3">
           {!n.read && <div className="h-2 w-2 rounded-full bg-[#D4AF37] mt-1.5 flex-shrink-0 animate-pulse" />}
           <div className={`flex-1 min-w-0 ${n.read ? "ml-5" : ""}`}>
-            <p className="text-[13px] font-bold leading-snug text-foreground">{n.title}</p>
-            <p className="text-xs text-foreground/70 mt-0.5 line-clamp-2">{n.body}</p>
-            <p className="text-[10px] text-foreground/50 mt-1.5 font-medium">{format(new Date(n.created_at), "dd/MM 'às' HH:mm")}</p>
+            <p className="text-[13px] font-bold leading-snug text-white">{n.title}</p>
+            <p className="text-xs text-slate-300 mt-0.5 line-clamp-2">{n.body}</p>
+            <p className="text-[10px] text-slate-500 mt-1.5 font-medium">{format(new Date(n.created_at), "dd/MM 'às' HH:mm")}</p>
           </div>
         </div>
       </motion.div>
@@ -1222,26 +1222,26 @@ export default function BarberHome() {
       {notifOpen && (
         <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-md flex items-end sm:items-center justify-center animate-in fade-in duration-200" onClick={() => setNotifOpen(false)}>
           <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="bg-card w-full sm:max-w-md sm:rounded-3xl max-h-[75vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border/30">
+            className="bg-[#131B2E] w-full sm:max-w-md sm:rounded-3xl max-h-[75vh] flex flex-col shadow-2xl border border-white/[0.06]" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
               <div className="flex items-center gap-2">
-                <Bell className="h-4 w-4 text-primary" />
-                <h3 className="font-semibold text-sm">Notificações</h3>
+                <Bell className="h-4 w-4 text-[#D4AF37]" />
+                <h3 className="font-semibold text-sm text-white">Notificações</h3>
                 {unread > 0 && <Badge variant="destructive" className="text-[9px] px-1.5 py-0">{unread}</Badge>}
               </div>
               <div className="flex items-center gap-2">
-                {unread > 0 && <button onClick={markRead} className="text-xs text-primary font-medium hover:underline">Ler todas</button>}
-                <button onClick={() => setNotifOpen(false)} className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-muted transition-colors"><X className="h-4 w-4" /></button>
+                {unread > 0 && <button onClick={markRead} className="text-xs text-[#D4AF37] font-medium hover:underline">Ler todas</button>}
+                <button onClick={() => setNotifOpen(false)} className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-white/[0.04] transition-colors"><X className="h-4 w-4 text-slate-400" /></button>
               </div>
             </div>
             <div className="overflow-y-auto flex-1 min-h-0 p-2">
               {notifs.length === 0 ? (
                 <div className="text-center py-16">
-                  <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-3">
-                    <Bell className="h-7 w-7 text-muted-foreground/30" />
+                  <div className="w-14 h-14 rounded-2xl bg-white/[0.03] flex items-center justify-center mx-auto mb-3">
+                    <Bell className="h-7 w-7 text-slate-600" />
                   </div>
-                  <p className="text-sm font-medium text-muted-foreground">Tudo em dia</p>
-                  <p className="text-xs text-muted-foreground/50 mt-0.5">Nenhuma notificação no momento</p>
+                  <p className="text-sm font-medium text-white">Tudo em dia</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Nenhuma notificação no momento</p>
                 </div>
               ) : notifs.map(n => (
                 <NotifItem
