@@ -523,6 +523,74 @@ export default function BarberHome() {
           .eq("appointment_id", checkoutAppt.id);
       }
 
+      // 3. Save payment splits and cash movements
+      const splits = checkoutSplits.length > 0 ? checkoutSplits : [
+        { payment_method: paymentMethod as any, amount: total }
+      ];
+
+      // Fetch the financial entry that was just created/updated
+      const { data: finEntry } = await supabase
+        .from("financial_entries")
+        .select("id")
+        .eq("appointment_id", checkoutAppt.id)
+        .maybeSingle();
+
+      if (finEntry) {
+        // Save payment splits
+        for (const split of splits) {
+          const { data: splitRow } = await supabase.from("payment_splits").insert({
+            financial_entry_id: finEntry.id,
+            payment_method: split.payment_method,
+            amount: split.amount,
+            cash_received: split.cash_received || null,
+            cash_change: split.cash_change || null,
+          }).select("id").single();
+
+          // Create cash movements for cash payments (if register is open)
+          if (split.payment_method === "dinheiro" && splitRow) {
+            // Check if cash register is open
+            const { data: openReg } = await supabase
+              .from("cash_register_sessions")
+              .select("id")
+              .eq("user_id", professional.user_id)
+              .eq("status", "open")
+              .maybeSingle();
+
+            if (openReg) {
+              // Recebimento
+              await supabase.from("cash_movements").insert({
+                cash_register_id: openReg.id,
+                user_id: professional.user_id,
+                type: "entrada",
+                category: "recebimento",
+                amount: split.amount,
+                payment_method: "dinheiro",
+                payment_split_id: splitRow.id,
+                financial_entry_id: finEntry.id,
+                description: `Recebido de ${checkoutAppt.customer_name} — ${checkoutAppt.service_name}`,
+              });
+
+              // Troco
+              if ((split.cash_change || 0) > 0) {
+                await supabase.from("cash_movements").insert({
+                  cash_register_id: openReg.id,
+                  user_id: professional.user_id,
+                  type: "saida",
+                  category: "troco",
+                  amount: split.cash_change!,
+                  payment_method: "dinheiro",
+                  payment_split_id: splitRow.id,
+                  description: `Troco para ${checkoutAppt.customer_name}`,
+                });
+
+                // Recalculate expected balance
+                await supabase.rpc("recalculate_expected_balance", { p_session_id: openReg.id });
+              }
+            }
+          }
+        }
+      }
+
       toast.success("Atendimento concluído com sucesso!");
       setCheckoutDialogOpen(false);
       setCheckoutAppt(null);
