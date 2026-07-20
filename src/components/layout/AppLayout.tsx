@@ -6,7 +6,7 @@ import { usePushSubscription } from "@/hooks/usePushSubscription";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Bell, LogOut, X } from "lucide-react";
+import { Bell, LogOut, X, Trash2 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useRef, useCallback, useState, useEffect } from "react";
 import { toast } from "sonner";
@@ -147,7 +147,7 @@ function MainContent() {
                 notifications.map((n: any) => (
                   <div
                     key={n.id}
-                    className={`p-3 rounded-xl mb-1 cursor-pointer ${n.read ? "bg-transparent" : "bg-primary/5"}`}
+                    className={`p-3 rounded-xl mb-1 cursor-pointer group relative ${n.read ? "bg-transparent hover:bg-muted/30" : "bg-primary/5 hover:bg-primary/10"}`}
                     onClick={async () => {
                       await supabase.from("client_notifications").update({ read: true }).eq("id", n.id);
                       setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x));
@@ -164,6 +164,18 @@ function MainContent() {
                           {format(new Date(n.created_at), "dd/MM HH:mm")}
                         </p>
                       </div>
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          await supabase.rpc("client_delete_notification", { p_notification_id: n.id });
+                          setNotifications(prev => prev.filter(x => x.id !== n.id));
+                          if (!n.read) setUnreadCount(c => Math.max(0, c - 1));
+                        }}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 rounded-md flex items-center justify-center hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex-shrink-0"
+                        title="Excluir notificação"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   </div>
                 ))
