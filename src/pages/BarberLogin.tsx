@@ -11,10 +11,12 @@ import { useNavigate, Navigate } from "react-router-dom";
 export default function BarberLogin() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  const LOGIN_DOMAIN = "barber.local";
 
   if (user) {
     if (user.must_change_password) return <Navigate to="/change-password" replace />;
@@ -24,13 +26,15 @@ export default function BarberLogin() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (!email || !password) { setError("Preencha email e senha"); return; }
+    if (!username || !password) { setError("Preencha usuário e senha"); return; }
     setBusy(true);
     try {
+      // Append domain to username for Supabase auth
+      const email = `${username.toLowerCase().trim().replace(/\s+/g, ".")}@${LOGIN_DOMAIN}`;
       await login(email, password);
       navigate("/barber-panel", { replace: true });
     } catch (err: any) {
-      setError(err?.message || "Email ou senha inválidos");
+      setError(err?.message || "Usuário ou senha inválidos");
     } finally {
       setBusy(false);
     }
@@ -68,11 +72,11 @@ export default function BarberLogin() {
           <CardContent className="p-6">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="email" className="text-xs font-semibold text-slate-400">Email</Label>
+                <Label htmlFor="username" className="text-xs font-semibold text-slate-400">Usuário</Label>
                 <Input
-                  id="email" type="email" autoComplete="email"
-                  placeholder="seu@email.com"
-                  value={email} onChange={e => setEmail(e.target.value)}
+                  id="username" autoComplete="username"
+                  placeholder="seu.usuario"
+                  value={username} onChange={e => setUsername(e.target.value)}
                   className="rounded-xl h-11 bg-[#0E1322] border-white/[0.08] text-white placeholder-slate-500 focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]"
                 />
               </div>
