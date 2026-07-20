@@ -218,6 +218,7 @@ export default function BarberHome() {
     (localStorage.getItem("barber_tab") as any) || "home"
   );
   const [professional, setProfessional] = useState<any>(null);
+  const [professionalLogin, setProfessionalLogin] = useState<string>("");
   const [appts, setAppts] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -367,6 +368,13 @@ export default function BarberHome() {
         if (!selectedProfId) {
           setSelectedProfId(prof.id);
         }
+        // Fetch login (username) from profiles table
+        supabase.from("profiles").select("email").eq("professional_id", prof.id).maybeSingle().then(({ data: profData }) => {
+          if (profData?.email) {
+            const login = profData.email.replace("@barber.local", "");
+            setProfessionalLogin(login);
+          }
+        });
       } else {
         console.warn("Nenhum profissional encontrado com ID:", user.professional_id);
       }
@@ -385,6 +393,13 @@ export default function BarberHome() {
         if (!selectedProfId) {
           setSelectedProfId(firstProf.id);
         }
+        // Fetch login for admin's first professional too
+        supabase.from("profiles").select("email").eq("professional_id", firstProf.id).maybeSingle().then(({ data: profData }) => {
+          if (profData?.email) {
+            const login = profData.email.replace("@barber.local", "");
+            setProfessionalLogin(login);
+          }
+        });
       }
     }
 
@@ -1243,6 +1258,9 @@ export default function BarberHome() {
                         )}
                       </div>
                       <h2 className="text-lg font-bold text-white mt-3">{professional.name}</h2>
+                      {professionalLogin && (
+                        <p className="text-xs text-[#D4AF37] mt-0.5 font-medium">@{professionalLogin}</p>
+                      )}
                       <p className="text-xs text-slate-400 mt-1">Comissão: {professional.commission_percent || 0}%</p>
                       <div className="flex items-center justify-center gap-2 mt-4">
                         <div className="px-3 py-1 bg-white/[0.04] border border-white/[0.06] rounded-full text-xs font-semibold text-slate-300">{stats.semana} atendimentos</div>

@@ -131,6 +131,18 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Force confirm email (supabase may not auto-confirm for admin-created users)
+    await adminClient.auth.admin.updateUserById(created.user.id, { email_confirm: true });
+    // Raw SQL fallback to clear confirmation_token
+    await adminClient.rpc("admin_confirm_user", { p_user_id: created.user.id }).catch(async () => {
+      // If RPC fails, try direct SQL
+      await fetch(`${supabaseUrl}/rest/v1/rpc/admin_confirm_user`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${serviceRoleKey}`, "apikey": anonKey },
+        body: JSON.stringify({ p_user_id: created.user.id }),
+      }).catch(() => {});
+    });
+
     const { error: normalizeError } = await adminClient.rpc("normalize_auth_user_tokens", { p_user_id: created.user.id });
     if (normalizeError) {
       return new Response(JSON.stringify({ error: `Migração de autenticação pendente: ${normalizeError.message}` }), {
