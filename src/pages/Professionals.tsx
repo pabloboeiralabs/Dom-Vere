@@ -224,7 +224,7 @@ export default function Professionals() {
           } else if (data?.error) {
             toast.error("Erro ao criar conta de acesso: " + data.error);
           } else {
-            toast.success(`Conta de acesso criada: ${loginClean}@barber.local`);
+            toast.success(`Usuário de acesso criado: @${loginClean}`);
             setProfAccounts(prev => ({ ...prev, [finalProfId]: { email: `${loginClean}@barber.local` } }));
           }
           setInviteLoading(false);
@@ -489,12 +489,12 @@ export default function Professionals() {
 
                 {/* Account Access sub-section */}
                 <div className="border-t border-border/30 pt-4 mt-2">
-                  <h3 className="text-sm font-bold text-foreground mb-3">E-Mail de Acesso para o PWA</h3>
+                  <h3 className="text-sm font-bold text-foreground mb-3">Usuário de Acesso para o PWA</h3>
                   {profAccounts[editing.id] ? (
                     <div className="bg-muted/40 border border-border/30 rounded-xl p-3.5 flex items-center justify-between gap-3">
                       <div className="space-y-1">
-                        <p className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">E-mail de acesso para o PWA</p>
-                        <p className="text-sm font-mono text-foreground font-semibold">{profAccounts[editing.id].email}</p>
+                        <p className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">Usuário de acesso</p>
+                        <p className="text-sm font-mono text-foreground font-semibold">@{profAccounts[editing.id].email.replace('@barber.local', '')}</p>
                       </div>
                       <Button
                         type="button"
@@ -511,7 +511,7 @@ export default function Professionals() {
                   ) : (
                     <div className="space-y-3 bg-muted/20 border border-border/30 rounded-xl p-4">
                       <div>
-                        <Label className="text-xs font-semibold text-muted-foreground uppercase">Criar E-mail de Acesso (Login / Usuário)</Label>
+                        <Label className="text-xs font-semibold text-muted-foreground uppercase">Criar Usuário de Acesso</Label>
                         <Input
                           type="text"
                           value={inviteEmail}
@@ -520,13 +520,13 @@ export default function Professionals() {
                           className="rounded-xl mt-1.5 h-10 bg-background"
                         />
                         <p className="text-[11px] text-muted-foreground mt-1">
-                          Insira um nome de usuário (ex: fulano.silva) para gerar o e-mail de acesso.
+                          Insira um nome de usuário (ex: fulano.silva) para criar o acesso ao app.
                         </p>
                         {inviteEmail.trim() && (
                           <div className="mt-3 p-3 bg-background rounded-lg text-xs space-y-1.5 border border-border/30">
                             <p className="font-semibold text-foreground">Credenciais que serão criadas:</p>
                             <p className="text-muted-foreground">
-                              📧 <strong>E-mail de acesso:</strong> <span className="font-mono text-primary font-bold">{inviteEmail.trim().toLowerCase().replace(/\s+/g, ".")}@barber.local</span>
+                              👤 <strong>Usuário:</strong> <span className="font-mono text-primary font-bold">@{inviteEmail.trim().toLowerCase().replace(/\s+/g, ".")}</span>
                             </p>
                             <p className="text-muted-foreground">
                               🔑 <strong>Senha padrão:</strong> <span className="font-mono font-bold">123456</span>
@@ -603,7 +603,7 @@ export default function Professionals() {
 
               {/* Login creation panel (Always visible) */}
               <div className="space-y-3 bg-muted/20 border border-border/30 rounded-xl p-4">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">E-mail de Acesso para o PWA (Opcional)</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Usuário de Acesso para o PWA (Opcional)</h3>
                 <div>
                   <Label className="text-xs text-muted-foreground uppercase">Nome de Usuário / Login</Label>
                   <Input
@@ -614,13 +614,13 @@ export default function Professionals() {
                     className="rounded-xl mt-1.5 h-10 bg-background"
                   />
                   <p className="text-[11px] text-muted-foreground mt-1">
-                    Insira um nome de usuário (ex: fulano.silva) para gerar o e-mail de acesso.
+                    Insira um nome de usuário (ex: fulano.silva) para criar o acesso ao app.
                   </p>
                   {inviteEmail.trim() && (
                     <div className="mt-3 p-3 bg-background rounded-lg text-xs space-y-1.5 border border-border/30">
                       <p className="font-semibold text-foreground">Credenciais para login no aplicativo PWA:</p>
                       <p className="text-muted-foreground">
-                        📧 <strong>E-mail de acesso:</strong> <span className="font-mono text-primary font-bold">{inviteEmail.trim().toLowerCase().replace(/\s+/g, ".")}@barber.local</span>
+                        👤 <strong>Usuário:</strong> <span className="font-mono text-primary font-bold">@{inviteEmail.trim().toLowerCase().replace(/\s+/g, ".")}</span>
                       </p>
                       <p className="text-muted-foreground">
                         🔑 <strong>Senha padrão:</strong> <span className="font-mono font-bold">123456</span>
