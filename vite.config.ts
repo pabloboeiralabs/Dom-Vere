@@ -48,17 +48,22 @@ export default defineConfig(({ mode }) => ({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ["react", "react-dom", "react-router-dom"],
-          ui: [
-            "@radix-ui/react-dialog",
-            "@radix-ui/react-dropdown-menu",
-            "@radix-ui/react-tabs",
-            "@radix-ui/react-popover",
-            "@radix-ui/react-select",
-            "@radix-ui/react-tooltip",
-          ],
-          charts: ["recharts"],
+        manualChunks(id: string) {
+          // Core vendor
+          if (id.includes("node_modules/react") || id.includes("node_modules/react-dom") || id.includes("node_modules/react-router")) return "vendor";
+          // UI library
+          if (id.includes("node_modules/@radix-ui")) return "ui";
+          // Charts
+          if (id.includes("node_modules/recharts")) return "charts";
+          // Supabase
+          if (id.includes("node_modules/@supabase")) return "supabase";
+          // Date utilities
+          if (id.includes("node_modules/date-fns")) return "datefns";
+          // Large isolated libs
+          if (id.includes("node_modules/xlsx")) return "xlsx";
+          if (id.includes("node_modules/framer-motion")) return "framer";
+          if (id.includes("node_modules/qrcode")) return "qrcode";
+          if (id.includes("node_modules/@xyflow")) return "xyflow";
         },
       },
     },
