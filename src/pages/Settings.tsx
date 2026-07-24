@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import { Plus, Trash2, Pencil, Bell, Clock } from "lucide-react";
 import WhatsAppTemplatesTab from "@/components/settings/WhatsAppTemplatesTab";
 
-interface Service { id: string; name: string; price: number; active: boolean; }
+interface Service { id: string; name: string; price: number; duration_minutes: number; active: boolean; }
 interface Plan { id: string; name: string; price: number; period: string; usage_limit: number; validity_days: number; active: boolean; services?: PlanService[]; }
 interface PlanService { service_id: string; service_name: string; quantity: number; }
 
@@ -29,9 +29,11 @@ export default function Settings() {
   const [servicesLoaded, setServicesLoaded] = useState(false);
   const [newServiceName, setNewServiceName] = useState("");
   const [newServicePrice, setNewServicePrice] = useState("0");
+  const [newServiceDuration, setNewServiceDuration] = useState("30");
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [editServiceName, setEditServiceName] = useState("");
   const [editServicePrice, setEditServicePrice] = useState("");
+  const [editServiceDuration, setEditServiceDuration] = useState("30");
 
   // Plans state
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -66,11 +68,11 @@ export default function Settings() {
       const { count } = await supabase.from("services").select("*", { count: "exact", head: true }).eq("user_id", user.id);
       if (count === 0) {
         await supabase.from("services").insert([
-          { user_id: user.id, name: "Corte", price: 0 },
-          { user_id: user.id, name: "Barba", price: 0 },
-          { user_id: user.id, name: "Corte + Barba", price: 0 },
-          { user_id: user.id, name: "Hidratação", price: 0 },
-          { user_id: user.id, name: "Sobrancelha", price: 0 },
+          { user_id: user.id, name: "Corte", price: 0, duration_minutes: 30 },
+          { user_id: user.id, name: "Barba", price: 0, duration_minutes: 20 },
+          { user_id: user.id, name: "Corte + Barba", price: 0, duration_minutes: 45 },
+          { user_id: user.id, name: "Hidratação", price: 0, duration_minutes: 30 },
+          { user_id: user.id, name: "Sobrancelha", price: 0, duration_minutes: 15 },
         ]);
       }
       setServicesLoaded(true);
@@ -130,10 +132,11 @@ export default function Settings() {
     if (!user || !newServiceName.trim()) return;
     setLoading(true);
     const price = parseFloat(newServicePrice) || 0;
-    const { error } = await supabase.from("services").insert({ user_id: user.id, name: newServiceName.trim(), price });
+    const duration = parseInt(newServiceDuration) || 30;
+    const { error } = await supabase.from("services").insert({ user_id: user.id, name: newServiceName.trim(), price, duration_minutes: duration });
     setLoading(false);
     if (error) { toast.error(error.message); return; }
-    setNewServiceName(""); setNewServicePrice("0");
+    setNewServiceName(""); setNewServicePrice("0"); setNewServiceDuration("30");
     loadServices();
     toast.success("Serviço adicionado!");
   };
@@ -149,13 +152,14 @@ export default function Settings() {
   };
 
   const startEditService = (s: Service) => {
-    setEditingService(s); setEditServiceName(s.name); setEditServicePrice(String(s.price));
+    setEditingService(s); setEditServiceName(s.name); setEditServicePrice(String(s.price)); setEditServiceDuration(String(s.duration_minutes || 30));
   };
 
   const saveEditService = async () => {
     if (!editingService) return;
     const price = parseFloat(editServicePrice) || 0;
-    await supabase.from("services").update({ name: editServiceName.trim(), price }).eq("id", editingService.id);
+    const duration = parseInt(editServiceDuration) || 30;
+    await supabase.from("services").update({ name: editServiceName.trim(), price, duration_minutes: duration }).eq("id", editingService.id);
     setEditingService(null); loadServices();
     toast.success("Serviço atualizado!");
   };
@@ -237,6 +241,10 @@ export default function Settings() {
                   <Label>Nome do serviço</Label>
                   <Input value={newServiceName} onChange={(e) => setNewServiceName(e.target.value)} placeholder="Ex: Corte, Barba..." />
                 </div>
+                <div className="space-y-2 w-full sm:w-24">
+                  <Label>Duração (min)</Label>
+                  <Input type="number" min="5" step="5" value={newServiceDuration} onChange={(e) => setNewServiceDuration(e.target.value)} />
+                </div>
                 <div className="space-y-2 w-full sm:w-28">
                   <Label>Preço (R$)</Label>
                   <Input type="number" step="0.01" value={newServicePrice} onChange={(e) => setNewServicePrice(e.target.value)} />
@@ -250,6 +258,7 @@ export default function Settings() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Serviço</TableHead>
+                    <TableHead className="text-center w-20">Duração</TableHead>
                     <TableHead className="text-right">Preço</TableHead>
                     <TableHead className="text-center w-20">Ativo</TableHead>
                     <TableHead className="text-right w-24">Ações</TableHead>
@@ -259,6 +268,7 @@ export default function Settings() {
                   {services.map(s => (
                     <TableRow key={s.id}>
                       <TableCell className="font-medium">{s.name}</TableCell>
+                      <TableCell className="text-center text-muted-foreground">{s.duration_minutes || 30} min</TableCell>
                       <TableCell className="text-right">R$ {Number(s.price).toFixed(2)}</TableCell>
                       <TableCell className="text-center">
                         <Checkbox checked={s.active} onCheckedChange={() => handleToggleService(s)} />
@@ -280,6 +290,7 @@ export default function Settings() {
                   <DialogHeader><DialogTitle>Editar Serviço</DialogTitle></DialogHeader>
                   <div className="space-y-4">
                     <div><Label>Nome</Label><Input value={editServiceName} onChange={(e) => setEditServiceName(e.target.value)} /></div>
+                    <div><Label>Duração (minutos)</Label><Input type="number" min="5" step="5" value={editServiceDuration} onChange={(e) => setEditServiceDuration(e.target.value)} /></div>
                     <div><Label>Preço (R$)</Label><Input type="number" step="0.01" value={editServicePrice} onChange={(e) => setEditServicePrice(e.target.value)} /></div>
                   </div>
                   <DialogFooter>

@@ -64,7 +64,7 @@ type StatItem = { icon: any; label: string; value: string; sub?: string; delay: 
 type TabId = "inicio" | "agendar" | "agenda" | "perfil";
 
 interface Professional { id: string; name: string; photo_url: string | null; }
-interface Service { id: string; name: string; price: number; }
+interface Service { id: string; name: string; price: number; duration_minutes: number; }
 interface Schedule { day_of_week: number; start_time: string; end_time: string; active: boolean; }
 interface SlotInfo { time: string; available: boolean; }
 
@@ -671,7 +671,11 @@ function BookScreen({ session, onDone, onCancel, onDoneChange }: { session: Sess
       }
 
       const [sh, sm] = selSlot.split(":").map(Number);
-      const endMin = sh * 60 + sm + 30;
+      const totalDuration = selSvcs.reduce((max, id) => {
+        const svc = services.find(s => s.id === id);
+        return Math.max(max, svc?.duration_minutes || 30);
+      }, 30);
+      const endMin = sh * 60 + sm + totalDuration;
       const endTime = `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`;
 
       let notesContent = "Agendamento via App do Cliente";

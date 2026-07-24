@@ -47,7 +47,7 @@ function maskTimeInput(value: string): string {
 
 interface Professional { id: string; name: string; }
 interface Customer { id: string; name: string; }
-interface Service { id: string; name: string; price: number; }
+interface Service { id: string; name: string; price: number; duration_minutes: number; }
 interface Schedule { day_of_week: number; start_time: string; end_time: string; active: boolean; }
 interface Appointment {
   id: string;
@@ -577,7 +577,9 @@ export default function Scheduling() {
                           key={t}
                           disabled={occupied}
                           onClick={() => {
-                            const endMin = slotMin + 30;
+                            const svc = services.find(s => s.id === form.service_id);
+                            const duration = svc?.duration_minutes || 30;
+                            const endMin = slotMin + duration;
                             const eh = Math.floor(endMin / 60), em = endMin % 60;
                             setForm({ ...form, start_time: t, end_time: `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}` });
                           }}

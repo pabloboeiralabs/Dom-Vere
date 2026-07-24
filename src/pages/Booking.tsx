@@ -34,6 +34,7 @@ interface Service {
   id: string;
   name: string;
   price: number;
+  duration_minutes: number;
 }
 interface Schedule {
   day_of_week: number;
@@ -364,7 +365,12 @@ export default function Booking({ userId: propUserId }: { userId?: string } = {}
       }
 
       const [sh, sm] = selectedSlot.split(":").map(Number);
-      const endMin = sh * 60 + sm + 30;
+      // Calculate total duration from selected services (use max duration)
+      const totalDuration = selectedServices.reduce((max, id) => {
+        const svc = services.find(s => s.id === id);
+        return Math.max(max, svc?.duration_minutes || 30);
+      }, 30);
+      const endMin = sh * 60 + sm + totalDuration;
       const endTime = `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`;
 
       const { error } = await supabase.from("appointments").insert({
