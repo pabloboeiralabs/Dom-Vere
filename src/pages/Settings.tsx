@@ -390,9 +390,9 @@ export default function Settings() {
 
       {/* Plan Dialog */}
       <Dialog open={planDialogOpen} onOpenChange={setPlanDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>{editingPlan ? "Editar Plano" : "Novo Plano"}</DialogTitle></DialogHeader>
-          <div className="space-y-4">
+        <DialogContent className="max-w-lg w-[calc(100vw-2rem)] max-h-[85vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0"><DialogTitle>{editingPlan ? "Editar Plano" : "Novo Plano"}</DialogTitle></DialogHeader>
+          <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pr-1">
             <div><Label>Nome do plano</Label><Input value={newPlanName} onChange={(e) => setNewPlanName(e.target.value)} placeholder="Ex: Corte e Barba 4x" /></div>
             <div><Label>Preço (R$)</Label><Input type="number" step="0.01" value={newPlanPrice} onChange={(e) => setNewPlanPrice(e.target.value)} /></div>
             <div className="grid grid-cols-2 gap-3">
@@ -416,7 +416,7 @@ export default function Settings() {
             {services.length > 0 && (
               <div>
                 <Label>Serviços inclusos</Label>
-                <div className="space-y-2 mt-1">
+                <div className="space-y-2 mt-1 max-h-[30vh] overflow-y-auto">
                   {services.filter(s => s.active).map(s => (
                     <div key={s.id} className="flex items-center gap-2">
                       <Checkbox
@@ -428,11 +428,11 @@ export default function Settings() {
                           return next;
                         })}
                       />
-                      <span className="text-sm flex-1">{s.name}</span>
+                      <span className="text-sm flex-1 truncate">{s.name}</span>
                       {selectedServices[s.id] && (
                         <Input
                           type="number" min={1}
-                          className="w-16 h-8 text-center text-xs"
+                          className="w-16 h-8 text-center text-xs flex-shrink-0"
                           value={selectedServices[s.id]}
                           onChange={(e) => setSelectedServices(prev => ({ ...prev, [s.id]: parseInt(e.target.value) || 1 }))}
                         />
@@ -443,7 +443,7 @@ export default function Settings() {
               </div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-shrink-0">
             <Button variant="outline" onClick={() => setPlanDialogOpen(false)}>Cancelar</Button>
             <Button onClick={savePlan} disabled={loading || !newPlanName.trim()}>{loading ? "Salvando..." : "Salvar"}</Button>
           </DialogFooter>
