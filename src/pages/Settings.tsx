@@ -416,7 +416,7 @@ export default function Settings() {
             {services.length > 0 && (
               <div>
                 <Label>Serviços inclusos</Label>
-                <div className="space-y-2 mt-1 max-h-[30vh] overflow-y-auto">
+                <div className="space-y-2 mt-1">
                   {services.filter(s => s.active).map(s => (
                     <div key={s.id} className="flex items-center gap-2">
                       <Checkbox
