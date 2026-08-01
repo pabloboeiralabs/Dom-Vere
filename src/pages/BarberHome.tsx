@@ -358,6 +358,13 @@ export default function BarberHome() {
       return;
     }
 
+    console.log("[BarberHome] loadData iniciado. user:", {
+      id: user.id,
+      role: user.role,
+      professional_id: user.professional_id,
+      owner_id: user.owner_id,
+    });
+
     // ownerUserId is always the shop owner (barbearia). For barbers, it's owner_id/professional's user_id.
     // We determine it from the professional record first, falling back to user.id for admins.
     let ownerUserId = user.owner_id || user.id;
@@ -370,6 +377,7 @@ export default function BarberHome() {
         toast.error(`Erro ao obter profissional: ${profErr.message}`);
       }
       if (prof) {
+        console.log("[BarberHome] Profissional encontrado por ID:", prof.name);
         setProfessional(prof);
         ownerUserId = prof.user_id || ownerUserId;
         if (!selectedProfId) {
@@ -386,7 +394,23 @@ export default function BarberHome() {
         console.warn("Nenhum profissional encontrado com ID:", user.professional_id);
         // Tenta fallback: busca qualquer profissional ativo vinculado ao owner_id
         const ownerId = user.owner_id || user.id;
-        const { data: fallbackProf } = await supabase.from("professionals").select("*").eq("user_id", ownerId).eq("active", true).order("name").limit(1).maybeSingle();
+        let { data: fallbackProf } = await supabase.from("professionals").select("*").eq("user_id", ownerId).eq("active", true).order("name").limit(1).maybeSingle();
+
+        // Se owner_id for null ou não encontrar, tenta buscar pelo user_id do perfil do dono
+        if (!fallbackProf && user.owner_id) {
+          const { data: ownerProfile } = await supabase.from("profiles").select("id").eq("id", user.owner_id).maybeSingle();
+          if (ownerProfile) {
+            const result = await supabase.from("professionals").select("*").eq("user_id", ownerProfile.id).eq("active", true).order("name").limit(1).maybeSingle();
+            fallbackProf = result.data;
+          }
+        }
+
+        // Último fallback: busca qualquer profissional ativo
+        if (!fallbackProf) {
+          const { data: anyProf } = await supabase.from("professionals").select("*").eq("active", true).order("name").limit(1).maybeSingle();
+          fallbackProf = anyProf;
+        }
+
         if (fallbackProf) {
           console.log("Usando profissional fallback:", fallbackProf.name);
           setProfessional(fallbackProf);
@@ -394,6 +418,7 @@ export default function BarberHome() {
           if (!selectedProfId) {
             setSelectedProfId(fallbackProf.id);
           }
+          ownerUserId = fallbackProf.user_id || ownerUserId;
           supabase.from("profiles").select("email").eq("professional_id", fallbackProf.id).maybeSingle().then(({ data: profData }) => {
             if (profData?.email) {
               setProfessionalLogin(profData.email.replace("@barber.local", ""));
