@@ -1243,42 +1243,63 @@ export default function BarberHome() {
                 </div>
               )}
 
-              {tab === "perfil" && professional && (
+              {tab === "perfil" && (
                 <div className="space-y-5">
-                  <div className="bg-[#131B2E]/60 rounded-3xl border border-white/[0.06] overflow-hidden shadow-lg relative">
-                    <div className="h-24 bg-gradient-to-br from-[#D4AF37]/20 via-primary/5 to-transparent" />
-                    <div className="px-5 pb-5 -mt-10 text-center relative z-10">
-                      <div className="h-20 w-20 rounded-full ring-4 ring-[#090D16] overflow-hidden bg-[#131B2E] mx-auto">
-                        {professional.photo_url ? (
-                          <img src={professional.photo_url} alt={professional.name} className="h-full w-full object-cover" />
-                        ) : (
-                          <div className="h-full w-full flex items-center justify-center bg-white/[0.04] text-white text-2xl font-bold">
-                            {professional.name?.split(" ").map((n:string)=>n[0]).join("").slice(0,2).toUpperCase()}
+                  {professional ? (
+                    <>
+                      <div className="bg-[#131B2E]/60 rounded-3xl border border-white/[0.06] overflow-hidden shadow-lg relative">
+                        <div className="h-24 bg-gradient-to-br from-[#D4AF37]/20 via-primary/5 to-transparent" />
+                        <div className="px-5 pb-5 -mt-10 text-center relative z-10">
+                          <div className="h-20 w-20 rounded-full ring-4 ring-[#090D16] overflow-hidden bg-[#131B2E] mx-auto">
+                            {professional.photo_url ? (
+                              <img src={professional.photo_url} alt={professional.name} className="h-full w-full object-cover" />
+                            ) : (
+                              <div className="h-full w-full flex items-center justify-center bg-white/[0.04] text-white text-2xl font-bold">
+                                {professional.name?.split(" ").map((n:string)=>n[0]).join("").slice(0,2).toUpperCase()}
+                              </div>
+                            )}
                           </div>
-                        )}
+                          <h2 className="text-lg font-bold text-white mt-3">{professional.name}</h2>
+                          {professionalLogin && (
+                            <p className="text-xs text-[#D4AF37] mt-0.5 font-medium">@{professionalLogin}</p>
+                          )}
+                          <p className="text-xs text-slate-400 mt-1">Comissão: {professional.commission_percent || 0}%</p>
+                          <div className="flex items-center justify-center gap-2 mt-4">
+                            <div className="px-3 py-1 bg-white/[0.04] border border-white/[0.06] rounded-full text-xs font-semibold text-slate-300">{stats.semana} atendimentos</div>
+                            <div className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-xs font-semibold text-emerald-400">{stats.cortes} cortes</div>
+                          </div>
+                        </div>
                       </div>
-                      <h2 className="text-lg font-bold text-white mt-3">{professional.name}</h2>
-                      {professionalLogin && (
-                        <p className="text-xs text-[#D4AF37] mt-0.5 font-medium">@{professionalLogin}</p>
-                      )}
-                      <p className="text-xs text-slate-400 mt-1">Comissão: {professional.commission_percent || 0}%</p>
-                      <div className="flex items-center justify-center gap-2 mt-4">
-                        <div className="px-3 py-1 bg-white/[0.04] border border-white/[0.06] rounded-full text-xs font-semibold text-slate-300">{stats.semana} atendimentos</div>
-                        <div className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-xs font-semibold text-emerald-400">{stats.cortes} cortes</div>
+
+                      <div className="text-left space-y-3">
+                        <p className="text-sm font-bold text-white uppercase tracking-wider">Meus Horários</p>
+                        <div className="bg-[#131B2E]/40 border border-white/[0.06] rounded-3xl p-4">
+                          <ScheduleEditor professionalId={professional.id} hideSaveButton triggerSave={scheduleSaveTrigger} />
+                        </div>
                       </div>
+
+                      <Button variant="outline" className="w-full h-12 rounded-2xl text-sm border-white/[0.08] bg-white/[0.02] text-white hover:bg-white/[0.06] hover:text-white transition-all font-semibold" onClick={forcePush}>
+                        <Bell className="h-4 w-4 mr-2" /> Ativar notificações
+                      </Button>
+                    </>
+                  ) : (
+                    <div className="text-center py-16">
+                      <div className="w-16 h-16 rounded-2xl bg-[#131B2E]/60 border border-white/[0.06] flex items-center justify-center mx-auto mb-4">
+                        <User className="h-8 w-8 text-slate-500" />
+                      </div>
+                      <p className="text-sm font-semibold text-slate-300">Profissional não encontrado</p>
+                      <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+                        Seu perfil não está vinculado a um profissional. Entre em contato com o administrador da barbearia para vincular seu cadastro.
+                      </p>
+                      <Button
+                        variant="outline"
+                        className="mt-6 h-10 rounded-xl text-sm border-white/[0.08] bg-white/[0.02] text-white hover:bg-white/[0.06]"
+                        onClick={() => loadData()}
+                      >
+                        Tentar novamente
+                      </Button>
                     </div>
-                  </div>
-                  
-                  <div className="text-left space-y-3">
-                    <p className="text-sm font-bold text-white uppercase tracking-wider">Meus Horários</p>
-                    <div className="bg-[#131B2E]/40 border border-white/[0.06] rounded-3xl p-4">
-                      <ScheduleEditor professionalId={professional.id} hideSaveButton triggerSave={scheduleSaveTrigger} />
-                    </div>
-                  </div>
-                  
-                  <Button variant="outline" className="w-full h-12 rounded-2xl text-sm border-white/[0.08] bg-white/[0.02] text-white hover:bg-white/[0.06] hover:text-white transition-all font-semibold" onClick={forcePush}>
-                    <Bell className="h-4 w-4 mr-2" /> Ativar notificações
-                  </Button>
+                  )}
                   <p className="text-center text-[10px] text-slate-600 font-semibold mt-4">
                     Dom Vere · v{import.meta.env.VITE_APP_VERSION || "1.0"}
                   </p>
