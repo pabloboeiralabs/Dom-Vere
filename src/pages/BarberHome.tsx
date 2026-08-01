@@ -353,7 +353,14 @@ export default function BarberHome() {
   };
 
   const loadData = async () => {
-    let ownerUserId = "";
+    if (!user?.id) {
+      console.warn("Carregamento abortado: usuário não autenticado");
+      return;
+    }
+
+    // ownerUserId is always the shop owner (barbearia). For barbers, it's owner_id/professional's user_id.
+    // We determine it from the professional record first, falling back to user.id for admins.
+    let ownerUserId = user.owner_id || user.id;
     let currentProfId = user?.professional_id || "";
 
     if (user?.professional_id) {
@@ -364,7 +371,7 @@ export default function BarberHome() {
       }
       if (prof) {
         setProfessional(prof);
-        ownerUserId = prof.user_id;
+        ownerUserId = prof.user_id || ownerUserId;
         if (!selectedProfId) {
           setSelectedProfId(prof.id);
         }
@@ -377,11 +384,25 @@ export default function BarberHome() {
         });
       } else {
         console.warn("Nenhum profissional encontrado com ID:", user.professional_id);
+        // Tenta fallback: busca qualquer profissional ativo vinculado ao owner_id
+        const ownerId = user.owner_id || user.id;
+        const { data: fallbackProf } = await supabase.from("professionals").select("*").eq("user_id", ownerId).eq("active", true).order("name").limit(1).maybeSingle();
+        if (fallbackProf) {
+          console.log("Usando profissional fallback:", fallbackProf.name);
+          setProfessional(fallbackProf);
+          currentProfId = fallbackProf.id;
+          if (!selectedProfId) {
+            setSelectedProfId(fallbackProf.id);
+          }
+          supabase.from("profiles").select("email").eq("professional_id", fallbackProf.id).maybeSingle().then(({ data: profData }) => {
+            if (profData?.email) {
+              setProfessionalLogin(profData.email.replace("@barber.local", ""));
+            }
+          });
+        }
       }
-    } else if (user?.id) {
+    } else {
       // Admin/Barbearia logged in without professional_id
-      ownerUserId = user.id;
-      // Get first active professional in the shop
       const { data: firstProf, error: firstProfErr } = await supabase.from("professionals").select("*").eq("user_id", user.id).eq("active", true).order("name").limit(1).maybeSingle();
       if (firstProfErr) {
         console.error("Erro ao buscar profissionais da loja:", firstProfErr);
@@ -401,11 +422,6 @@ export default function BarberHome() {
           }
         });
       }
-    }
-
-    if (!ownerUserId) {
-      console.warn("Carregamento abortado: ownerUserId nulo. user:", user);
-      return;
     }
 
     const profToFetch = selectedProfId || currentProfId;
