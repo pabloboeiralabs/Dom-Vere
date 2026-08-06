@@ -353,21 +353,7 @@ export default function BarberHome() {
   };
 
   const loadData = async () => {
-    if (!user?.id) {
-      console.warn("Carregamento abortado: usuário não autenticado");
-      return;
-    }
-
-    console.log("[BarberHome] loadData iniciado. user:", {
-      id: user.id,
-      role: user.role,
-      professional_id: user.professional_id,
-      owner_id: user.owner_id,
-    });
-
-    // ownerUserId is always the shop owner (barbearia). For barbers, it's owner_id/professional's user_id.
-    // We determine it from the professional record first, falling back to user.id for admins.
-    let ownerUserId = user.owner_id || user.id;
+    let ownerUserId = "";
     let currentProfId = user?.professional_id || "";
 
     if (user?.professional_id) {
@@ -377,9 +363,8 @@ export default function BarberHome() {
         toast.error(`Erro ao obter profissional: ${profErr.message}`);
       }
       if (prof) {
-        console.log("[BarberHome] Profissional encontrado por ID:", prof.name);
         setProfessional(prof);
-        ownerUserId = prof.user_id || ownerUserId;
+        ownerUserId = prof.user_id;
         if (!selectedProfId) {
           setSelectedProfId(prof.id);
         }
@@ -392,42 +377,11 @@ export default function BarberHome() {
         });
       } else {
         console.warn("Nenhum profissional encontrado com ID:", user.professional_id);
-        // Tenta fallback: busca qualquer profissional ativo vinculado ao owner_id
-        const ownerId = user.owner_id || user.id;
-        let { data: fallbackProf } = await supabase.from("professionals").select("*").eq("user_id", ownerId).eq("active", true).order("name").limit(1).maybeSingle();
-
-        // Se owner_id for null ou não encontrar, tenta buscar pelo user_id do perfil do dono
-        if (!fallbackProf && user.owner_id) {
-          const { data: ownerProfile } = await supabase.from("profiles").select("id").eq("id", user.owner_id).maybeSingle();
-          if (ownerProfile) {
-            const result = await supabase.from("professionals").select("*").eq("user_id", ownerProfile.id).eq("active", true).order("name").limit(1).maybeSingle();
-            fallbackProf = result.data;
-          }
-        }
-
-        // Último fallback: busca qualquer profissional ativo
-        if (!fallbackProf) {
-          const { data: anyProf } = await supabase.from("professionals").select("*").eq("active", true).order("name").limit(1).maybeSingle();
-          fallbackProf = anyProf;
-        }
-
-        if (fallbackProf) {
-          console.log("Usando profissional fallback:", fallbackProf.name);
-          setProfessional(fallbackProf);
-          currentProfId = fallbackProf.id;
-          if (!selectedProfId) {
-            setSelectedProfId(fallbackProf.id);
-          }
-          ownerUserId = fallbackProf.user_id || ownerUserId;
-          supabase.from("profiles").select("email").eq("professional_id", fallbackProf.id).maybeSingle().then(({ data: profData }) => {
-            if (profData?.email) {
-              setProfessionalLogin(profData.email.replace("@barber.local", ""));
-            }
-          });
-        }
       }
-    } else {
+    } else if (user?.id) {
       // Admin/Barbearia logged in without professional_id
+      ownerUserId = user.id;
+      // Get first active professional in the shop
       const { data: firstProf, error: firstProfErr } = await supabase.from("professionals").select("*").eq("user_id", user.id).eq("active", true).order("name").limit(1).maybeSingle();
       if (firstProfErr) {
         console.error("Erro ao buscar profissionais da loja:", firstProfErr);
@@ -447,6 +401,11 @@ export default function BarberHome() {
           }
         });
       }
+    }
+
+    if (!ownerUserId) {
+      console.warn("Carregamento abortado: ownerUserId nulo. user:", user);
+      return;
     }
 
     const profToFetch = selectedProfId || currentProfId;
@@ -1324,21 +1283,14 @@ export default function BarberHome() {
                       </Button>
                     </>
                   ) : (
-                    <div className="text-center py-16">
-                      <div className="w-16 h-16 rounded-2xl bg-[#131B2E]/60 border border-white/[0.06] flex items-center justify-center mx-auto mb-4">
-                        <User className="h-8 w-8 text-slate-500" />
+                    <div className="bg-[#131B2E]/60 rounded-3xl border border-white/[0.06] p-8 text-center">
+                      <div className="w-16 h-16 rounded-2xl bg-[#1A2340] border border-white/[0.06] flex items-center justify-center mx-auto mb-4">
+                        <User className="h-8 w-8 text-[#D4AF37]" />
                       </div>
-                      <p className="text-sm font-semibold text-slate-300">Profissional não encontrado</p>
-                      <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
-                        Seu perfil não está vinculado a um profissional. Entre em contato com o administrador da barbearia para vincular seu cadastro.
+                      <h3 className="text-base font-bold text-white">Perfil não vinculado</h3>
+                      <p className="text-xs text-slate-400 mt-2 max-w-xs mx-auto">
+                        Seu usuário não está vinculado a um profissional. Peça ao administrador para vincular seu cadastro a um barbeiro da equipe.
                       </p>
-                      <Button
-                        variant="outline"
-                        className="mt-6 h-10 rounded-xl text-sm border-white/[0.08] bg-white/[0.02] text-white hover:bg-white/[0.06]"
-                        onClick={() => loadData()}
-                      >
-                        Tentar novamente
-                      </Button>
                     </div>
                   )}
                   <p className="text-center text-[10px] text-slate-600 font-semibold mt-4">
