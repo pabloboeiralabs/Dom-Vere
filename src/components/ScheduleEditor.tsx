@@ -1,10 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
@@ -161,27 +158,67 @@ export function ScheduleEditor({ professionalId, hideSaveButton, triggerSave }: 
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Horários de trabalho</h3>
-        <span className="text-[10px] text-muted-foreground">Ative os turnos e defina os horários</span>
-      </div>
-      {days.map((d, idx) => (
-        <Card key={d.dayIndex} className={`border-border/30 rounded-2xl overflow-hidden transition-all ${d.manha.enabled || d.tarde.enabled || d.noturno.enabled ? "border-l-[3px] border-l-primary" : ""}`}>
-          <CardContent className="py-3 px-4 space-y-2.5">
-            <p className="text-sm font-bold">{DAYS[d.dayIndex]}</p>
-            {(["manha", "tarde", "noturno"] as const).map((shift) => (
-              <div key={shift} className={`flex items-center gap-2 p-2 rounded-xl transition-colors ${d[shift].enabled ? "bg-muted/30" : "opacity-40"}`}>
-                <Switch checked={d[shift].enabled} onCheckedChange={(v) => updateShift(idx, shift, "enabled", v)} />
-                <span className="text-xs font-medium capitalize w-14">{shift}</span>
-                <Input type="time" value={d[shift].start_time} onChange={(e) => updateShift(idx, shift, "start_time", e.target.value)} disabled={!d[shift].enabled} className="h-8 text-xs w-28 rounded-lg" />
-                <span className="text-[10px] text-muted-foreground">até</span>
-                <Input type="time" value={d[shift].end_time} onChange={(e) => updateShift(idx, shift, "end_time", e.target.value)} disabled={!d[shift].enabled} className="h-8 text-xs w-28 rounded-lg" />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      ))}
+    <div className="space-y-2.5">
+      {!hideSaveButton && (
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-sm font-semibold">Horários de trabalho</h3>
+          <span className="text-[10px] text-slate-400">Ative os turnos e defina os horários</span>
+        </div>
+      )}
+      {days.map((d, idx) => {
+        const hasAnyShift = d.manha.enabled || d.tarde.enabled || d.noturno.enabled;
+        return (
+          <div
+            key={d.dayIndex}
+            className={`rounded-2xl border overflow-hidden transition-all ${
+              hasAnyShift
+                ? "border-emerald-500/20 bg-emerald-500/[0.03]"
+                : "border-white/[0.05] bg-white/[0.01]"
+            }`}
+          >
+            <div className="py-2.5 px-3.5 space-y-2">
+              <p className={`text-xs font-bold uppercase tracking-wider ${hasAnyShift ? "text-emerald-400" : "text-slate-500"}`}>
+                {DAYS[d.dayIndex]}
+              </p>
+              {(["manha", "tarde", "noturno"] as const).map((shift) => {
+                const enabled = d[shift].enabled;
+                return (
+                  <div
+                    key={shift}
+                    className={`flex items-center gap-1.5 rounded-xl transition-all ${
+                      enabled ? "" : "opacity-30"
+                    }`}
+                  >
+                    <Switch
+                      checked={enabled}
+                      onCheckedChange={(v) => updateShift(idx, shift, "enabled", v)}
+                      className="scale-75 shrink-0"
+                    />
+                    <span className="text-[11px] font-medium capitalize w-12 shrink-0 text-slate-300">
+                      {shift}
+                    </span>
+                    <input
+                      type="time"
+                      value={d[shift].start_time}
+                      onChange={(e) => updateShift(idx, shift, "start_time", e.target.value)}
+                      disabled={!enabled}
+                      className="h-7 px-2 rounded-lg text-[11px] font-mono bg-[#0E1322] border border-white/[0.08] text-white w-[88px] shrink-0 focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37] disabled:opacity-40 transition-all"
+                    />
+                    <span className="text-[10px] text-slate-500 shrink-0">até</span>
+                    <input
+                      type="time"
+                      value={d[shift].end_time}
+                      onChange={(e) => updateShift(idx, shift, "end_time", e.target.value)}
+                      disabled={!enabled}
+                      className="h-7 px-2 rounded-lg text-[11px] font-mono bg-[#0E1322] border border-white/[0.08] text-white w-[88px] shrink-0 focus:outline-none focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37] disabled:opacity-40 transition-all"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
       {!hideSaveButton && (
         <div className="sticky bottom-0 z-20 bg-background/95 backdrop-blur-xl pt-3 pb-6">
           <Button onClick={save} disabled={saving} className="w-full h-12 rounded-2xl text-sm font-semibold shadow-lg shadow-primary/20">
