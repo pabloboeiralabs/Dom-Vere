@@ -304,8 +304,8 @@ Deno.serve(async (req) => {
             headers: { "Content-Type": "application/json", "apikey": instanceToken },
           });
           const qrData = await qrRes.json().catch(() => ({}));
-          qrcodeBase64 = qrData?.data?.Qrcode || qrData?.data?.Code || null;
-          paircode = qrData?.data?.Paircode || null;
+          qrcodeBase64 = qrData?.data?.qrcode || qrData?.data?.Qrcode || qrData?.data?.Code || null;
+          paircode = qrData?.data?.paircode || qrData?.data?.Paircode || qrData?.data?.code || null;
         }
       } catch (e) {
         console.error("[provision] evolution status/connect check failed", e);

@@ -140,8 +140,8 @@ export function useEvolution() {
     if (!isConnected) {
       try {
         const qrData = await apiCall("GET", "/instance/qr");
-        qrcodeBase64 = qrData?.data?.Qrcode || qrData?.data?.Code || undefined;
-        paircode = qrData?.data?.Paircode || undefined;
+        qrcodeBase64 = qrData?.data?.qrcode || qrData?.data?.Qrcode || qrData?.data?.Code || undefined;
+        paircode = qrData?.data?.paircode || qrData?.data?.Paircode || qrData?.data?.code || undefined;
       } catch (e) {
         console.warn("Falha ao buscar QR code", e);
       }
