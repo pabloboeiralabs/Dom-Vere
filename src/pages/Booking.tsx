@@ -327,36 +327,27 @@ export default function Booking({ userId: propUserId }: { userId?: string } = {}
     }
     setBooking(true);
     try {
+      // Normaliza telefone (remove máscara) para casar com o que está no banco
+      const normalizedPhone = customerPhone.replace(/\D/g, "");
+
       let customerId: string;
-      if (customerPhone.trim()) {
-        const { data: existing } = await supabase
-          .from("customers")
-          .select("id")
-          .eq("user_id", userId)
-          .eq("phone", customerPhone.trim())
-          .limit(1);
-        if (existing && existing.length > 0) {
-          customerId = existing[0].id;
-        } else {
-          const { data: newC, error } = await supabase
-            .from("customers")
-            .insert({
-              user_id: userId,
-              name: customerName.trim(),
-              phone: customerPhone.trim(),
-            })
-            .select("id")
-            .single();
-          if (error) throw error;
-          customerId = newC!.id;
-        }
+      const { data: existing } = await supabase
+        .from("customers")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("phone", normalizedPhone)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (existing && existing.length > 0) {
+        customerId = existing[0].id;
       } else {
         const { data: newC, error } = await supabase
           .from("customers")
           .insert({
             user_id: userId,
             name: customerName.trim(),
-            phone: customerPhone.trim(),
+            phone: normalizedPhone,
           })
           .select("id")
           .single();

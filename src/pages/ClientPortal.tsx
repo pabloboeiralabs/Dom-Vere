@@ -657,18 +657,9 @@ function BookScreen({ session, onDone, onCancel, onDoneChange }: { session: Sess
     }
     setBusy(true);
     try {
-      const { data: existing } = await supabase
-        .from("customers").select("id").eq("user_id", session.user_id).eq("phone", customerPhone.trim()).limit(1);
-      let customerId: string;
-      if (existing?.length) {
-        customerId = existing[0].id;
-      } else {
-        const { data: nc, error: ec } = await supabase
-          .from("customers").insert({ user_id: session.user_id, name: customerName.trim(), phone: customerPhone.trim() })
-          .select("id").single();
-        if (ec) throw ec;
-        customerId = nc!.id;
-      }
+      // Cliente já autenticado: vincula direto ao customer_id da sessão.
+      // (evita vincular ao cliente errado quando há telefone duplicado no banco)
+      const customerId = session.customer_id;
 
       const [sh, sm] = selSlot.split(":").map(Number);
       const totalDuration = selSvcs.reduce((max, id) => {
