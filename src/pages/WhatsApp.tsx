@@ -61,6 +61,12 @@ export default function WhatsApp() {
 
   const isConnected = instanceStatus?.status === "connected";
 
+  // Auto-transiciona para o chat assim que a instância conectar (QR escaneado)
+  useEffect(() => {
+    if (!config || isConnected) return;
+    const id = setInterval(() => { getStatus().catch(() => {}); }, 3000);
+    return () => clearInterval(id);
+  }, [config, isConnected, getStatus]);
 
   // Load CRM leads for tabs
   useEffect(() => {
