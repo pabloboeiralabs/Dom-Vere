@@ -6,13 +6,16 @@ import "./index.css";
 if ("serviceWorker" in navigator) {
   const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.0";
 
-  // 1. Limpar service workers ÓRFÃOS (de versões antigas com scope errado)
+  // 1. Limpar service workers ÓRFÃOS (scope errado ou URL sem versão)
   navigator.serviceWorker.getRegistrations().then((registrations) => {
     const currentScope = self.location.origin + "/";
     for (const reg of registrations) {
-      // Remove SWs que não são do scope atual (ex: /cliente → /)
-      if (reg.scope !== currentScope && !reg.scope.startsWith(currentScope)) {
-        console.log("[PWA] Unregistering old SW:", reg.scope);
+      const scriptUrl = reg.active?.scriptURL || reg.installing?.scriptURL || reg.waiting?.scriptURL || "";
+      const wrongScope = reg.scope !== currentScope && !reg.scope.startsWith(currentScope);
+      // Registros antigos (ex: /sw.js sem ?v=) do registerSW.js removido
+      const staleUnversioned = scriptUrl.startsWith(currentScope) && !scriptUrl.includes("?v=");
+      if (wrongScope || staleUnversioned) {
+        console.log("[PWA] Unregistering old SW:", scriptUrl || reg.scope);
         reg.unregister();
       }
     }
