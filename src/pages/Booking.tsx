@@ -523,7 +523,7 @@ export default function Booking({ userId: propUserId }: { userId?: string } = {}
   const StepIcon = stepMeta[currentStep].icon;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex flex-col">
+    <div className="h-screen bg-gradient-to-br from-background via-background to-primary/5 flex flex-col">
       {/* Header */}
       <div className="pt-8 pb-4 px-4 flex items-center justify-between">
         <div className="w-10" /> {/* Spacer */}
@@ -597,7 +597,7 @@ export default function Booking({ userId: propUserId }: { userId?: string } = {}
       </div>
 
       {/* Content area */}
-      <div className="flex-1 px-4 pb-4 overflow-x-hidden overflow-y-auto relative">
+      <div className="flex-1 min-h-0 px-4 pb-4 overflow-x-hidden overflow-y-auto relative">
         <AnimatePresence mode="wait" custom={direction}>
           <motion.div
             key={currentStep}
