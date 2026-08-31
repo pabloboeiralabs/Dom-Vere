@@ -41,8 +41,27 @@ if ("serviceWorker" in navigator) {
     }
   });
 
-  // (Atualização automática + reload removidos: causavam reload loop no PWA.
-  //  O SW é registrado abaixo e atualiza silenciosamente no próximo load.)
+  // 2. Força atualização imediata quando um novo SW é detectado
+  navigator.serviceWorker.ready.then((reg) => {
+    reg.update().catch(() => {}); // verifica update logo ao carregar
+    reg.addEventListener("updatefound", () => {
+      const newWorker = reg.installing;
+      if (!newWorker) return;
+      newWorker.addEventListener("statechange", () => {
+        if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+          newWorker.postMessage({ type: "SKIP_WAITING" });
+        }
+      });
+    });
+  });
+
+  // 3. Recarrega quando o novo SW assume controle (uma vez por deploy)
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (refreshing) return;
+    refreshing = true;
+    window.location.reload();
+  });
 
   // 5. Ouvir mensagens do SW (ex: NOTIFICATION_CLICK redirect)
   navigator.serviceWorker.addEventListener("message", (event) => {
