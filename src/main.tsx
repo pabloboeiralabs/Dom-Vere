@@ -21,36 +21,8 @@ if ("serviceWorker" in navigator) {
     }
   });
 
-  // 2. Quando um NOVO SW é detectado, força ativação imediata
-  navigator.serviceWorker.ready.then((reg) => {
-    reg.addEventListener("updatefound", () => {
-      const newWorker = reg.installing;
-      if (!newWorker) return;
-      console.log("[PWA] New SW found, forcing activation...");
-      newWorker.addEventListener("statechange", () => {
-        if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-          console.log("[PWA] New SW installed, skipWaiting...");
-          newWorker.postMessage({ type: "SKIP_WAITING" });
-        }
-      });
-    });
-  });
-
-  // 3. Recarregar quando novo SW assume controle
-  let refreshing = false;
-  navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (refreshing) return;
-    refreshing = true;
-    console.log("[PWA] New version activated, reloading...");
-    window.location.reload();
-  });
-
-  // 4. Verificar atualizações a cada 60 segundos
-  setInterval(() => {
-    navigator.serviceWorker.ready.then((reg) => {
-      reg.update().catch(() => {});
-    });
-  }, 60_000);
+  // (Atualização automática + reload removidos: causavam reload loop no PWA.
+  //  O SW é registrado abaixo e atualiza silenciosamente no próximo load.)
 
   // 5. Ouvir mensagens do SW (ex: NOTIFICATION_CLICK redirect)
   navigator.serviceWorker.addEventListener("message", (event) => {
