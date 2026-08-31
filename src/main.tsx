@@ -2,6 +2,26 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 
+// ─── Prevenir pull-to-refresh (Android Chrome ignora overscroll-behavior no body overflow:hidden) ───
+if ("ontouchstart" in window) {
+  let touchStartY = 0;
+  window.addEventListener("touchstart", (e) => {
+    touchStartY = e.touches[0].clientY;
+  }, { passive: true });
+
+  window.addEventListener("touchmove", (e) => {
+    const deltaY = e.touches[0].clientY - touchStartY;
+    if (deltaY <= 0) return; // só interessa swipe para baixo
+
+    const el = e.target as Element | null;
+    const scrollable = el && typeof el.closest === "function"
+      ? (el.closest(".overflow-y-auto, .overflow-auto, .overflow-scroll") as HTMLElement | null)
+      : null;
+    const atTop = scrollable ? scrollable.scrollTop <= 0 : window.scrollY <= 0;
+    if (atTop) e.preventDefault();
+  }, { passive: false });
+}
+
 // ─── PWA: Forçar atualização automática, nunca travar em cache antigo ───
 if ("serviceWorker" in navigator) {
   const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.0";
