@@ -108,22 +108,30 @@ export default function Booking({ userId: propUserId }: { userId?: string } = {}
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [schedules, setSchedules] = useState<Record<string, Schedule[]>>({});
-  const [selectedProf, setSelectedProf] = useState("");
-  const [selectedServices, setSelectedServices] = useState<string[]>([]);
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedProf, setSelectedProf] = useState(() => localStorage.getItem("booking_selectedProf") || "");
+  const [selectedServices, setSelectedServices] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("booking_selectedServices") || "[]"); } catch { return []; }
+  });
+  const [selectedDate, setSelectedDate] = useState<Date>(() => {
+    const s = localStorage.getItem("booking_selectedDate");
+    return s ? new Date(s) : new Date();
+  });
   const [availableSlots, setAvailableSlots] = useState<SlotInfo[]>([]);
-  const [selectedSlot, setSelectedSlot] = useState("");
+  const [selectedSlot, setSelectedSlot] = useState(() => localStorage.getItem("booking_selectedSlot") || "");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
-  const [customerBirthDate, setCustomerBirthDate] = useState("");
-  const [loginMode, setLoginMode] = useState<"" | "login" | "register" | "guest">("");
+  const [customerBirthDate, setCustomerBirthDate] = useState(() => localStorage.getItem("booking_birthDate") || "");
+  const [loginMode, setLoginMode] = useState<"" | "login" | "register" | "guest">(() => (localStorage.getItem("booking_loginMode") as "" | "login" | "register" | "guest") || "");
   const [loginError, setLoginError] = useState("");
   const [loggingIn, setLoggingIn] = useState(false);
   const [bookedCustomerId, setBookedCustomerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [booking, setBooking] = useState(false);
   const [booked, setBooked] = useState(false);
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(() => {
+    const s = parseInt(localStorage.getItem("booking_step") || "0", 10);
+    return Number.isNaN(s) ? 0 : Math.min(Math.max(s, 0), STEPS.length - 1);
+  });
   const [direction, setDirection] = useState(1);
   const [userHistory, setUserHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -138,6 +146,17 @@ export default function Booking({ userId: propUserId }: { userId?: string } = {}
     if (savedName) setCustomerName(savedName);
     if (savedPhone) setCustomerPhone(savedPhone);
   }, []);
+
+  // Persistir o progresso do agendamento (sobrevive a reload)
+  useEffect(() => {
+    localStorage.setItem("booking_step", String(step));
+    localStorage.setItem("booking_loginMode", loginMode);
+    localStorage.setItem("booking_selectedProf", selectedProf);
+    localStorage.setItem("booking_selectedServices", JSON.stringify(selectedServices));
+    localStorage.setItem("booking_selectedDate", selectedDate.toISOString());
+    localStorage.setItem("booking_selectedSlot", selectedSlot);
+    localStorage.setItem("booking_birthDate", customerBirthDate);
+  }, [step, loginMode, selectedProf, selectedServices, selectedDate, selectedSlot, customerBirthDate]);
 
   const currentStep = STEPS[step];
 
@@ -392,6 +411,8 @@ export default function Booking({ userId: propUserId }: { userId?: string } = {}
 
       localStorage.setItem("customerName", customerName.trim());
       localStorage.setItem("customerPhone", customerPhone.trim());
+      // Limpa o progresso do agendamento (novo agendamento começa do zero)
+      ["booking_step", "booking_loginMode", "booking_selectedProf", "booking_selectedServices", "booking_selectedDate", "booking_selectedSlot", "booking_birthDate"].forEach(k => localStorage.removeItem(k));
       setBooked(true);
       toast.success("Agendamento realizado com sucesso!");
     } catch (e: any) {
@@ -597,7 +618,7 @@ export default function Booking({ userId: propUserId }: { userId?: string } = {}
       </div>
 
       {/* Content area */}
-      <div className="flex-1 min-h-0 px-4 pb-4 overflow-x-hidden overflow-y-auto overscroll-y-none relative">
+      <div className="flex-1 min-h-0 px-4 pb-4 overflow-x-hidden overflow-y-auto relative">
         <AnimatePresence mode="wait" custom={direction}>
           <motion.div
             key={currentStep}
