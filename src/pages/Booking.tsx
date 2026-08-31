@@ -544,7 +544,7 @@ export default function Booking({ userId: propUserId }: { userId?: string } = {}
   const StepIcon = stepMeta[currentStep].icon;
 
   return (
-    <div className="h-screen bg-gradient-to-br from-background via-background to-primary/5 flex flex-col">
+    <div className="h-dvh bg-gradient-to-br from-background via-background to-primary/5 flex flex-col">
       {/* Header */}
       <div className="pt-8 pb-4 px-4 flex items-center justify-between">
         <div className="w-10" /> {/* Spacer */}
