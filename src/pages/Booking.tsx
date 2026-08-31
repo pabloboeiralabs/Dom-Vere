@@ -597,7 +597,7 @@ export default function Booking({ userId: propUserId }: { userId?: string } = {}
       </div>
 
       {/* Content area */}
-      <div className="flex-1 min-h-0 px-4 pb-4 overflow-x-hidden overflow-y-auto relative">
+      <div className="flex-1 min-h-0 px-4 pb-4 overflow-x-hidden overflow-y-auto overscroll-y-none relative">
         <AnimatePresence mode="wait" custom={direction}>
           <motion.div
             key={currentStep}
