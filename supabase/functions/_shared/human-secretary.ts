@@ -123,11 +123,22 @@ async function secretaryConversation(c:Context,complete:(messages:any[],tools:an
  if(memory?.awaiting_reminder){const hours=parseReminderChoice(c.text);if(hours!==null){const result=await rpc(c.db,'secretary_set_reminder',{p_owner:c.owner,p_chat:c.chat,p_hours:hours});if(result.error)return{text:result.error};return{text:hours===0?'Combinado, esse agendamento fica sem lembrete.':`Combinado! Vou te lembrar ${reminderLabel(hours)} antes do horário.`};}if(/^(sim|quero|pode ser|\d+)$/i.test(c.text.trim()))return{text:'Quanto tempo antes fica bom para você? Por exemplo, meia hora ou 1 hora.'};if(/\b(minutos?|min|horas?|h|dias?)\b/i.test(c.text)&&!/(amanhã|amanha|hoje|às|as|remarcar)/i.test(c.text))return{text:'Consigo configurar de 5 minutos a 7 dias antes. Qual antecedência você prefere?'};}
  const intent=secretaryDateIntent(c.text);
  if(intent.ambiguous)return{text:'Você quer amanhã ou um horário no período da manhã?'};
- let requestedDate=intent.date||(memory?.requested_date>=intent.calendar.today?memory.requested_date:undefined);const requestedPeriod=intent.period||memory?.requested_period;
+ let requestedDate=intent.date;
+ const requestedPeriod=intent.period||memory?.requested_period;
+ if(!requestedDate){
+  if(intent.period){
+   const bHour=Number(new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',hour:'numeric',hour12:false}).format(new Date()));
+   if(intent.period==='morning')requestedDate=bHour<11?intent.calendar.today:intent.calendar.tomorrow;
+   else if(intent.period==='afternoon')requestedDate=bHour<17?intent.calendar.today:intent.calendar.tomorrow;
+   else if(intent.period==='evening')requestedDate=bHour<20?intent.calendar.today:intent.calendar.tomorrow;
+  }else if(memory?.requested_date>=intent.calendar.today){
+   requestedDate=memory.requested_date;
+  }
+ }
  const selectedTime=c.text.match(/\b([01]?\d|2[0-3])[:h]([0-5]\d)?\b/);const offeredTime=selectedTime?`${selectedTime[1].padStart(2,'0')}:${selectedTime[2]||'00'}`:null;
  const acceptsOffer=!intent.date&&memory?.offered_date&&Date.now()-new Date(memory.offered_at).getTime()<15*60000&&(explicitConfirmation(c.text)||(offeredTime&&(memory.offered_slots||[]).some((slot:any)=>slot.time.slice(0,5)===offeredTime)));
  if(acceptsOffer){requestedDate=memory.offered_date;const{error}=await c.db.from('secretary_memory').update({requested_date:requestedDate,offered_date:null,offered_slots:null,offered_at:null,pending:null}).eq('user_id',c.owner).eq('chat',c.chat);if(error)throw new Error('Preferência de horário indisponível');}
- if(intent.date||intent.period){const{error}=await c.db.from('secretary_memory').update({...(intent.date?{requested_date:intent.date,slot_selection:null}:{}),...(intent.period?{requested_period:intent.period,slot_selection:null}:{}),updated_at:new Date().toISOString()}).eq('user_id',c.owner).eq('chat',c.chat);if(error)throw new Error('Preferência de horário indisponível');}
+ if(intent.date||intent.period){const{error}=await c.db.from('secretary_memory').update({...(requestedDate?{requested_date:requestedDate,slot_selection:null}:{}),...(intent.period?{requested_period:intent.period,slot_selection:null}:{}),updated_at:new Date().toISOString()}).eq('user_id',c.owner).eq('chat',c.chat);if(error)throw new Error('Preferência de horário indisponível');}
  const greeting=c.text.trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[!.,?]/g,'').trim();
  if(/^(oi+|ola+|oie+|bom dia|boa tarde|boa noite|e ai|opa|hello|hi)$/.test(greeting)){const first=String(customer?.name||memory?.customer_name||'').trim().split(' ')[0];return{text:`${greeting.startsWith('bom dia')?'Bom dia':greeting.startsWith('boa tarde')?'Boa tarde':greeting.startsWith('boa noite')?'Boa noite':'Oi'}${first?', '+first:''}! ${c.history.some(m=>m.from_me)?'Como posso te ajudar?':`Aqui é ${String(c.settings.secretary_name||'Lia').slice(0,40)}, da ${c.settings.shop_name||'barbearia'}. Como posso te ajudar?`}`};}
  if(memory?.pending&&explicitConfirmation(c.text)){
@@ -176,20 +187,73 @@ async function secretaryConversation(c:Context,complete:(messages:any[],tools:an
      { const ids=bookingServiceIds(args,selectedServices);
      if(!ids.length||!ids.every(validUUID)){result={error:'Escolha um serviço do catálogo'};break;}
      selectedServices=ids;const saved=await c.db.from('secretary_memory').update({requested_services:ids}).eq('user_id',c.owner).eq('chat',c.chat);if(saved.error)throw Error('Serviços indisponíveis');
-     const slotArgs={p_owner:c.owner,...(ids.length>1?{p_services:ids}:{p_service:ids[0]}),p_professional:args.professional_id||null,p_date:requestedDate||args.date||null};
+     const targetDate=requestedDate||args.date||null;
+     const targetPeriod=requestedPeriod||args.period||null;
+     const slotArgs={p_owner:c.owner,...(ids.length>1?{p_services:ids}:{p_service:ids[0]}),p_professional:args.professional_id||null,p_date:targetDate};
      const slots=await rpc(c.db,ids.length>1?'secretary_slots_multi':'secretary_slots',slotArgs);
-     result=compactSecretarySlots(slots,requestedPeriod||args.period);
-     if(!result.length&&(requestedDate||args.date)){
-      const open=await rpc(c.db,'secretary_has_work_period',{p_owner:c.owner,p_date:requestedDate||args.date,p_professional:args.professional_id||null,p_period:requestedPeriod||args.period||null});
-      const periodLabel={morning:'de manhã',afternoon:'à tarde',evening:'à noite'}[(requestedPeriod||args.period) as 'morning'|'afternoon'|'evening'];
-      const unavailable=open?`Para ${friendlyBookingDate(requestedDate||args.date)} não tenho horário${periodLabel?' '+periodLabel:''}.`:`Para ${friendlyBookingDate(requestedDate||args.date)}, não há atendimento${periodLabel?' '+periodLabel:''}.`;
-      const next=await rpc(c.db,ids.length>1?'secretary_next_slots_multi':'secretary_next_slots',{p_owner:c.owner,...(ids.length>1?{p_services:ids}:{p_service:ids[0]}),p_after:requestedDate||args.date,p_professional:args.professional_id||null,p_period:requestedPeriod||args.period||null});
-      if(!next.length)return{text:`${unavailable} Também não encontrei opções nos próximos 30 dias com essa escolha. Quer tentar outro profissional ou período?`};
-      const offered=compactSecretarySlots(next,requestedPeriod||args.period);const offeredDate=offered[0].date;
-      const{error}=await c.db.from('secretary_memory').update({offered_date:offeredDate,offered_slots:offered,offered_at:new Date().toISOString()}).eq('user_id',c.owner).eq('chat',c.chat);if(error)throw new Error('Consulta indisponível');
-      return await saveSlotSelection(c,offered,ids,{intro:unavailable+' A próxima disponibilidade é:',alternative:true});
+     result=compactSecretarySlots(slots,targetPeriod);
+     if(!result.length&&targetDate){
+      const open=await rpc(c.db,'secretary_has_work_period',{p_owner:c.owner,p_date:targetDate,p_professional:args.professional_id||null,p_period:targetPeriod});
+      const periodLabel={morning:'de manhã',afternoon:'à tarde',evening:'à noite'}[(targetPeriod||'') as 'morning'|'afternoon'|'evening']||'';
+      const targetLabel=targetDate===intent.calendar.today?'hoje':targetDate===intent.calendar.tomorrow?'amanhã':friendlyBookingDate(targetDate);
+      const unavailable=open?`Para ${targetLabel} não tenho horário${periodLabel?' '+periodLabel:''}.`:`Para ${targetLabel}, não há atendimento${periodLabel?' '+periodLabel:''}.`;
+
+      const sameDayOther=compactSecretarySlots(slots,undefined);
+      const nextInPeriod=targetPeriod?await rpc(c.db,ids.length>1?'secretary_next_slots_multi':'secretary_next_slots',{p_owner:c.owner,...(ids.length>1?{p_services:ids}:{p_service:ids[0]}),p_after:targetDate,p_professional:args.professional_id||null,p_period:targetPeriod}):[];
+      const nextAny=await rpc(c.db,ids.length>1?'secretary_next_slots_multi':'secretary_next_slots',{p_owner:c.owner,...(ids.length>1?{p_services:ids}:{p_service:ids[0]}),p_after:targetDate,p_professional:args.professional_id||null,p_period:null});
+
+      if(!sameDayOther.length&&!nextInPeriod.length&&!nextAny.length){
+       return{text:`${unavailable} Também não encontrei opções nos próximos 30 dias com essa escolha. Quer tentar outro profissional ou período?`};
+      }
+
+      // Se no mesmo dia tem vagas em outro período (ex: pediu à tarde, mas tem de manhã)
+      if(sameDayOther.length){
+       const otherHour=Number(sameDayOther[0].time?.slice(0,2));
+       const otherPeriod=otherHour<12?'no período da manhã':otherHour<18?'no período da tarde':'no período da noite';
+       let intro=`${unavailable} Mas tenho opções livres ${otherPeriod}.`;
+       let offered=sameDayOther.slice(0,10);
+       if(nextInPeriod.length){
+        const nextPeriodDate=friendlyBookingDate(nextInPeriod[0].date);
+        intro+=` Já ${periodLabel?periodLabel:'nesse período'}, a próxima disponibilidade é em ${nextPeriodDate}.`;
+        offered=[...offered.slice(0,6),...compactSecretarySlots(nextInPeriod,targetPeriod).slice(0,6)];
+       }
+       const offeredDate=offered[0].date;
+       await c.db.from('secretary_memory').update({offered_date:offeredDate,offered_slots:offered,offered_at:new Date().toISOString()}).eq('user_id',c.owner).eq('chat',c.chat);
+       return await saveSlotSelection(c,offered,ids,{intro,alternative:true});
+      }
+
+      // Se no dia seguinte tem vaga antes da próxima vaga no período desejado (ex: sexta de manhã antes de sábado à tarde)
+      if(nextAny.length&&nextInPeriod.length&&nextAny[0].date<nextInPeriod[0].date){
+       const earlierDate=friendlyBookingDate(nextAny[0].date);
+       const earlierHour=Number(nextAny[0].time?.slice(0,2));
+       const earlierPeriod=earlierHour<12?'no período da manhã':earlierHour<18?'no período da tarde':'no período da noite';
+       const periodDate=friendlyBookingDate(nextInPeriod[0].date);
+       const intro=`${unavailable} Tenho disponibilidade em ${earlierDate} ${earlierPeriod}, ou ${periodLabel?periodLabel:'nesse período'} a partir de ${periodDate}.`;
+       const offered=[...compactSecretarySlots(nextAny,undefined).slice(0,6),...compactSecretarySlots(nextInPeriod,targetPeriod).slice(0,6)];
+       const offeredDate=offered[0].date;
+       await c.db.from('secretary_memory').update({offered_date:offeredDate,offered_slots:offered,offered_at:new Date().toISOString()}).eq('user_id',c.owner).eq('chat',c.chat);
+       return await saveSlotSelection(c,offered,ids,{intro,alternative:true});
+      }
+
+      const nextSlots=nextInPeriod.length?nextInPeriod:nextAny;
+      const offered=compactSecretarySlots(nextSlots,nextInPeriod.length?targetPeriod:undefined);
+      const offeredDate=offered[0].date;
+      const intro=`${unavailable} A próxima disponibilidade ${periodLabel?periodLabel+' ':''}é em ${friendlyBookingDate(offeredDate)}:`;
+      await c.db.from('secretary_memory').update({offered_date:offeredDate,offered_slots:offered,offered_at:new Date().toISOString()}).eq('user_id',c.owner).eq('chat',c.chat);
+      return await saveSlotSelection(c,offered,ids,{intro,alternative:true});
      }
-     if(result.length){if(!requestedDate&&!args.date){const date=result[0].date;const all=await rpc(c.db,ids.length>1?'secretary_slots_multi':'secretary_slots',{...slotArgs,p_date:date});result=compactSecretarySlots(all,requestedPeriod||args.period);}return await saveSlotSelection(c,result,ids);}break; }
+     if(result.length){
+      if(!targetDate){
+       const date=result[0].date;
+       const all=await rpc(c.db,ids.length>1?'secretary_slots_multi':'secretary_slots',{...slotArgs,p_date:date});
+       result=compactSecretarySlots(all,targetPeriod);
+      }
+      const isQuestion=/^(tem|teria|temos|ha|possui|consegue)\b/i.test(c.text.trim())||/\b(tem|teria)\s+(algum\s+)?hor[aá]rio/i.test(c.text);
+      const periodLabel={morning:'de manhã',afternoon:'à tarde',evening:'à noite'}[(targetPeriod||'') as 'morning'|'afternoon'|'evening']||'';
+      const targetLabel=targetDate===intent.calendar.today?'hoje':targetDate===intent.calendar.tomorrow?'amanhã':targetDate?friendlyBookingDate(targetDate):'';
+      const intro=isQuestion&&targetLabel?`Tenho sim! Para ${targetLabel}${periodLabel?' '+periodLabel:''}, tenho estes horários livres:`:undefined;
+      return await saveSlotSelection(c,result,ids,intro?{intro}:{});
+     }break; }
     case 'my_appointments':{
      if(!cid){result=[];break;}const{data,error}=await c.db.from('appointments').select('id,date,start_time,end_time,status,service_id,service_ids,service_names,professional_id').eq('user_id',c.owner).eq('customer_id',cid).in('status',['agendado','confirmado']).gte('date',new Date(Date.now()-3*3600000).toISOString().slice(0,10)).order('date').limit(15);if(error)throw new Error('Agenda indisponível');result=data;break;
     }
