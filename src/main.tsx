@@ -1,41 +1,26 @@
+import {tenantBase} from "./lib/tenant";
+import { preventPullToRefresh } from "./lib/preventPullToRefresh";
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 
-// ─── Prevenir pull-to-refresh (Android Chrome ignora overscroll-behavior no body overflow:hidden) ───
-if ("ontouchstart" in window) {
-  let touchStartY = 0;
-  window.addEventListener("touchstart", (e) => {
-    touchStartY = e.touches[0].clientY;
-  }, { passive: true });
-
-  window.addEventListener("touchmove", (e) => {
-    const deltaY = e.touches[0].clientY - touchStartY;
-    if (deltaY <= 0) return; // só interessa swipe para baixo
-
-    const el = e.target as Element | null;
-    const scrollable = el && typeof el.closest === "function"
-      ? (el.closest(".overflow-y-auto, .overflow-auto, .overflow-scroll") as HTMLElement | null)
-      : null;
-    const atTop = scrollable ? scrollable.scrollTop <= 0 : window.scrollY <= 0;
-    if (atTop) e.preventDefault();
-  }, { passive: false });
-}
+// Bloquear atualização pelo gesto sem impedir rolagem interna.
+if ("ontouchstart" in window) preventPullToRefresh();
 
 // ─── PWA: Forçar atualização automática, nunca travar em cache antigo ───
-if ("serviceWorker" in navigator) {
+if ("serviceWorker" in navigator && (window.location.hostname!=="barbearias.zlabs.com.br"||!!tenantBase()) && window.location.pathname!=="/acesso-barbearias") {
   const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.0";
 
-  // 1. Limpar service workers ÓRFÃOS (scope errado ou URL sem versão)
+  // 1. Limpar service workers ÓRFÃOS (scope errado ou versão desatualizada)
   navigator.serviceWorker.getRegistrations().then((registrations) => {
-    const currentScope = self.location.origin + "/";
+    const currentScope = self.location.origin + (tenantBase()?tenantBase()+"/":"/");
     for (const reg of registrations) {
       const scriptUrl = reg.active?.scriptURL || reg.installing?.scriptURL || reg.waiting?.scriptURL || "";
-      const wrongScope = reg.scope !== currentScope && !reg.scope.startsWith(currentScope);
-      // Registros antigos (ex: /sw.js sem ?v=) do registerSW.js removido
-      const staleUnversioned = scriptUrl.startsWith(currentScope) && !scriptUrl.includes("?v=");
-      if (wrongScope || staleUnversioned) {
-        console.log("[PWA] Unregistering old SW:", scriptUrl || reg.scope);
+      const wrongScope = false; // Never remove another shop's worker.
+      // Registros antigos sem versão ou com versão antiga que não corresponde à ativa
+      const staleVersion = reg.scope===currentScope && (!scriptUrl.includes("?v=") || !scriptUrl.includes("?v="+APP_VERSION));
+      if (wrongScope || staleVersion) {
+        console.log("[PWA] Unregistering old/stale SW:", scriptUrl || reg.scope);
         reg.unregister();
       }
     }
@@ -58,7 +43,10 @@ if ("serviceWorker" in navigator) {
   // 3. Recarrega quando o novo SW assume controle (uma vez por deploy)
   let refreshing = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (refreshing) return;
+    // Preserve the client's active screen when a worker updates in the background.
+    // The next normal opening loads the new application bundle.
+    const clientPortal = window.location.pathname.startsWith("/cliente") || /^(agendar|cliente|client)\./.test(window.location.hostname);
+    if (refreshing || clientPortal || document.querySelector("[data-native-scroll]")) return;
     refreshing = true;
     window.location.reload();
   });
@@ -74,9 +62,11 @@ if ("serviceWorker" in navigator) {
   // 6. Cache busting: registrar SW com versão dinâmica p/ furar cache Cloudflare
   const bustCache = () => {
     navigator.serviceWorker.getRegistration().then((reg) => {
-      if (!reg) {
-        // Registrar com versão dinâmica se ainda não registrado
-        navigator.serviceWorker.register("/sw.js?v=" + APP_VERSION);
+      const activeUrl = (tenantBase()?"/tenant-sw.js?v=":"/sw.js?v=")+APP_VERSION;
+      const scriptUrl = reg?.active?.scriptURL || reg?.installing?.scriptURL || reg?.waiting?.scriptURL || "";
+      if (!reg || reg.scope!==location.origin+(tenantBase()?tenantBase()+"/":"/") || !scriptUrl.includes("?v="+APP_VERSION)) {
+        // Registrar com versão dinâmica se ainda não registrado ou se versão antiga
+        navigator.serviceWorker.register(activeUrl,{scope:tenantBase()?tenantBase()+"/":"/"});
       }
     });
   };
