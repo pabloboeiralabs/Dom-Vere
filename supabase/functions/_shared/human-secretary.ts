@@ -48,7 +48,10 @@ export const secretaryTools=[
  ['propose_change','Prepare cancelamento ou remarcação de um agendamento listado por my_appointments; confirmação posterior obrigatória.',{appointment_id:{type:'string'},operation:{type:'string',enum:['cancel','reschedule']},service_id:{type:'string'},professional_id:{type:'string'},date:{type:'string'},time:{type:'string'}},['appointment_id','operation']],
  ['handoff','Encaminhe quando o cliente pedir atendente ou o pedido exceder suas ferramentas.',{},[]],
 ].map(([name,description,properties,required])=>({type:'function',function:{name,description,parameters:{type:'object',properties,required,additionalProperties:false}}}));
-export function explicitConfirmation(text:string){return /^(sim|confirmo|confirmar|pode confirmar|pode agendar|pode cancelar|pode remarcar|ok|pode ser|pode marcar|pode sim|fechado|combinado|claro|isso)[.!\s]*$/i.test(text.trim());}
+export function explicitConfirmation(text:string){
+  const clean=text.trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[!.,?]+$/,'').trim();
+  return /^(s|ss|sim|confirmo|confirma|confirmar|confirmado|pode confirmar|pode agendar|pode cancelar|pode remarcar|pode marcar|pode sim|pode ser|pode|ok|oki|okay|okey|ta|ta bom|ta bem|ta beleza|beleza|blz|blza|fechado|fechou|fecho|combinado|combina|claro|com certeza|certeza|isso|isso mesmo|exato|exatamente|perfeito|perfeitamente|show|show de bola|top|topo|bora|demorou|uhum|aham)$/i.test(clean);
+}
 export function canonicalPhone(phone:string){const value=phone.replace(/\D/g,'');return !phone.trim().startsWith('+')&&(value.length===10||value.length===11)?'55'+value:value;}
 const validUUID=(id:any)=>typeof id==='string'&&/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(id);
 export async function secretaryReply(c:Context,complete:(messages:any[],tools:any[])=>Promise<any>):Promise<{text:string;handoff?:boolean;slotSelection?:SlotSelection}>{
@@ -136,14 +139,30 @@ async function secretaryConversation(c:Context,complete:(messages:any[],tools:an
   }
  }
  const selectedTime=c.text.match(/\b([01]?\d|2[0-3])[:h]([0-5]\d)?\b/);const offeredTime=selectedTime?`${selectedTime[1].padStart(2,'0')}:${selectedTime[2]||'00'}`:null;
- const acceptsOffer=!intent.date&&memory?.offered_date&&Date.now()-new Date(memory.offered_at).getTime()<15*60000&&(explicitConfirmation(c.text)||(offeredTime&&(memory.offered_slots||[]).some((slot:any)=>slot.time.slice(0,5)===offeredTime)));
+ const acceptsOffer=!memory?.pending&&!intent.date&&memory?.offered_date&&Date.now()-new Date(memory.offered_at).getTime()<15*60000&&(explicitConfirmation(c.text)||(offeredTime&&(memory.offered_slots||[]).some((slot:any)=>slot.time.slice(0,5)===offeredTime)));
  if(acceptsOffer){requestedDate=memory.offered_date;const{error}=await c.db.from('secretary_memory').update({requested_date:requestedDate,offered_date:null,offered_slots:null,offered_at:null,pending:null}).eq('user_id',c.owner).eq('chat',c.chat);if(error)throw new Error('Preferência de horário indisponível');}
  if(intent.date||intent.period){const{error}=await c.db.from('secretary_memory').update({...(requestedDate?{requested_date:requestedDate,slot_selection:null}:{}),...(intent.period?{requested_period:intent.period,slot_selection:null}:{}),updated_at:new Date().toISOString()}).eq('user_id',c.owner).eq('chat',c.chat);if(error)throw new Error('Preferência de horário indisponível');}
  const greeting=c.text.trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[!.,?]/g,'').trim();
  if(/^(oi+|ola+|oie+|bom dia|boa tarde|boa noite|e ai|opa|hello|hi)$/.test(greeting)){const first=String(customer?.name||memory?.customer_name||'').trim().split(' ')[0];return{text:`${greeting.startsWith('bom dia')?'Bom dia':greeting.startsWith('boa tarde')?'Boa tarde':greeting.startsWith('boa noite')?'Boa noite':'Oi'}${first?', '+first:''}! ${c.history.some(m=>m.from_me)?'Como posso te ajudar?':`Aqui é ${String(c.settings.secretary_name||'Lia').slice(0,40)}, da ${c.settings.shop_name||'barbearia'}. Como posso te ajudar?`}`};}
  if(memory?.pending&&explicitConfirmation(c.text)){
-  const result=await rpc(c.db,'secretary_confirm',{p_owner:c.owner,p_chat:c.chat});
+  let result=await rpc(c.db,'secretary_confirm',{p_owner:c.owner,p_chat:c.chat});
   if(result.needs_profile){const current=(await c.db.from('secretary_memory').select('*').eq('user_id',c.owner).eq('chat',c.chat).maybeSingle()).data;const profile=await collectSecretaryProfile(c.db,c.owner,c.chat,customer,current||memory);return{text:profile.text||result.error||'Ainda faltam os dados para confirmar. Confira seu cadastro.'};}
+  if(result.error){
+   if(memory.pending.date&&memory.pending.time){
+    const pDate=memory.pending.date;
+    const pTime=String(memory.pending.time).slice(0,5);
+    const pProf=memory.pending.professional_id;
+    const pServices=Array.isArray(memory.pending.service_ids)&&memory.pending.service_ids.length?memory.pending.service_ids:[memory.pending.service_id].filter(Boolean);
+    if(pServices.length&&pProf){
+     const recheck=await rpc(c.db,pServices.length>1?'secretary_slots_multi':'secretary_slots',{p_owner:c.owner,...(pServices.length>1?{p_services:pServices}:{p_service:pServices[0]}),p_professional:pProf,p_date:pDate});
+     const isFree=Array.isArray(recheck)&&recheck.some((s:any)=>s.time?.slice(0,5)===pTime);
+     if(isFree){
+      await rpc(c.db,pServices.length>1?'secretary_propose_multi':'secretary_propose',{p_owner:c.owner,p_chat:c.chat,...(pServices.length>1?{p_services:pServices}:{p_service:pServices[0]}),p_professional:pProf,p_date:pDate,p_time:pTime});
+      result=await rpc(c.db,'secretary_confirm',{p_owner:c.owner,p_chat:c.chat});
+     }
+    }
+   }
+  }
   if(result.error)return{text:result.error};
   if(!result.date||!result.time||(!result.cancelled&&(!result.created||!result.professional_name||!result.service_name)))throw Error('A confirmação da agenda está incompleta. Consulte o painel antes de tentar novamente.');
   if(result.cancelled)return{text:`Pronto, cancelei o horário de ${friendlyBookingDate(result.date)} às ${result.time.slice(0,5)}.`};
@@ -156,10 +175,18 @@ async function secretaryConversation(c:Context,complete:(messages:any[],tools:an
   }
   return{text:`Combinado${firstName(customer?.name||memory?.customer_name||'')?', '+firstName(customer?.name||memory?.customer_name):''}! ${result.service_name} com ${professionalDisplayName(result.professional_name||'',c.professionals)}, ${friendlyBookingDate(result.date)}, às ${result.time.slice(0,5)}. Já está na agenda. Quanto tempo antes você quer que eu te lembre? Pode ser 30 minutos, 1 hora ou o tempo que preferir.`};
  }
- // An unconfirmed proposal must never survive a new request, a refusal or a topic change.
- if(memory?.pending){const{error}=await c.db.from('secretary_memory').update({pending:null,registration_stage:null,customer_birth_date:null}).eq('user_id',c.owner).eq('chat',c.chat);if(error)throw new Error('Memória indisponível');if(/^(não|nao|não confirmo|nao confirmo|desisti)[.!\s]*$/i.test(c.text.trim()))return{text:'Sem problema, não fiz essa alteração. Posso ajudar com outra opção?'};}
  let selectedServices:string[]=memory?.requested_services||[];
  const pair=requestedServicePair(c.text,c.services);
+ // An unconfirmed proposal must never survive a new request, a refusal or a topic change.
+ if(memory?.pending){
+  const isRefusal=/^(não|nao|não confirmo|nao confirmo|desisti|deixa|deixa pra lá|deixa pra la)[.!\s]*$/i.test(c.text.trim());
+  const isNewRequest=intent.date||intent.period||pair?.ids.length||/\b(outro|outra|outros|outras|dia|horário|horario|preço|preco|quanto|corte|barba|sobrancelha|botox|lavagem|pezinho)\b/i.test(c.text);
+  if(isRefusal||isNewRequest){
+   const{error}=await c.db.from('secretary_memory').update({pending:null,registration_stage:null,customer_birth_date:null}).eq('user_id',c.owner).eq('chat',c.chat);
+   if(error)throw new Error('Memória indisponível');
+   if(isRefusal)return{text:'Sem problema, não fiz essa alteração. Posso ajudar com outra opção?'};
+  }
+ }
  if(pair?.needsVariant){const beard=c.services.find(s=>s.name.toLowerCase()==='barba');if(beard)await c.db.from('secretary_memory').update({requested_services:[beard.id]}).eq('user_id',c.owner).eq('chat',c.chat);return{text:'A sobrancelha você prefere na lâmina ou na pinça? Vou incluir junto com a barba.'};}
  if(pair?.ids.length)selectedServices=pair.ids;
  if(selectedServices.length>=1&&/sobrancelha|sombrancelha|lâmina|lamina|pinça|pinca/i.test(c.text)){
@@ -238,7 +265,7 @@ async function secretaryConversation(c:Context,complete:(messages:any[],tools:an
       const nextSlots=nextInPeriod.length?nextInPeriod:nextAny;
       const offered=compactSecretarySlots(nextSlots,nextInPeriod.length?targetPeriod:undefined);
       const offeredDate=offered[0].date;
-      const intro=`${unavailable} A próxima disponibilidade ${periodLabel?periodLabel+' ':''}é em ${friendlyBookingDate(offeredDate)}:`;
+      const intro=`${unavailable} A próxima disponibilidade ${periodLabel?periodLabel+' ':''}é:`;
       await c.db.from('secretary_memory').update({offered_date:offeredDate,offered_slots:offered,offered_at:new Date().toISOString()}).eq('user_id',c.owner).eq('chat',c.chat);
       return await saveSlotSelection(c,offered,ids,{intro,alternative:true});
      }
