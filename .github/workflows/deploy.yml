@@ -32,6 +32,11 @@ jobs:
             cp -r /root/domvere-frontend/supabase/functions/* /root/supabase-domvere/docker/volumes/functions/
             docker restart supabase-edge-functions-domvere
 
+            echo "=== Verificando arquivo de ambiente ==="
+            if [ ! -f /root/domvere-frontend/.env ] && [ -f /root/domvere-security-backup-20261015/frontend-env-pre-rotation ]; then
+              cp /root/domvere-security-backup-20261015/frontend-env-pre-rotation /root/domvere-frontend/.env
+            fi
+
             echo "=== Buildando nova imagem (sem derrubar o atual) ==="
             docker compose build web
 
