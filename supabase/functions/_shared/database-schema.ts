@@ -576,6 +576,7 @@ export type Database = {
       }
       crm_leads: {
         Row: {
+          bot_enabled_when_global_off: boolean
           appointment_id: string | null
           assigned_staff_id: string | null
           bot_msg_count: number | null
@@ -598,6 +599,7 @@ export type Database = {
           wa_chatid: string | null
         }
         Insert: {
+          bot_enabled_when_global_off?: boolean
           appointment_id?: string | null
           assigned_staff_id?: string | null
           bot_msg_count?: number | null
@@ -620,6 +622,7 @@ export type Database = {
           wa_chatid?: string | null
         }
         Update: {
+          bot_enabled_when_global_off?: boolean
           appointment_id?: string | null
           assigned_staff_id?: string | null
           bot_msg_count?: number | null

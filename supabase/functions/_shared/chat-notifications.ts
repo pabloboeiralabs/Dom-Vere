@@ -2,8 +2,8 @@ import type {DatabaseClient} from './database-client.ts';
 import { shopStaff } from "./chat-actions.ts";
 export async function notifyManualMessage(db:DatabaseClient,owner:string,chat:string,text:string,fromMe:boolean){
  if(fromMe||!/^\d+@s\.whatsapp\.net$/.test(chat))return;
- const{data:lead}=await db.from('crm_leads').select('bot_paused,assigned_staff_id,name').eq('user_id',owner).eq('wa_chatid',chat).maybeSingle();
- if(!lead?.bot_paused){const{data:settings}=await db.from('settings').select('bot_enabled').eq('user_id',owner).maybeSingle();if(settings?.bot_enabled!==false)return;}
+ const{data:lead}=await db.from('crm_leads').select('bot_paused,bot_enabled_when_global_off,assigned_staff_id,name').eq('user_id',owner).eq('wa_chatid',chat).maybeSingle();
+ if(!lead?.bot_paused){if(lead?.bot_enabled_when_global_off)return;const{data:settings}=await db.from('settings').select('bot_enabled').eq('user_id',owner).maybeSingle();if(settings?.bot_enabled!==false)return;}
  const staff=await shopStaff(db,owner);
  const recipients=[owner,...(staff||[]).map((p)=>p.id)];
  for(const recipient of new Set(recipients)){

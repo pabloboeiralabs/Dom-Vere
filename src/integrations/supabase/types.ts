@@ -140,6 +140,7 @@ export type Database = {
       }
       crm_leads: {
         Row: {
+          bot_enabled_when_global_off: boolean
           appointment_id: string | null
           bot_msg_count: number | null
           bot_paused: boolean | null
@@ -157,6 +158,7 @@ export type Database = {
           wa_chatid: string | null
         }
         Insert: {
+          bot_enabled_when_global_off?: boolean
           appointment_id?: string | null
           bot_msg_count?: number | null
           bot_paused?: boolean | null
@@ -174,6 +176,7 @@ export type Database = {
           wa_chatid?: string | null
         }
         Update: {
+          bot_enabled_when_global_off?: boolean
           appointment_id?: string | null
           bot_msg_count?: number | null
           bot_paused?: boolean | null
@@ -1089,6 +1092,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      set_contact_bot_override: {
+        Args: { p_chat: string; p_enabled: boolean }
+        Returns: undefined
+      }
       client_portal_appointments: {
         Args: { p_customer_id: string }
         Returns: {

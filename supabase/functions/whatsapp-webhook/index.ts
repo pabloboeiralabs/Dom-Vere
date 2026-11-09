@@ -963,6 +963,14 @@ Deno.serve(async (req) => {
       if (error) throw error;
       return new Response(JSON.stringify({ok:true,message:"Outbound message stored."}));
     }
+    const chatId = `${sender}${suffix}`;
+    const contactBotEnabled = async () => {
+      const { data, error } = await supabase.from("crm_leads")
+        .select("bot_enabled_when_global_off,bot_paused")
+        .eq("user_id", cfg.user_id).eq("wa_chatid", chatId).maybeSingle();
+      if (error) throw error;
+      return data?.bot_enabled_when_global_off === true && !data.bot_paused;
+    };
     let manualPaused=false;
     if(!isMe){
       const {data:currentLead,error:currentLeadError}=await supabase.rpc("ensure_whatsapp_lead",{p_user_id:cfg.user_id,p_chat:`${sender}${suffix}`,p_phone:sender});
@@ -989,7 +997,7 @@ Deno.serve(async (req) => {
     let secretaryPending=false;
     if((isSim||isNao)&&!manualPaused){
       const[{data:pending},{data:mode}]=await Promise.all([supabase.from("secretary_memory").select("pending,pending_at,awaiting_reminder").eq("user_id",cfg.user_id).eq("chat",`${sender}${suffix}`).maybeSingle(),supabase.from("settings").select("bot_mode,bot_enabled").eq("user_id",cfg.user_id).maybeSingle()]);
-      secretaryPending=!!(pending?.awaiting_reminder||(pending?.pending&&new Date(pending.pending_at||'').getTime()>Date.now()-15*60000))&&mode?.bot_enabled===true&&mode?.bot_mode==='ai';
+      secretaryPending=!!(pending?.awaiting_reminder||(pending?.pending&&new Date(pending.pending_at||'').getTime()>Date.now()-15*60000))&&mode?.bot_mode==='ai'&&(mode.bot_enabled===true||await contactBotEnabled());
     }
     if (!secretaryPending && (isSim || isNao) && lowerText.length <= 35) {
       const {data:pendingLead,error:confirmationError}=await supabase.rpc('respond_whatsapp_reminder',{p_owner:cfg.user_id,p_chat:`${sender}${suffix}`,p_confirm:isSim});
@@ -1036,7 +1044,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: true, message: "Group message stored." }));
     }
 
-    const isBotEnabled = !!(settingsRes.data?.bot_enabled);
+    const isBotEnabled = settingsRes.data?.bot_enabled === true || await contactBotEnabled();
     if (!isBotEnabled) {
       console.log("[webhook] Bot is disabled for user, saving message but skipping AI reply.");
       return new Response(JSON.stringify({ ok: true, message: "Bot disabled, message stored." }));
@@ -1146,6 +1154,10 @@ Deno.serve(async (req) => {
       if (botPaused) {
         console.log("[webhook] Bot paused for lead, skipping response");
         return new Response(JSON.stringify({ ok: true, ignored: "bot_paused" }));
+      }
+
+      if (settingsRes.data?.bot_enabled !== true && !await contactBotEnabled()) {
+        return new Response(JSON.stringify({ ok: true, ignored: "contact_bot_disabled" }));
       }
 
       if (isGreetingOnly) {

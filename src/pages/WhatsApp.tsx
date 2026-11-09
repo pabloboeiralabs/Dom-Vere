@@ -1,3 +1,5 @@
+import { BotPauseButton } from "@/components/whatsapp/BotPauseButton";
+import { ContactBotButton } from "@/components/whatsapp/ContactBotButton";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useUazapi, type UazapiChat, type UazapiMessage } from "@/hooks/useUazapi";
 import { WhatsAppConnect } from "@/components/whatsapp/WhatsAppConnect";
@@ -425,6 +427,7 @@ export default function WhatsApp() {
           </div>
           {/* Summary bar + Tabs */}
           <div className="px-3 py-2 border-b border-border space-y-2">
+            <BotPauseButton canManage={!!user && ["barbearia", "admin"].includes(user.role)} />
             <div className="flex items-center gap-3 text-xs">
               <span className="flex items-center gap-1 text-muted-foreground"><Users className="h-3 w-3" /> {leadsCount} leads</span>
               <span className="flex items-center gap-1 text-muted-foreground"><Clock className="h-3 w-3" /> {waitingCount} espera</span>
@@ -460,13 +463,20 @@ export default function WhatsApp() {
         {/* Right panel - Conversation */}
         <ResizablePanel defaultSize={70} minSize={40} className={`flex flex-col ${!showMobileChat && !activeChat ? "hidden md:flex" : ""} ${showMobileChat ? "flex" : "hidden md:flex"}`}>
           {activeChat ? (
-            <WhatsAppConversation
-              chat={activeChat}
-              messages={messages}
-              onSendMessage={handleSendMessage}
-              onBack={() => { setShowMobileChat(false); }}
-              sending={sending}
-            />
+            <div className="flex h-full min-h-0 flex-col">
+              {user && ['barbearia', 'admin'].includes(user.role) && /^[0-9]{7,15}@s\.whatsapp\.net$/.test(activeChat.wa_chatid) && (
+                <ContactBotButton key={activeChat.wa_chatid} owner={user.id} chat={activeChat.wa_chatid} />
+              )}
+              <div className="min-h-0 flex-1">
+                <WhatsAppConversation
+                  chat={activeChat}
+                  messages={messages}
+                  onSendMessage={handleSendMessage}
+                  onBack={() => { setShowMobileChat(false); }}
+                  sending={sending}
+                />
+              </div>
+            </div>
           ) : (
             <div className="flex-1 flex items-center justify-center bg-muted/20">
               <div className="text-center">
