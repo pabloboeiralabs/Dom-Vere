@@ -1,16 +1,16 @@
+import AgendaBoard, { type AgendaAppointment } from "@/components/AgendaBoard";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { format, addDays, startOfWeek, isSameDay } from "date-fns";
+import { format, addDays, startOfWeek } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CalendarClock, ChevronLeft, ChevronRight, Plus, Share2, Copy, Check } from "lucide-react";
 
@@ -63,20 +63,6 @@ interface Appointment {
   notes: string;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  agendado: "bg-blue-500/20 text-blue-700 border-blue-500/30",
-  concluido: "bg-green-500/20 text-green-700 border-green-500/30",
-  cancelado: "bg-red-500/20 text-red-700 border-red-500/30",
-  no_show: "bg-yellow-500/20 text-yellow-700 border-yellow-500/30",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  agendado: "Agendado",
-  concluido: "Concluído",
-  cancelado: "Cancelado",
-  no_show: "Não compareceu",
-};
-
 function generateTimeSlots(start: string, end: string, interval = 30): string[] {
   const slots: string[] = [];
   const [sh, sm] = start.split(":").map(Number);
@@ -100,12 +86,14 @@ export default function Scheduling() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [schedules, setSchedules] = useState<Record<string, Schedule[]>>({});
+  const [lastServices,setLastServices]=useState<AgendaAppointment[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<ViewMode>("weekly");
+  const [viewMode, setViewMode] = useState<ViewMode>("daily");
+  const [professionalFilter, setProfessionalFilter] = useState("all");
   const [linkCopied, setLinkCopied] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
   const filteredCustomers = useMemo(() =>
@@ -158,6 +146,28 @@ export default function Scheduling() {
       setCustomers((custsRes.data || []) as Customer[]);
       setServices((servsRes.data || []) as Service[]);
       setAppointments((apptsRes.data || []) as Appointment[]);
+      const latest = await Promise.all(profs.map(async (prof) => {
+        const { data, error } = await supabase.from("appointments")
+          .select("id,professional_id,date,start_time,end_time,status,service_names,customer:customers(name),service:services(name)")
+          .eq("user_id", user.id)
+          .eq("professional_id", prof.id)
+          .eq("status", "concluido")
+          .order("date", { ascending: false })
+          .order("start_time", { ascending: false })
+          .limit(1)
+          .overrideTypes<Array<AgendaAppointment & {
+            service_names: string | null;
+            customer: { name: string } | null;
+            service: { name: string } | null;
+          }>, { merge: false }>();
+        if (error) return [];
+        return (data || []).map((row) => ({
+          ...row,
+          customer_name: row.customer?.name,
+          service_name: row.service_names || row.service?.name,
+        }));
+      }));
+      setLastServices(latest.flat());
 
       if (profs.length > 0) {
         const profIds = profs.map((p) => p.id);
@@ -222,19 +232,18 @@ export default function Scheduling() {
       }).catch((err) => {
         console.error("[Scheduling] Falha ao chamar notify-professional:", err);
       });
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e: unknown) {
+      toast.error((typeof e === 'object' && e !== null && 'message' in e ? String(e.message) : String(e)));
     }
   };
 
   const updateStatus = async (id: string, status: string) => {
     if (!user) return;
-    await supabase.from("appointments").update({ status }).eq("id", id).eq("user_id", user.id);
-    loadData();
+    const { error } = await supabase.from("appointments").update({ status }).eq("id", id).eq("user_id", user.id);
+    if (error) { toast.error("Não foi possível alterar o status."); return; }
+    toast.success("Status atualizado");
+    await loadData();
   };
-
-  const getAppointmentsForCell = (profId: string, day: Date) =>
-    appointments.filter((a) => a.professional_id === profId && isSameDay(parseLocalDate(a.date), day));
 
   const openNewAppointment = (profId?: string, day?: Date, time?: string) => {
     const endTime = time
@@ -265,53 +274,10 @@ export default function Scheduling() {
     setTimeout(() => setLinkCopied(false), 2000);
   };
 
-  // Daily view helpers
-  const getDaySchedulesForProf = (profId: string, day: Date) =>
-    schedules[profId]?.filter((s) => s.day_of_week === day.getDay() && s.active) || [];
-
-  const getDayScheduleForProf = (profId: string, day: Date) => {
-    const daySchedules = getDaySchedulesForProf(profId, day);
-    if (daySchedules.length === 0) return undefined;
-
-    return {
-      ...daySchedules[0],
-      start_time: daySchedules.reduce((min, s) => (s.start_time < min ? s.start_time : min), "23:59:00"),
-      end_time: daySchedules.reduce((max, s) => (s.end_time > max ? s.end_time : max), "00:00:00"),
-      active: true,
-    };
-  };
-
-  const isWithinSchedule = (profId: string, day: Date, time: string) =>
-    getDaySchedulesForProf(profId, day).some(
-      (s) => time >= s.start_time.substring(0, 5) && time < s.end_time.substring(0, 5)
-    );
-
-  const getAppointmentAtSlot = (profId: string, day: Date, time: string) => {
-    return appointments.find(
-      (a) =>
-        a.professional_id === profId &&
-        isSameDay(parseLocalDate(a.date), day) &&
-        a.start_time?.substring(0, 5) === time
-    );
-  };
-
-  const isSlotOccupied = (profId: string, day: Date, time: string) => {
-    const [th, tm] = time.split(":").map(Number);
-    const slotMin = th * 60 + tm;
-    return appointments.some((a) => {
-      if (a.professional_id !== profId || !isSameDay(parseLocalDate(a.date), day)) return false;
-      const [sh, sm] = (a.start_time || "").split(":").map(Number);
-      const [eh, em] = (a.end_time || "").split(":").map(Number);
-      const startMin = sh * 60 + (sm || 0);
-      const endMin = eh * 60 + (em || 0);
-      return slotMin >= startMin && slotMin < endMin;
-    });
-  };
-
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-foreground">Agendamento</h1>
+        <div><h1 className="text-2xl font-bold text-foreground">Agenda da equipe</h1><p className="text-sm text-muted-foreground mt-1">Horários, clientes e serviços organizados por profissional.</p></div>
         <div className="flex items-center gap-2 flex-wrap">
           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
             <TabsList>
@@ -374,6 +340,15 @@ export default function Scheduling() {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3">
+        <Button variant={professionalFilter === "all" ? "default" : "outline"} onClick={()=>{ setProfessionalFilter("all"); setViewMode("daily"); }}>Ver agenda geral da barbearia</Button>
+        <Label htmlFor="agenda-professional">Profissional</Label>
+        <select id="agenda-professional" value={professionalFilter} onChange={e=>setProfessionalFilter(e.target.value)} className="rounded-lg border bg-background text-foreground px-3 py-2 text-sm">
+          <option value="all">Toda a equipe</option>{professionals.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <span className="text-sm text-muted-foreground">{professionalFilter === "all" ? "Agenda geral da equipe" : `Agenda de ${professionals.find(p=>p.id === professionalFilter)?.name || "profissional"}`}</span>
+      </div>
+
       {loading ? (
         <div className="flex justify-center py-12">
           <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
@@ -385,30 +360,13 @@ export default function Scheduling() {
             <p className="text-muted-foreground">Cadastre profissionais primeiro para usar o agendamento</p>
           </CardContent>
         </Card>
-      ) : viewMode === "weekly" ? (
-        <WeeklyView
-          professionals={professionals}
-          weekDays={weekDays}
-          schedules={schedules}
-          appointments={appointments}
-          getAppointmentsForCell={getAppointmentsForCell}
-          openNewAppointment={openNewAppointment}
-          updateStatus={updateStatus}
-          onDayClick={(day) => { setSelectedDate(day); setViewMode("daily"); }}
-        />
       ) : (
-        <DailyView
-          professionals={professionals}
-          selectedDate={selectedDate}
-          schedules={schedules}
-          appointments={appointments}
-          getAppointmentAtSlot={getAppointmentAtSlot}
-          isSlotOccupied={isSlotOccupied}
-          getDayScheduleForProf={getDayScheduleForProf}
-          isWithinSchedule={isWithinSchedule}
-          openNewAppointment={openNewAppointment}
-          updateStatus={updateStatus}
-        />
+        <AgendaBoard professionals={professionals.filter(p => professionalFilter === "all" || p.id === professionalFilter)}
+          days={viewMode === "weekly" ? weekDays : [selectedDate]} schedules={schedules} lastServices={lastServices}
+          appointments={appointments.filter(a => professionalFilter === "all" || a.professional_id === professionalFilter)}
+          openNewAppointment={openNewAppointment} updateStatus={updateStatus}
+          onViewProfessional={id=>{ setProfessionalFilter(id); setWeekStart(startOfWeek(selectedDate, { weekStartsOn: 1 })); setViewMode("weekly"); }}
+          onDayClick={day => { setSelectedDate(day); setViewMode("daily"); }} />
       )}
 
       {/* Create Appointment Dialog */}
@@ -633,182 +591,6 @@ export default function Scheduling() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-// ─── Weekly View Component ───
-interface WeeklyViewProps {
-  professionals: Professional[];
-  weekDays: Date[];
-  schedules: Record<string, Schedule[]>;
-  appointments: Appointment[];
-  getAppointmentsForCell: (profId: string, day: Date) => Appointment[];
-  openNewAppointment: (profId?: string, day?: Date) => void;
-  updateStatus: (id: string, status: string) => void;
-  onDayClick: (day: Date) => void;
-}
-
-function WeeklyView({ professionals, weekDays, schedules, getAppointmentsForCell, openNewAppointment, updateStatus, onDayClick }: WeeklyViewProps) {
-  return (
-    <div className="overflow-x-auto">
-      <div className="min-w-[800px]">
-        <div className="grid gap-1" style={{ gridTemplateColumns: `120px repeat(${weekDays.length}, 1fr)` }}>
-          <div className="p-2 text-sm font-bold text-muted-foreground sticky left-0 bg-background z-10">Profissional</div>
-          {weekDays.map((d) => (
-            <div
-              key={d.toISOString()}
-              className={`p-2 text-center text-sm font-medium rounded-t-lg cursor-pointer hover:bg-accent/30 transition-colors ${isSameDay(d, new Date()) ? "bg-primary/10 text-primary" : "text-foreground"}`}
-              onClick={() => onDayClick(d)}
-            >
-              <div className="capitalize">{format(d, "EEE", { locale: ptBR })}</div>
-              <div className="text-lg font-bold">{format(d, "dd")}</div>
-            </div>
-          ))}
-        </div>
-
-        {professionals.map((prof) => (
-          <div key={prof.id} className="grid gap-1 border-t border-border" style={{ gridTemplateColumns: `120px repeat(${weekDays.length}, 1fr)` }}>
-            <div className="p-2 text-sm font-medium text-foreground flex items-center sticky left-0 bg-background z-10">
-              {prof.name}
-            </div>
-            {weekDays.map((day) => {
-              const dayAppts = getAppointmentsForCell(prof.id, day);
-              const daySchedule = schedules[prof.id]?.find((s) => s.day_of_week === day.getDay());
-              const isOff = !daySchedule || !daySchedule.active;
-
-              return (
-                <div
-                  key={day.toISOString()}
-                  className={`min-h-[80px] p-1 rounded-lg border border-border/50 ${isOff && dayAppts.length === 0 ? "bg-muted/30" : "bg-card cursor-pointer hover:bg-accent/20"} ${isSameDay(day, new Date()) ? "ring-1 ring-primary/30" : ""}`}
-                  onClick={() => (!isOff || dayAppts.length > 0) && onDayClick(day)}
-                >
-                  {dayAppts.length > 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full gap-1">
-                      <span className="text-lg font-bold text-primary">{dayAppts.length}</span>
-                      <span className="text-[10px] text-muted-foreground">{dayAppts.length === 1 ? "serviço" : "serviços"}</span>
-                    </div>
-                  ) : isOff ? (
-                    <span className="text-[10px] text-muted-foreground">Folga</span>
-                  ) : (
-                    <span className="text-[10px] text-muted-foreground opacity-50">—</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── Daily View Component ───
-interface DailyViewProps {
-  professionals: Professional[];
-  selectedDate: Date;
-  schedules: Record<string, Schedule[]>;
-  appointments: Appointment[];
-  getAppointmentAtSlot: (profId: string, day: Date, time: string) => Appointment | undefined;
-  isSlotOccupied: (profId: string, day: Date, time: string) => boolean;
-  getDayScheduleForProf: (profId: string, day: Date) => Schedule | undefined;
-  isWithinSchedule: (profId: string, day: Date, time: string) => boolean;
-  openNewAppointment: (profId?: string, day?: Date, time?: string) => void;
-  updateStatus: (id: string, status: string) => void;
-}
-
-function DailyView({ professionals, selectedDate, appointments, getDayScheduleForProf, getAppointmentAtSlot, isSlotOccupied, isWithinSchedule, openNewAppointment, updateStatus }: DailyViewProps) {
-  const allSchedules = professionals.map((p) => getDayScheduleForProf(p.id, selectedDate)).filter(Boolean) as Schedule[];
-  const dayAppointments = appointments.filter((a) => isSameDay(parseLocalDate(a.date), selectedDate));
-
-  if (allSchedules.length === 0 && dayAppointments.length === 0) {
-    return (
-      <Card>
-        <CardContent className="py-12 text-center">
-          <p className="text-muted-foreground">Nenhum profissional trabalha neste dia</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const scheduleStarts = allSchedules.map((s) => s.start_time.substring(0, 5));
-  const scheduleEnds = allSchedules.map((s) => s.end_time.substring(0, 5));
-  const appointmentStarts = dayAppointments.map((a) => a.start_time?.substring(0, 5)).filter(Boolean) as string[];
-  const appointmentEnds = dayAppointments.map((a) => a.end_time?.substring(0, 5)).filter(Boolean) as string[];
-  const earliestStart = [...scheduleStarts, ...appointmentStarts].reduce((min, time) => (time < min ? time : min), "23:59");
-  const latestEnd = [...scheduleEnds, ...appointmentEnds].reduce((max, time) => (time > max ? time : max), "00:00");
-  const timeSlots = generateTimeSlots(earliestStart, latestEnd, 30);
-
-  return (
-    <div className="overflow-x-auto">
-      <div className="min-w-[600px]">
-        <div className="grid gap-px bg-border" style={{ gridTemplateColumns: `70px repeat(${professionals.length}, 1fr)` }}>
-          <div className="p-2 text-xs font-bold text-muted-foreground bg-background">Horário</div>
-          {professionals.map((p) => {
-            const sch = getDayScheduleForProf(p.id, selectedDate);
-            return (
-              <div key={p.id} className={`p-2 text-center text-sm font-medium bg-background ${!sch?.active ? "opacity-50" : ""}`}>
-                {p.name}
-                {sch?.active && (
-                  <div className="text-[10px] text-muted-foreground">
-                    {sch.start_time?.substring(0, 5)} - {sch.end_time?.substring(0, 5)}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {timeSlots.map((time) => (
-          <div
-            key={time}
-            className="grid gap-px bg-border"
-            style={{ gridTemplateColumns: `70px repeat(${professionals.length}, 1fr)` }}
-          >
-            <div className="p-1 text-xs text-muted-foreground bg-background flex items-center justify-center font-mono">
-              {time}
-            </div>
-            {professionals.map((prof) => {
-              const sch = getDayScheduleForProf(prof.id, selectedDate);
-              const appt = getAppointmentAtSlot(prof.id, selectedDate, time);
-              const isOutOfHours = !sch?.active || !isWithinSchedule(prof.id, selectedDate, time);
-              const occupied = !appt && isSlotOccupied(prof.id, selectedDate, time);
-
-              if (isOutOfHours && !appt) {
-                return <div key={prof.id} className="min-h-[40px] bg-muted/30" />;
-              }
-
-              if (appt) {
-                return (
-                  <div
-                    key={prof.id}
-                    className={`min-h-[40px] p-1 bg-background border-l-2 ${STATUS_COLORS[appt.status] || ""} cursor-pointer`}
-                    onClick={() => {
-                      const next = appt.status === "agendado" ? "concluido" : appt.status === "concluido" ? "agendado" : appt.status;
-                      updateStatus(appt.id, next);
-                    }}
-                  >
-                    <div className="text-xs font-medium truncate">{appt.customer_name || "Cliente"}</div>
-                    <div className="text-[10px] truncate opacity-75">{appt.service_name}</div>
-                  </div>
-                );
-              }
-
-              if (occupied) {
-                return <div key={prof.id} className="min-h-[40px] bg-background" />;
-              }
-
-              return (
-                <div
-                  key={prof.id}
-                  className="min-h-[40px] bg-background hover:bg-accent/20 cursor-pointer transition-colors"
-                  onClick={() => openNewAppointment(prof.id, selectedDate, time)}
-                />
-              );
-            })}
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
