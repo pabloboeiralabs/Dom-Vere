@@ -25,6 +25,7 @@ import {
    =================================================================== */
 
 type Session = {
+  pwa_session_token: string;
   customer_id: string;
   user_id: string;
   name: string;
@@ -1148,24 +1149,14 @@ function BookScreen({ session, onDone, onCancel, onDoneChange }: { session: Sess
    APPOINTMENTS SCREEN
    =================================================================== */
 
-function AppointmentsScreen({ session }: { session: Session }) {
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [loading, setLoading] = useState(true);
+function AppointmentsScreen({ appointments, history, loading, sessionToken, onRefresh }: {
+  sessionToken: string;
+  onRefresh: () => Promise<void>;
+  appointments: Appointment[];
+  history: HistoryItem[];
+  loading: boolean;
+}) {
   const [filter, setFilter] = useState<"upcoming" | "past" | "history">("upcoming");
-
-  useEffect(() => {
-    (async () => {
-      const cli = supabase as any;
-      const [a, h] = await Promise.all([
-        cli.rpc("client_portal_appointments", { p_customer_id: session.customer_id }),
-        cli.rpc("client_portal_history", { p_customer_id: session.customer_id }),
-      ]);
-      if (a.data) setAppointments(a.data as Appointment[]);
-      if (h.data) setHistory(h.data as HistoryItem[]);
-      setLoading(false);
-    })();
-  }, [session.customer_id]);
 
   const upcoming = useMemo(() => appointments
     .filter((a) => safeParseDateTime(a.date, a.start_time) >= new Date() && a.status !== "cancelado")
@@ -1178,11 +1169,11 @@ function AppointmentsScreen({ session }: { session: Session }) {
     [appointments]);
 
   const handleCancel = async (id: string) => {
-    const { data: updated, error } = await (supabase as any).rpc("client_portal_cancel_appointment", { p_appointment_id: id });
+    const { data: updated, error } = await (supabase as any).rpc("client_cancel_appointment", { p_appointment_id: id, p_session_token: sessionToken });
     if (error) { toast.error("Erro ao cancelar agendamento"); return; }
     if (!updated) { toast.error("Agendamento já estava cancelado"); return; }
     toast.success("Agendamento cancelado");
-    setAppointments((prev) => prev.map((a) => a.id === id ? { ...a, status: "cancelado" } : a));
+    await onRefresh();
   };
 
   if (loading) {
@@ -1488,7 +1479,7 @@ export default function ClientPortal() {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && parsed.user_id && parsed.customer_id && parsed.name) {
+        if (parsed && parsed.user_id && parsed.customer_id && parsed.name && parsed.pwa_session_token) {
           return parsed;
         }
       }
@@ -1496,6 +1487,8 @@ export default function ClientPortal() {
     return null;
   });
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [appointmentHistory, setAppointmentHistory] = useState<HistoryItem[]>([]);
+  const [appointmentsLoading, setAppointmentsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>("inicio");
   const [bookDone, setBookDone] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -1560,7 +1553,7 @@ export default function ClientPortal() {
       if (saved) {
         const parsed = JSON.parse(saved);
         // Validate required fields to avoid crashes with stale sessions
-        if (parsed && parsed.user_id && parsed.customer_id && parsed.name) {
+        if (parsed && parsed.user_id && parsed.customer_id && parsed.name && parsed.pwa_session_token) {
           setSession(parsed);
         } else {
           localStorage.removeItem(STORAGE_KEY);
@@ -1577,23 +1570,58 @@ export default function ClientPortal() {
     }
   }, []);
 
-  /* Fetch appointments */
+  const customerId = session?.customer_id;
+  const sessionToken = session?.pwa_session_token;
+  const latestAgendaRequest = useRef(0);
   const refreshAll = useCallback(async () => {
-    if (!session) return;
-    const [aRes, sRes] = await Promise.all([
-      (supabase as any).rpc("client_portal_appointments", { p_customer_id: session.customer_id }),
-      (supabase as any).rpc("client_portal_refresh", { p_customer_id: session.customer_id }),
-    ]);
-    if (aRes.data) setAppointments(aRes.data as Appointment[]);
-    if (sRes.data?.[0]) {
-      setSession(sRes.data[0] as Session);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(sRes.data[0]));
+    if (!customerId || !sessionToken) return;
+    const request = ++latestAgendaRequest.current;
+    const { data, error } = await supabase.rpc("client_portal_sync_snapshot", {
+      p_customer_id: customerId,
+      p_session_token: sessionToken,
+    });
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (request !== latestAgendaRequest.current || !saved || JSON.parse(saved).pwa_session_token !== sessionToken) return;
+    setAppointmentsLoading(false);
+    if (error) {
+      if (error.message.includes("Sessão expirada")) {
+        localStorage.removeItem(STORAGE_KEY);
+        setSession(null);
+        setAppointments([]);
+        setAppointmentHistory([]);
+      }
+      return;
     }
-  }, [session]);
+    if (!data) return;
+    const snapshot = data as unknown as {
+      appointments: Appointment[];
+      history: HistoryItem[];
+      profile: Omit<Session, "pwa_session_token"> | null;
+    };
+    setAppointments(snapshot.appointments);
+    setAppointmentHistory(snapshot.history);
+    if (snapshot.profile?.customer_id === customerId) {
+      const next = { ...snapshot.profile, pwa_session_token: sessionToken };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      setSession(current => JSON.stringify(current) === JSON.stringify(next) ? current : next);
+    }
+  }, [customerId, sessionToken]);
 
-  const fetchAppts = useMemo(() => () => refreshAll(), [refreshAll]);
+  const fetchAppts = refreshAll;
 
-  useEffect(() => { fetchAppts(); }, [fetchAppts]);
+  useEffect(() => {
+    if (!sessionToken) return;
+    const refresh = () => { if (!document.hidden) void refreshAll(); };
+    refresh();
+    const interval = window.setInterval(refresh, 10000);
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [refreshAll, sessionToken]);
 
   const { pullDistance, refreshing } = usePullToRefresh({
     onRefresh: refreshAll,
@@ -1690,7 +1718,12 @@ export default function ClientPortal() {
     !!session && pushEnabled
   );
 
-  const handleLogin = (s: Session) => setSession(s);
+  const handleLogin = (s: Session) => {
+    setAppointments([]);
+    setAppointmentHistory([]);
+    setAppointmentsLoading(true);
+    setSession(s);
+  };
   const handleLogout = () => {
     pushSub.unsubscribe();
     localStorage.removeItem(STORAGE_KEY);
@@ -1762,7 +1795,7 @@ export default function ClientPortal() {
               <Button
                 onClick={async () => {
                   setConfirming(true);
-                  const { data, error } = await (supabase as any).rpc("client_portal_cancel_appointment", { p_appointment_id: confirmAppt.id });
+                  const { data, error } = await (supabase as any).rpc("client_cancel_appointment", { p_appointment_id: confirmAppt.id, p_session_token: sessionToken });
                   setConfirming(false);
                   if (error) {
                     toast.error("Erro ao cancelar agendamento");
@@ -1781,7 +1814,7 @@ export default function ClientPortal() {
               <Button
                 onClick={async () => {
                   setConfirming(true);
-                  const { data, error } = await (supabase as any).rpc("client_confirm_appointment", { p_appointment_id: confirmAppt.id });
+                  const { data, error } = await (supabase as any).rpc("client_confirm_appointment_secure", { p_appointment_id: confirmAppt.id, p_session_token: sessionToken });
                   setConfirming(false);
                   if (error || !data) {
                     toast.error("Erro ao confirmar agendamento");
@@ -1881,7 +1914,7 @@ export default function ClientPortal() {
             )}
             {activeTab === "inicio" && <HomeScreen key={`home-${refreshKey}`} session={session} appointments={appointments} onTabChange={setActiveTab} />}
             {activeTab === "agendar" && <BookScreen session={session} onDone={fetchAppts} onCancel={() => setActiveTab("inicio")} onDoneChange={setBookDone} />}
-            {activeTab === "agenda" && <AppointmentsScreen key={`appts-${refreshKey}`} session={session} />}
+            {activeTab === "agenda" && <AppointmentsScreen key={`appts-${refreshKey}`} appointments={appointments} history={appointmentHistory} loading={appointmentsLoading} sessionToken={session.pwa_session_token} onRefresh={refreshAll} />}
             {activeTab === "perfil" && <ProfileScreen session={session} onLogout={handleLogout} pushEnabled={pushEnabled} onForcePush={forceSubscribe} onTogglePush={async () => {
               if (!pushEnabled) {
                 const result = await Notification.requestPermission();

@@ -1092,6 +1092,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      client_portal_sync_snapshot: {
+        Args: { p_customer_id: string; p_session_token: string }
+        Returns: Json
+      }
       set_contact_bot_override: {
         Args: { p_chat: string; p_enabled: boolean }
         Returns: undefined
