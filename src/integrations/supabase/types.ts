@@ -1128,6 +1128,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      public_booking_slots: {
+        Args: { p_professional: string; p_date: string; p_services: string[] }
+        Returns: Json
+      }
       complete_panel_appointment: {
         Args: { p_appointment_id: string; p_service_ids: string[]; p_discount: number; p_splits: Json }
         Returns: undefined

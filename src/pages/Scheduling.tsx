@@ -109,15 +109,42 @@ export default function Scheduling() {
   const [form, setForm] = useState({
     professional_id: "",
     customer_id: "",
-    service_id: "",
+    service_ids: [] as string[],
     date: format(new Date(), "yyyy-MM-dd"),
     date_input: formatDateForInput(format(new Date(), "yyyy-MM-dd")),
-    start_time: "09:00",
-    end_time: "09:30",
+    start_time: "",
     notes: "",
     reminder_enabled: false,
     reminder_hours: "24",
   });
+
+  const { professional_id: bookingProfessional, date: bookingDate, service_ids: bookingServices } = form;
+  const slotsKey = JSON.stringify([bookingProfessional, bookingDate, bookingServices]);
+  const [slotResult, setSlotResult] = useState<{ key: string; times: string[]; error: boolean } | null>(null);
+  const [savingAppointment, setSavingAppointment] = useState(false);
+  const currentSlots = slotResult?.key === slotsKey ? slotResult : null;
+  const selectedServices = bookingServices.map(id => services.find(service => service.id === id)).filter((service): service is Service => !!service);
+  const duration = selectedServices.reduce((sum, service) => sum + Math.max(5, service.duration_minutes ?? 30), 0);
+  const serviceTotal = selectedServices.reduce((sum, service) => sum + Number(service.price), 0);
+  const canBook = dateInputToIso(form.date_input) === bookingDate &&
+    currentSlots?.times.includes(form.start_time) && selectedServices.length === bookingServices.length;
+
+  useEffect(() => {
+    setSlotResult(null);
+    if (!dialogOpen || !bookingProfessional || !bookingDate || !bookingServices.length) return;
+    let active = true;
+    void supabase.rpc("public_booking_slots", {
+      p_professional: bookingProfessional, p_date: bookingDate, p_services: bookingServices,
+    }).then(({ data, error }) => {
+      if (!active) return;
+      const times = Array.isArray(data) ? data.flatMap(slot =>
+        slot && typeof slot === "object" && !Array.isArray(slot) && slot.available === true &&
+        typeof slot.time === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(slot.time) ? [slot.time] : []
+      ) : [];
+      setSlotResult({ key: slotsKey, times: [...new Set(times)], error: !!error });
+    });
+    return () => { active = false; };
+  }, [dialogOpen, bookingProfessional, bookingDate, bookingServices, slotsKey, appointments]);
 
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
   const dayName = useMemo(() => {
@@ -141,7 +168,7 @@ export default function Scheduling() {
       const [profsRes, custsRes, servsRes, apptsRes] = await Promise.all([
         supabase.from("professionals").select("id, name").eq("user_id", user.id).eq("active", true).order("name"),
         supabase.from("customers").select("id, name").eq("user_id", user.id).order("name"),
-        supabase.from("services").select("id, name, price").eq("user_id", user.id).eq("active", true).order("name"),
+        supabase.from("services").select("id, name, price, duration_minutes").eq("user_id", user.id).eq("active", true).order("name"),
         supabase.rpc("get_appointments_with_details", { p_user_id: user.id, p_from: fromDate, p_to: toDate }),
       ]);
 
@@ -196,16 +223,22 @@ export default function Scheduling() {
   useEffect(() => { loadData(); }, [loadData]);
 
   const handleCreateAppointment = async () => {
-    if (!user || !form.professional_id || !form.date || !form.start_time) return;
+    if (!user || !canBook || savingAppointment) return;
+    const [hours, minutes] = form.start_time.split(":").map(Number);
+    const end = hours * 60 + minutes + duration;
+    if (end >= 1440) { toast.error("Os serviços ultrapassam o final do dia."); return; }
+    const endTime = `${String(Math.floor(end / 60)).padStart(2, "0")}:${String(end % 60).padStart(2, "0")}`;
+    setSavingAppointment(true);
     try {
       const { error } = await supabase.from("appointments").insert({
         user_id: user.id,
         professional_id: form.professional_id,
         customer_id: form.customer_id || null,
-        service_id: form.service_id || null,
+        service_id: bookingServices[0],
+        service_ids: bookingServices,
         date: form.date,
         start_time: form.start_time,
-        end_time: form.end_time,
+        end_time: endTime,
         notes: form.notes,
       });
       if (error) throw error;
@@ -219,14 +252,13 @@ export default function Scheduling() {
 
       // Notify professional via WhatsApp and push (fire and forget with error logging)
       const customer = customers.find(c => c.id === form.customer_id);
-      const service = services.find(s => s.id === form.service_id);
       const prof = professionals.find(p => p.id === form.professional_id);
       supabase.functions.invoke("notify-professional", {
         body: {
           professional_id: form.professional_id,
           user_id: user.id,
           customer_name: customer?.name || "Não informado",
-          service_name: service?.name || "Não informado",
+          service_name: selectedServices.map(service => service.name).join(" + "),
           date: form.date,
           start_time: form.start_time,
         },
@@ -238,6 +270,8 @@ export default function Scheduling() {
       });
     } catch (e: unknown) {
       toast.error((typeof e === 'object' && e !== null && 'message' in e ? String(e.message) : String(e)));
+    } finally {
+      setSavingAppointment(false);
     }
   };
 
@@ -256,18 +290,14 @@ export default function Scheduling() {
   };
 
   const openNewAppointment = (profId?: string, day?: Date, time?: string) => {
-    const endTime = time
-      ? `${String(Math.floor((parseInt(time.split(":")[0]) * 60 + parseInt(time.split(":")[1]) + 30) / 60)).padStart(2, "0")}:${String((parseInt(time.split(":")[0]) * 60 + parseInt(time.split(":")[1]) + 30) % 60).padStart(2, "0")}`
-      : "09:30";
     const date = day ? format(day, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd");
     setForm({
       professional_id: profId || "",
       customer_id: "",
-      service_id: "",
+      service_ids: [] as string[],
       date,
       date_input: formatDateForInput(date),
-      start_time: time || "09:00",
-      end_time: endTime,
+      start_time: time ?? "",
       notes: "",
       reminder_enabled: false,
       reminder_hours: "24",
@@ -389,7 +419,7 @@ export default function Scheduling() {
       )}
 
       {/* Create Appointment Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={open => { if (!savingAppointment) setDialogOpen(open); }}>
         <DialogContent className="flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] flex-col overflow-hidden">
           <DialogHeader className="shrink-0 pr-6">
             <DialogTitle>Novo Agendamento</DialogTitle>
@@ -397,7 +427,7 @@ export default function Scheduling() {
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-2">
             <div>
               <Label>Profissional *</Label>
-              <Select value={form.professional_id} onValueChange={(v) => setForm({ ...form, professional_id: v })}>
+              <Select value={form.professional_id} onValueChange={(v) => setForm({ ...form, professional_id: v, start_time: "" })}>
                 <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                 <SelectContent>
                   {professionals.map((p) => (
@@ -427,17 +457,30 @@ export default function Scheduling() {
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label>Serviço</Label>
-              <Select value={form.service_id} onValueChange={(v) => setForm({ ...form, service_id: v })}>
-                <SelectTrigger><SelectValue placeholder="Selecione (opcional)" /></SelectTrigger>
-                <SelectContent>
-                  {services.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.name} — R$ {Number(s.price).toFixed(2)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium">Serviços *</legend>
+              <div className="space-y-2">
+                {services.map(service => (
+                  <label key={service.id} className="flex items-center gap-2 rounded-md border p-2 text-sm">
+                    <input type="checkbox" checked={bookingServices.includes(service.id)}
+                      disabled={bookingServices.length >= 10 && !bookingServices.includes(service.id)}
+                      onChange={event => {
+                        const checked = event.currentTarget.checked;
+                        setForm(current => ({
+                          ...current,
+                          service_ids: checked ? [...current.service_ids, service.id] : current.service_ids.filter(id => id !== service.id),
+                          start_time: "",
+                        }));
+                      }} />
+                    <span>{service.name} · {Math.max(5, service.duration_minutes ?? 30)} min · {Number(service.price).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
+                  </label>
+                ))}
+                {!services.length && <p className="text-sm text-muted-foreground">Nenhum serviço ativo cadastrado.</p>}
+              </div>
+              {bookingServices.length > 0 && (
+                <p className="text-sm font-medium">Total · {duration} min · {serviceTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p>
+              )}
+            </fieldset>
             <div>
               <Label>Data *</Label>
               <Input
@@ -450,6 +493,7 @@ export default function Scheduling() {
                     ...form,
                     date_input: masked,
                     date: iso || form.date,
+                    start_time: "",
                   });
                 }}
               />
@@ -493,6 +537,7 @@ export default function Scheduling() {
                             setForm({
                               ...form,
                               date: iso,
+                              start_time: "",
                               date_input: formatDateForInput(iso),
                             });
                           }}
@@ -520,57 +565,23 @@ export default function Scheduling() {
                   Horários disponíveis — {professionals.find(p => p.id === form.professional_id)?.name}
                 </Label>
                 <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5 max-h-[180px] overflow-y-auto p-1">
-                  {(() => {
-                    const selectedDay = parseLocalDate(form.date);
-                    const dayOfWeek = selectedDay.getDay();
-                    const daySchs = schedules[form.professional_id]?.filter(
-                      (s) => s.day_of_week === dayOfWeek && s.active
-                    ) || [];
-                    if (daySchs.length === 0) return <p className="text-xs text-muted-foreground col-span-full py-4 text-center">Sem horários neste dia</p>;
-                    const slots: string[] = [];
-                    for (const sch of daySchs) {
-                      let cur = Number(sch.start_time.slice(0, 2)) * 60 + Number(sch.start_time.slice(3, 5));
-                      const end = Number(sch.end_time.slice(0, 2)) * 60 + Number(sch.end_time.slice(3, 5));
-                      while (cur + 30 <= end) {
-                        const h = Math.floor(cur / 60), m = cur % 60;
-                        const time = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-                        slots.push(time);
-                        cur += 30;
-                      }
-                    }
-                    if (slots.length === 0) return <p className="text-xs text-muted-foreground col-span-full py-4 text-center">Sem horários neste dia</p>;
-                    return slots.map(t => {
-                      const [th, tm] = t.split(":").map(Number);
-                      const slotMin = th * 60 + tm;
-                      const occupied = appointments.some(a => {
-                        if (a.professional_id !== form.professional_id || a.date !== form.date || a.status === "cancelado") return false;
-                        const [sh, sm] = (a.start_time || "").split(":").map(Number);
-                        const [eh, em] = (a.end_time || "").split(":").map(Number);
-                        return slotMin >= sh * 60 + (sm || 0) && slotMin < eh * 60 + (em || 0);
-                      });
-                      const isSelected = form.start_time === t;
-                      return (
-                        <button
-                          key={t}
-                          disabled={occupied}
-                          onClick={() => {
-                            const svc = services.find(s => s.id === form.service_id);
-                            const duration = svc?.duration_minutes || 30;
-                            const endMin = slotMin + duration;
-                            const eh = Math.floor(endMin / 60), em = endMin % 60;
-                            setForm({ ...form, start_time: t, end_time: `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}` });
-                          }}
-                          className={`text-xs py-1.5 px-2 rounded-lg border transition-all ${
-                            occupied ? "bg-muted text-muted-foreground/30 border-border/20 cursor-not-allowed line-through" :
-                            isSelected ? "bg-primary text-primary-foreground border-primary font-medium" :
-                            "bg-card border-border/30 hover:border-primary/40 hover:bg-primary/5"
-                          }`}
-                        >
-                          {t}
-                        </button>
-                      );
-                    });
-                  })()}
+                  {!bookingServices.length ? (
+                    <p className="col-span-full py-4 text-xs text-muted-foreground">Selecione os serviços para consultar os horários.</p>
+                  ) : !currentSlots ? (
+                    <p className="col-span-full py-4 text-xs text-muted-foreground" role="status">Consultando horários…</p>
+                  ) : currentSlots.error || !currentSlots.times.length ? (
+                    <p className="col-span-full py-4 text-xs text-muted-foreground">
+                      {currentSlots.error ? "Não foi possível consultar os horários." : "Sem horários disponíveis para esses serviços."}
+                    </p>
+                  ) : currentSlots.times.map(time => (
+                    <button key={time} type="button" aria-pressed={form.start_time === time}
+                      onClick={() => setForm(current => ({ ...current, start_time: time }))}
+                      className={`rounded-lg border px-2 py-1.5 text-xs ${form.start_time === time
+                        ? "border-primary bg-primary font-medium text-primary-foreground"
+                        : "border-border/30 bg-card hover:border-primary/40 hover:bg-primary/5"}`}>
+                      {time}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
@@ -607,7 +618,9 @@ export default function Scheduling() {
               )}
             </div>
           </div>
-          <Button onClick={handleCreateAppointment} className="w-full shrink-0">Agendar</Button>
+          <Button onClick={handleCreateAppointment} disabled={!canBook || savingAppointment} className="w-full shrink-0">
+            {savingAppointment ? "Agendando…" : "Agendar"}
+          </Button>
         </DialogContent>
       </Dialog>
     </div>
