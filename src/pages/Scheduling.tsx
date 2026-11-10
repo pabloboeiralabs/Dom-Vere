@@ -1,3 +1,4 @@
+import AppointmentServicesDialog from "@/components/AppointmentServicesDialog";
 import AgendaBoard, { type AgendaAppointment } from "@/components/AgendaBoard";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -85,6 +86,7 @@ export default function Scheduling() {
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [serviceAppointment, setServiceAppointment] = useState<AgendaAppointment | null>(null);
   const [schedules, setSchedules] = useState<Record<string, Schedule[]>>({});
   const [lastServices,setLastServices]=useState<AgendaAppointment[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -364,9 +366,14 @@ export default function Scheduling() {
         <AgendaBoard professionals={professionals.filter(p => professionalFilter === "all" || p.id === professionalFilter)}
           days={viewMode === "weekly" ? weekDays : [selectedDate]} schedules={schedules} lastServices={lastServices}
           appointments={appointments.filter(a => professionalFilter === "all" || a.professional_id === professionalFilter)}
-          openNewAppointment={openNewAppointment} updateStatus={updateStatus}
+          openNewAppointment={openNewAppointment} updateStatus={updateStatus} onAddServices={setServiceAppointment}
           onViewProfessional={id=>{ setProfessionalFilter(id); setWeekStart(startOfWeek(selectedDate, { weekStartsOn: 1 })); setViewMode("weekly"); }}
           onDayClick={day => { setSelectedDate(day); setViewMode("daily"); }} />
+      )}
+
+      {serviceAppointment && (
+        <AppointmentServicesDialog key={serviceAppointment.id} appointmentId={serviceAppointment.id}
+          customerName={serviceAppointment.customer_name} services={services} onClose={() => setServiceAppointment(null)} />
       )}
 
       {/* Create Appointment Dialog */}

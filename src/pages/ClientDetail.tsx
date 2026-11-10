@@ -80,6 +80,7 @@ export default function ClientDetail() {
   const navigate = useNavigate();
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [performedServices, setPerformedServices] = useState<{ appointment_id: string; service_id: string; service_name: string; performed_at: string }[]>([]);
   const [customerPlans, setCustomerPlans] = useState<CustomerPlan[]>([]);
   const [availablePlans, setAvailablePlans] = useState<Plan[]>([]);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
@@ -129,8 +130,14 @@ export default function ClientDetail() {
   const loadHistory = useCallback(async () => {
     if (!user || !id) return;
     try {
-      const { data } = await supabase.rpc("get_customer_history", { p_user_id: user.id, p_customer_id: id });
-      setHistory((data || []) as HistoryItem[]);
+      const [historyResult, servicesResult] = await Promise.all([
+        supabase.rpc("get_customer_history", { p_user_id: user.id, p_customer_id: id }),
+        supabase.from("appointment_performed_services")
+          .select("appointment_id,service_id,service_name,performed_at")
+          .eq("user_id", user.id).eq("customer_id", id).order("performed_at", { ascending: false }),
+      ]);
+      if (!historyResult.error) setHistory((historyResult.data || []) as HistoryItem[]);
+      if (!servicesResult.error) setPerformedServices(servicesResult.data || []);
     } catch (e) {
       console.error(e);
     }
@@ -526,6 +533,21 @@ export default function ClientDetail() {
           </Button>
         </CardHeader>
         <CardContent className="p-0">
+          {performedServices.length > 0 && (
+            <div className="border-b px-6 py-4">
+              <h3 className="mb-2 text-sm font-semibold">Serviços realizados na agenda</h3>
+              <ul className="space-y-2 text-sm">
+                {performedServices.map(service => (
+                  <li key={`${service.appointment_id}:${service.service_id}`} className="flex flex-wrap justify-between gap-2">
+                    <span>{service.service_name}</span>
+                    <time className="text-muted-foreground" dateTime={service.performed_at}>
+                      {new Date(service.performed_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+                    </time>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <Table>
             <TableHeader>
               <TableRow>

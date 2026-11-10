@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      appointment_performed_services: {
+        Row: {
+          appointment_id: string
+          service_id: string
+          user_id: string
+          customer_id: string
+          service_name: string
+          performed_at: string
+        }
+        Insert: {
+          appointment_id: string
+          service_id: string
+          user_id: string
+          customer_id: string
+          service_name: string
+          performed_at: string
+        }
+        Update: {
+          appointment_id?: string
+          service_id?: string
+          user_id?: string
+          customer_id?: string
+          service_name?: string
+          performed_at?: string
+        }
+        Relationships: []
+      }
       appointments: {
         Row: {
           created_at: string | null
@@ -1092,6 +1119,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_appointment_performed_services: {
+        Args: { p_appointment_id: string; p_service_ids: string[] }
+        Returns: undefined
+      }
       client_portal_sync_snapshot: {
         Args: { p_customer_id: string; p_session_token: string }
         Returns: Json
