@@ -42,8 +42,8 @@ async function enrichAppointments(appts: any[]) {
     return {
       ...a,
       customer_name: cm.get(a.customer_id)||"—",
-      service_name: svc?.name||"—",
-      service_price: svc?.price || 0
+      service_name: a.service_names||svc?.name||"—",
+      service_price: a.service_total_price ?? svc?.price ?? 0
     };
   });
 }
@@ -74,7 +74,7 @@ const StatCard = ({ label, value, icon: Icon, color }: { label: string; value: a
   </motion.div>
 );
 
-const ApptCard = ({ a, onUpdateStatus, onAddService, onCheckout }: { a: any; onUpdateStatus: (id: string, status: string) => Promise<void>; onAddService: (appt: any) => void; onCheckout: (appt: any) => void }) => (
+const ApptCard = ({ a, onUpdateStatus, onCheckout }: { a: any; onUpdateStatus: (id: string, status: string) => Promise<void>; onCheckout: (appt: any) => void }) => (
   <motion.div initial={{ opacity: 0, y: 12, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ type: "spring", damping: 20, stiffness: 200 }} className="flex gap-4 items-start relative pb-2 group">
     {/* Left timeline side */}
     <div className="flex flex-col items-center min-w-[50px] pt-1 relative self-stretch">
@@ -121,17 +121,6 @@ const ApptCard = ({ a, onUpdateStatus, onAddService, onCheckout }: { a: any; onU
               Compareceu
             </Button>
           </div>
-          <Button
-            onClick={(e) => {
-              e.stopPropagation();
-              onAddService(a);
-            }}
-            variant="outline"
-            size="sm"
-            className="w-full rounded-xl h-8 text-xs text-slate-300 border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05] hover:text-white transition-all gap-1"
-          >
-            <Plus className="h-3.5 w-3.5" /> Adicionar Serviço Extra
-          </Button>
         </div>
       )}
     </div>
@@ -266,7 +255,6 @@ export default function BarberHome() {
   const [services, setServices] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
-  const [selectedApptForService, setSelectedApptForService] = useState<any | null>(null);
   const [productSaleDialogOpen, setProductSaleDialogOpen] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState("");
   const [saleQuantity, setSaleQuantity] = useState("1");
@@ -294,9 +282,10 @@ export default function BarberHome() {
   const [checkoutDialogOpen, setCheckoutDialogOpen] = useState(false);
   const [checkoutAppt, setCheckoutAppt] = useState<any | null>(null);
   const [checkoutPrice, setCheckoutPrice] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("pix");
   const [checkoutSplits, setCheckoutSplits] = useState<import("@/types/cash-register").SplitPaymentInput[]>([]);
-  const [additionalSelected, setAdditionalSelected] = useState<Set<string>>(new Set());
+  const [checkoutServices, setCheckoutServices] = useState<{ id: string; name: string; price: number }[]>([]);
+  const [checkoutServiceIds, setCheckoutServiceIds] = useState<string[]>([]);
+  const checkoutTotal = Number(checkoutPrice);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   usePushSubscription(undefined, user?.id, !!user);
@@ -412,7 +401,7 @@ export default function BarberHome() {
 
     const [aR, hR] = await Promise.all([
       profToFetch
-        ? supabase.from("appointments").select("id,date,start_time,end_time,status,customer_id,service_id").eq("professional_id", profToFetch).in("status",["agendado","confirmado"]).order("date").order("start_time")
+        ? supabase.from("appointments").select("id,date,start_time,end_time,status,customer_id,service_id,service_ids,service_names,service_total_price").eq("professional_id", profToFetch).in("status",["agendado","confirmado"]).order("date").order("start_time")
         : Promise.resolve({ data: [], error: null }),
       profToFetch
         ? supabase.from("cuts").select("created_at,professional_id,customer_id").eq("professional_id", profToFetch).order("created_at",{ascending:false}).limit(50)
@@ -482,137 +471,62 @@ export default function BarberHome() {
     }
   };
 
-  const handleOpenCheckout = (appt: any) => {
+  const handleOpenCheckout = async (appt: NonNullable<typeof checkoutAppt>) => {
+    const bookedIds: string[] = appt.service_ids?.length ? appt.service_ids : appt.service_id ? [appt.service_id] : [];
+    const missing = bookedIds.filter(id => !services.some(service => service.id === id));
+    let options = services.map(({ id, name, price }) => ({ id, name, price: Number(price) }));
+    if (missing.length) {
+      const { data, error } = await supabase.from("services").select("id,name,price").in("id", missing);
+      if (error) {
+        toast.error("Não foi possível carregar os serviços agendados.");
+        return;
+      }
+      options = [...options, ...(data ?? []).map(({ id, name, price }) => ({ id, name, price: Number(price) }))];
+    }
     setCheckoutAppt(appt);
-    setCheckoutPrice(String(appt.service_price || 0));
-    setPaymentMethod("pix");
-    setAdditionalSelected(new Set());
+    setCheckoutServices(options);
+    setCheckoutServiceIds(bookedIds.filter(id => options.some(service => service.id === id)));
+    setCheckoutPrice(String(appt.service_price ?? 0));
+    setCheckoutSplits([]);
     setCheckoutDialogOpen(true);
   };
 
+  const toggleCheckoutService = (id: string, checked: boolean) => {
+    const next = checked ? [...checkoutServiceIds, id] : checkoutServiceIds.filter(current => current !== id);
+    setCheckoutServiceIds(next);
+    setCheckoutPrice(checkoutServices.filter(service => next.includes(service.id))
+      .reduce((sum, service) => sum + service.price, 0).toFixed(2));
+    setCheckoutSplits([]);
+  };
+
   const handleConfirmCheckout = async () => {
-    if (!checkoutAppt || !professional) return;
+    if (!checkoutAppt || checkoutLoading || !checkoutServiceIds.length) return;
+    if (!checkoutPrice.trim() || !Number.isFinite(checkoutTotal) || checkoutTotal < 0) {
+      toast.error("Informe um valor válido para o atendimento.");
+      return;
+    }
+    const splits: import("@/types/cash-register").SplitPaymentInput[] = checkoutSplits.length ? checkoutSplits : [{ payment_method: "pix", amount: checkoutTotal }];
+    const totalCents = Math.round(checkoutTotal * 100);
+    if (splits.reduce((sum, split) => sum + Math.round(split.amount * 100), 0) !== totalCents) {
+      toast.error("A soma dos pagamentos deve ser igual ao valor total.");
+      return;
+    }
     setCheckoutLoading(true);
     try {
-      const mainPriceNum = Number(checkoutPrice) || 0;
-      const additionalServices = services.filter(s => additionalSelected.has(s.id));
-      const additionalTotal = additionalServices.reduce((sum, s) => sum + Number(s.price), 0);
-      const total = mainPriceNum + additionalTotal;
-
-      const mainServiceName = checkoutAppt.service_name;
-      const additionalNames = additionalServices.map(s => `${s.name} (R$ ${Number(s.price).toFixed(2)})`).join(", ");
-      
-      let description = `Serviço: ${mainServiceName} (R$ ${mainPriceNum.toFixed(2)})`;
-      if (additionalNames) {
-        description += ` + Adicionais: ${additionalNames}`;
-      }
-      description += ` | Cliente: ${checkoutAppt.customer_name} | Profissional: ${professional.name}`;
-
-      // 1. Update appointment status to 'concluido'
-      const { error: statusErr } = await supabase
-        .from("appointments")
-        .update({ status: "concluido" })
-        .eq("id", checkoutAppt.id);
-      if (statusErr) throw statusErr;
-
-      // 2. Update financial entry generated by trigger
-      const { error: entryErr } = await supabase
-        .from("financial_entries")
-        .update({
-          amount: total,
-          payment_method: paymentMethod,
-          description: description
-        })
-        .eq("appointment_id", checkoutAppt.id);
-      if (entryErr) {
-        console.warn("Could not update financial entry directly. Retrying in 1s...", entryErr);
-        // Retry logic in case of minor trigger delay
-        await new Promise(r => setTimeout(r, 1000));
-        await supabase
-          .from("financial_entries")
-          .update({
-            amount: total,
-            payment_method: paymentMethod,
-            description: description
-          })
-          .eq("appointment_id", checkoutAppt.id);
-      }
-
-      // 3. Save payment splits and cash movements
-      const splits = checkoutSplits.length > 0 ? checkoutSplits : [
-        { payment_method: paymentMethod as any, amount: total }
-      ];
-
-      // Fetch the financial entry that was just created/updated
-      const { data: finEntry } = await supabase
-        .from("financial_entries")
-        .select("id")
-        .eq("appointment_id", checkoutAppt.id)
-        .maybeSingle();
-
-      if (finEntry) {
-        // Save payment splits
-        for (const split of splits) {
-          const { data: splitRow } = await supabase.from("payment_splits").insert({
-            financial_entry_id: finEntry.id,
-            payment_method: split.payment_method,
-            amount: split.amount,
-            cash_received: split.cash_received || null,
-            cash_change: split.cash_change || null,
-          }).select("id").single();
-
-          // Create cash movements for cash payments (if register is open)
-          if (split.payment_method === "dinheiro" && splitRow) {
-            // Check if cash register is open
-            const { data: openReg } = await supabase
-              .from("cash_register_sessions")
-              .select("id")
-              .eq("user_id", professional.user_id)
-              .eq("status", "open")
-              .maybeSingle();
-
-            if (openReg) {
-              // Recebimento
-              await supabase.from("cash_movements").insert({
-                cash_register_id: openReg.id,
-                user_id: professional.user_id,
-                type: "entrada",
-                category: "recebimento",
-                amount: split.amount,
-                payment_method: "dinheiro",
-                payment_split_id: splitRow.id,
-                financial_entry_id: finEntry.id,
-                description: `Recebido de ${checkoutAppt.customer_name} — ${checkoutAppt.service_name}`,
-              });
-
-              // Troco
-              if ((split.cash_change || 0) > 0) {
-                await supabase.from("cash_movements").insert({
-                  cash_register_id: openReg.id,
-                  user_id: professional.user_id,
-                  type: "saida",
-                  category: "troco",
-                  amount: split.cash_change!,
-                  payment_method: "dinheiro",
-                  payment_split_id: splitRow.id,
-                  description: `Troco para ${checkoutAppt.customer_name}`,
-                });
-
-                // Recalculate expected balance
-                await supabase.rpc("recalculate_expected_balance", { p_session_id: openReg.id });
-              }
-            }
-          }
-        }
-      }
-
-      toast.success("Atendimento concluído com sucesso!");
+      const { error } = await supabase.rpc("complete_barber_appointment", {
+        p_appointment_id: checkoutAppt.id,
+        p_service_ids: checkoutServiceIds,
+        p_splits: splits.map(({ payment_method, amount, cash_received }) => ({
+          payment_method, amount, cash_received: cash_received ?? null,
+        })),
+      });
+      if (error) throw error;
+      toast.success("Presença confirmada e atendimento concluído.");
       setCheckoutDialogOpen(false);
       setCheckoutAppt(null);
-      setAdditionalSelected(new Set());
       await loadData();
-    } catch (e: any) {
-      toast.error(e.message || "Erro ao concluir atendimento");
+    } catch (error: unknown) {
+      toast.error(typeof error === "object" && error && "message" in error ? String(error.message) : "Erro ao concluir atendimento.");
     } finally {
       setCheckoutLoading(false);
     }
@@ -856,37 +770,6 @@ export default function BarberHome() {
     }
   };
 
-  const handleAddExtraService = async (service: any) => {
-    if (!selectedApptForService) return;
-    try {
-      const startTime = selectedApptForService.end_time;
-      const [sh, sm] = startTime.split(":").map(Number);
-      const startMinutes = sh * 60 + sm;
-      const endMinutes = startMinutes + service.duration_minutes;
-      const eh = Math.floor(endMinutes / 60) % 24;
-      const em = endMinutes % 60;
-      const endTime = `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}:00`;
-
-      const { error } = await supabase.from("appointments").insert({
-        user_id: professional.user_id,
-        customer_id: selectedApptForService.customer_id,
-        professional_id: user!.professional_id,
-        service_id: service.id,
-        date: selectedApptForService.date,
-        start_time: startTime,
-        end_time: endTime,
-        status: "agendado",
-      });
-
-      if (error) throw error;
-      toast.success(`Serviço extra "${service.name}" adicionado com sucesso!`);
-      setSelectedApptForService(null);
-      await loadData();
-    } catch (e: any) {
-      toast.error(e.message || "Erro ao adicionar serviço extra");
-    }
-  };
-
   const handleRecordProductSale = async () => {
     if (!selectedProductId) {
       toast.error("Selecione um produto");
@@ -1109,7 +992,6 @@ export default function BarberHome() {
                             key={a.id}
                             a={a}
                             onUpdateStatus={updateStatus}
-                            onAddService={setSelectedApptForService}
                             onCheckout={handleOpenCheckout}
                           />
                         ))}
@@ -1178,7 +1060,6 @@ export default function BarberHome() {
                             key={a.id}
                             a={a}
                             onUpdateStatus={updateStatus}
-                            onAddService={setSelectedApptForService}
                             onCheckout={handleOpenCheckout}
                           />
                         ))}
@@ -1229,7 +1110,6 @@ export default function BarberHome() {
                                     key={a.id}
                                     a={a}
                                     onUpdateStatus={updateStatus}
-                                    onAddService={setSelectedApptForService}
                                     onCheckout={handleOpenCheckout}
                                   />
                                 ))}
@@ -1357,35 +1237,6 @@ export default function BarberHome() {
           </motion.div>
         </div>
       )}
-      {/* ── Dialog: Adicionar Serviço Extra ── */}
-      <Dialog open={!!selectedApptForService} onOpenChange={(open) => !open && setSelectedApptForService(null)}>
-        <DialogContent className="sm:max-w-md rounded-3xl bg-[#0E1322] border border-white/[0.08] text-white">
-          <DialogHeader>
-            <DialogTitle className="text-base font-bold text-white">Adicionar Serviço Extra</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <p className="text-xs text-slate-400">
-              Selecione o serviço adicional que o cliente <strong>{selectedApptForService?.customer_name}</strong> vai realizar. Isso criará um agendamento adjacente na agenda para bloquear o tempo e computar sua comissão.
-            </p>
-            <div className="max-h-[40vh] overflow-y-auto space-y-1.5 pr-1 no-scrollbar">
-              {services.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => handleAddExtraService(s)}
-                  className="w-full text-left p-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.06] hover:border-[#D4AF37]/30 transition-all flex items-center justify-between group"
-                >
-                  <div>
-                    <p className="text-sm font-semibold group-hover:text-[#F3C06B] transition-colors">{s.name}</p>
-                    <p className="text-[11px] text-slate-400 font-medium">{s.duration_minutes} min · R$ {Number(s.price).toFixed(2)}</p>
-                  </div>
-                  <Plus className="h-4 w-4 text-slate-400 group-hover:text-[#F3C06B] transition-colors" />
-                </button>
-              ))}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {/* ── Dialog: Vender Produto ── */}
       <Dialog open={productSaleDialogOpen} onOpenChange={setProductSaleDialogOpen}>
         <DialogContent className="sm:max-w-md rounded-3xl bg-[#0E1322] border border-white/[0.08] text-white">
@@ -1656,102 +1507,49 @@ export default function BarberHome() {
       </Dialog>
 
       {/* ── Dialog: Confirmar Presença e Finalizar (Checkout) ── */}
-      <Dialog open={checkoutDialogOpen} onOpenChange={setCheckoutDialogOpen}>
+      <Dialog open={checkoutDialogOpen} onOpenChange={open => { if (!checkoutLoading) setCheckoutDialogOpen(open); }}>
         <DialogContent className="sm:max-w-md rounded-3xl bg-[#0E1322] border border-white/[0.08] text-white max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-base font-bold text-white">Finalizar Atendimento</DialogTitle>
+            <DialogTitle className="text-base font-bold text-white">Confirmar comparecimento</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
             <div className="p-4 bg-[#131B2E] rounded-2xl border border-white/[0.06] relative overflow-hidden">
               <div className="absolute top-0 right-0 w-8 h-8 bg-gradient-to-bl from-white/[0.02] to-transparent rounded-bl-full" />
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Cliente</p>
               <p className="text-base font-bold text-white mt-1">{checkoutAppt?.customer_name}</p>
-              <p className="text-xs text-slate-400 mt-1.5">Serviço Principal: <span className="text-white font-medium">{checkoutAppt?.service_name}</span></p>
             </div>
 
-            {/* Price Edit */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-400">Valor Cobrado pelo Serviço (R$)</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={checkoutPrice}
-                onChange={(e) => setCheckoutPrice(e.target.value)}
-                className="w-full h-10 px-3 rounded-xl border border-white/[0.08] bg-[#131B2E] text-white text-sm focus:outline-none focus:ring-1 focus:ring-[#D4AF37]"
-              />
-            </div>
-
-            {/* Split Payment Form */}
-            <SplitPaymentForm
-              totalAmount={Number(checkoutPrice) || 0}
-              onChange={(splits) => {
-                setCheckoutSplits(splits);
-                if (splits.length > 0) setPaymentMethod(splits[0].payment_method);
-              }}
-            />
-
-            {/* Additional Services Checkbox list */}
-            {services.length > 1 && (
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-slate-400">Serviços Adicionais Realizados</label>
-                <div className="max-h-36 overflow-y-auto border border-white/[0.08] rounded-2xl p-3 space-y-2 bg-[#131B2E]/40 no-scrollbar">
-                  {services
-                    .filter(s => s.id !== checkoutAppt?.service_id)
-                    .map(s => {
-                      const selected = additionalSelected.has(s.id);
-                      return (
-                        <label key={s.id} className="flex items-center justify-between cursor-pointer py-1 select-none">
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={selected}
-                              onChange={() => {
-                                  setAdditionalSelected(prev => {
-                                    const next = new Set(prev);
-                                    if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
-                                    return next;
-                                  });
-                              }}
-                              className="rounded border-white/[0.08] text-[#D4AF37] bg-[#131B2E] focus:ring-[#D4AF37]"
-                            />
-                            <span className="text-xs font-semibold text-slate-300">{s.name}</span>
-                          </div>
-                          <span className="text-xs text-[#F3C06B] font-bold">R$ {Number(s.price).toFixed(2)}</span>
-                        </label>
-                      );
-                    })}
-                </div>
+            <fieldset className="space-y-2" disabled={checkoutLoading}>
+              <legend className="text-sm font-semibold">Serviços executados</legend>
+              <div className="max-h-40 space-y-2 overflow-y-auto rounded-xl border border-white/10 p-3">
+                {checkoutServices.map(service => (
+                  <label key={service.id} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="flex items-center gap-2">
+                      <input type="checkbox" checked={checkoutServiceIds.includes(service.id)}
+                        onChange={event => toggleCheckoutService(service.id, event.currentTarget.checked)} />
+                      {service.name}
+                    </span>
+                    <span className="text-[#F3C06B]">R$ {service.price.toFixed(2)}</span>
+                  </label>
+                ))}
               </div>
+            </fieldset>
+
+            <label className="block space-y-1 text-sm font-semibold">
+              Valor total a cobrar (R$)
+              <input type="number" step="0.01" min="0" value={checkoutPrice} disabled={checkoutLoading}
+                onChange={event => { setCheckoutPrice(event.target.value); setCheckoutSplits([]); }}
+                className="w-full h-10 px-3 rounded-xl border border-white/[0.08] bg-[#131B2E] text-white text-sm" />
+            </label>
+
+            {checkoutDialogOpen && (
+              <fieldset disabled={checkoutLoading}>
+                <SplitPaymentForm key={`${checkoutAppt?.id}:${checkoutServiceIds.join(",")}:${checkoutPrice}`}
+                  totalAmount={Math.max(0, checkoutTotal || 0)} onChange={setCheckoutSplits} />
+              </fieldset>
             )}
 
-            {/* Receipt Summary - Styled as modern fiscal receipt */}
-            <div className="rounded-2xl border border-dashed border-white/20 p-4 space-y-2.5 bg-white/[0.01] relative">
-              <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-4 bg-[#0E1322] rounded-r-full" />
-              <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-2 h-4 bg-[#0E1322] rounded-l-full" />
-              
-              <div className="flex justify-between text-xs text-slate-400 font-medium">
-                <span>{checkoutAppt?.service_name}</span>
-                <span>R$ {Number(checkoutPrice || 0).toFixed(2)}</span>
-              </div>
-              
-              {services.filter(s => additionalSelected.has(s.id)).map(s => (
-                <div key={s.id} className="flex justify-between text-xs text-slate-400 font-medium">
-                  <span>+ {s.name} (Adicional)</span>
-                  <span>R$ {Number(s.price).toFixed(2)}</span>
-                </div>
-              ))}
-
-              <div className="flex justify-between text-sm font-bold text-white border-t border-white/10 pt-2.5 mt-2.5">
-                <span>Valor Total</span>
-                <span className="text-[#F3C06B]">R$ {(
-                  (Number(checkoutPrice) || 0) + 
-                  services.filter(s => additionalSelected.has(s.id)).reduce((sum, s) => sum + Number(s.price), 0)
-                ).toFixed(2)}</span>
-              </div>
-            </div>
-
-            <Button onClick={handleConfirmCheckout} disabled={checkoutLoading} className="w-full h-11 rounded-2xl mt-2 font-bold bg-[#D4AF37] text-[#090D16] hover:bg-[#F3C06B]">
+            <Button onClick={handleConfirmCheckout} disabled={checkoutLoading || !checkoutServiceIds.length} className="w-full h-11 rounded-2xl mt-2 font-bold bg-[#D4AF37] text-[#090D16] hover:bg-[#F3C06B]">
               {checkoutLoading ? "Finalizando..." : "Confirmar Presença e Finalizar"}
             </Button>
           </div>

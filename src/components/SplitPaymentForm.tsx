@@ -42,7 +42,9 @@ export function SplitPaymentForm({ totalAmount, onChange, initialSplits }: Props
     if (remaining <= 0) return;
     const available = PAYMENT_METHODS.find(m => !usedMethods.includes(m.value));
     const method = available?.value || "outro";
-    setSplits([...splits, { payment_method: method, amount: remaining }]);
+    const updated = [...splits, { payment_method: method, amount: remaining }];
+    setSplits(updated);
+    onChange(updated);
   };
 
   const removeSplit = (index: number) => {

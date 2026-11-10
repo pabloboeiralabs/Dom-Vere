@@ -43,6 +43,9 @@ export type Database = {
       }
       appointments: {
         Row: {
+          service_ids: string[] | null
+          service_names: string | null
+          service_total_price: number | null
           created_at: string | null
           customer_id: string | null
           date: string
@@ -56,6 +59,9 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          service_ids?: string[] | null
+          service_names?: string | null
+          service_total_price?: number | null
           created_at?: string | null
           customer_id?: string | null
           date: string
@@ -69,6 +75,9 @@ export type Database = {
           user_id: string
         }
         Update: {
+          service_ids?: string[] | null
+          service_names?: string | null
+          service_total_price?: number | null
           created_at?: string | null
           customer_id?: string | null
           date?: string
@@ -1119,6 +1128,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      complete_barber_appointment: {
+        Args: { p_appointment_id: string; p_service_ids: string[]; p_splits: Json }
+        Returns: undefined
+      }
       add_appointment_performed_services: {
         Args: { p_appointment_id: string; p_service_ids: string[] }
         Returns: undefined
