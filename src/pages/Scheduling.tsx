@@ -1,3 +1,4 @@
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AppointmentPaymentDialog } from "@/components/AppointmentPaymentDialog";
 import AppointmentServicesDialog from "@/components/AppointmentServicesDialog";
 import AgendaBoard, { type AgendaAppointment } from "@/components/AgendaBoard";
@@ -14,7 +15,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { format, addDays, startOfWeek } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarClock, ChevronLeft, ChevronRight, Plus, Share2, Copy, Check } from "lucide-react";
+import { CalendarClock, ChevronDown, ChevronLeft, ChevronRight, Plus, Share2, Copy, Check } from "lucide-react";
 
 /** Parse a date string like "2025-03-28" as local (not UTC) */
 function parseLocalDate(dateStr: string): Date {
@@ -459,7 +460,16 @@ export default function Scheduling() {
             </div>
             <fieldset className="space-y-2">
               <legend className="text-sm font-medium">Serviços *</legend>
-              <div className="space-y-2">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button type="button" variant="outline" className="w-full justify-between gap-2"
+                    aria-label="Selecionar serviços">
+                    <span className="truncate">{selectedServices.map(service => service.name).join(" + ") || "Selecione os serviços"}</span>
+                    <ChevronDown className="h-4 w-4 shrink-0 opacity-60" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="start" aria-label="Serviços disponíveis"
+                  className="max-h-[min(16rem,var(--radix-popover-content-available-height))] w-[var(--radix-popover-trigger-width)] space-y-2 overflow-y-auto overscroll-contain p-2">
                 {services.map(service => (
                   <label key={service.id} className="flex items-center gap-2 rounded-md border p-2 text-sm">
                     <input type="checkbox" checked={bookingServices.includes(service.id)}
@@ -476,7 +486,8 @@ export default function Scheduling() {
                   </label>
                 ))}
                 {!services.length && <p className="text-sm text-muted-foreground">Nenhum serviço ativo cadastrado.</p>}
-              </div>
+                </PopoverContent>
+              </Popover>
               {bookingServices.length > 0 && (
                 <p className="text-sm font-medium">Total · {duration} min · {serviceTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p>
               )}
