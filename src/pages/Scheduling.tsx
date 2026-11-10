@@ -373,7 +373,7 @@ export default function Scheduling() {
 
       {serviceAppointment && (
         <AppointmentServicesDialog key={serviceAppointment.id} appointmentId={serviceAppointment.id}
-          customerName={serviceAppointment.customer_name} services={services} onClose={() => setServiceAppointment(null)} />
+          customerName={serviceAppointment.customer_name} services={services} onSaved={() => void loadData()} onClose={() => setServiceAppointment(null)} />
       )}
 
       {/* Create Appointment Dialog */}

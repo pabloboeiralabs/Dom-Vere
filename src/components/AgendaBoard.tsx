@@ -16,7 +16,7 @@ export default function AgendaBoard({ professionals, days, appointments, lastSer
   const addServicesButton = (a: AgendaAppointment) => onAddServices && ["agendado", "confirmado", "concluido"].includes(a.status) && (
       <button type="button" className="mt-3 flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold text-blue-800"
         onClick={() => onAddServices(a)}>
-        <Plus size={16} /> Adicionar serviços realizados
+        <Plus size={16} /> Adicionar serviços
       </button>
     );
   const card = (a: AgendaAppointment) => <article key={a.id} className="rounded-xl border border-slate-300 bg-white p-4 shadow-sm">

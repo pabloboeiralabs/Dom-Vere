@@ -80,7 +80,7 @@ export default function ClientDetail() {
   const navigate = useNavigate();
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [performedServices, setPerformedServices] = useState<{ appointment_id: string; service_id: string; service_name: string; performed_at: string }[]>([]);
+  const [performedServices, setPerformedServices] = useState<{ id: string; service_names: string | null; date: string }[]>([]);
   const [customerPlans, setCustomerPlans] = useState<CustomerPlan[]>([]);
   const [availablePlans, setAvailablePlans] = useState<Plan[]>([]);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
@@ -132,9 +132,10 @@ export default function ClientDetail() {
     try {
       const [historyResult, servicesResult] = await Promise.all([
         supabase.rpc("get_customer_history", { p_user_id: user.id, p_customer_id: id }),
-        supabase.from("appointment_performed_services")
-          .select("appointment_id,service_id,service_name,performed_at")
-          .eq("user_id", user.id).eq("customer_id", id).order("performed_at", { ascending: false }),
+        supabase.from("appointments")
+          .select("id,service_names,date")
+          .eq("user_id", user.id).eq("customer_id", id).eq("status", "concluido")
+          .not("service_names", "is", null).order("date", { ascending: false }),
       ]);
       if (!historyResult.error) setHistory((historyResult.data || []) as HistoryItem[]);
       if (!servicesResult.error) setPerformedServices(servicesResult.data || []);
@@ -538,10 +539,10 @@ export default function ClientDetail() {
               <h3 className="mb-2 text-sm font-semibold">Serviços realizados na agenda</h3>
               <ul className="space-y-2 text-sm">
                 {performedServices.map(service => (
-                  <li key={`${service.appointment_id}:${service.service_id}`} className="flex flex-wrap justify-between gap-2">
-                    <span>{service.service_name}</span>
-                    <time className="text-muted-foreground" dateTime={service.performed_at}>
-                      {new Date(service.performed_at).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+                  <li key={service.id} className="flex flex-wrap justify-between gap-2">
+                    <span>{service.service_names}</span>
+                    <time className="text-muted-foreground" dateTime={service.date}>
+                      {new Date(service.date + "T00:00:00").toLocaleDateString("pt-BR")}
                     </time>
                   </li>
                 ))}
