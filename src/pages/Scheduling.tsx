@@ -390,11 +390,11 @@ export default function Scheduling() {
 
       {/* Create Appointment Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
+        <DialogContent className="flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] flex-col overflow-hidden">
+          <DialogHeader className="shrink-0 pr-6">
             <DialogTitle>Novo Agendamento</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-2">
             <div>
               <Label>Profissional *</Label>
               <Select value={form.professional_id} onValueChange={(v) => setForm({ ...form, professional_id: v })}>
@@ -606,8 +606,8 @@ export default function Scheduling() {
                 </Select>
               )}
             </div>
-            <Button onClick={handleCreateAppointment} className="w-full">Agendar</Button>
           </div>
+          <Button onClick={handleCreateAppointment} className="w-full shrink-0">Agendar</Button>
         </DialogContent>
       </Dialog>
     </div>
