@@ -460,7 +460,7 @@ export default function Scheduling() {
             </div>
             <fieldset className="space-y-2">
               <legend className="text-sm font-medium">Serviços *</legend>
-              <Popover>
+              <Popover modal>
                 <PopoverTrigger asChild>
                   <Button type="button" variant="outline" className="w-full justify-between gap-2"
                     aria-label="Selecionar serviços">
