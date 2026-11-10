@@ -1,3 +1,4 @@
+import { AppointmentPaymentDialog } from "@/components/AppointmentPaymentDialog";
 import AppointmentServicesDialog from "@/components/AppointmentServicesDialog";
 import AgendaBoard, { type AgendaAppointment } from "@/components/AgendaBoard";
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -87,6 +88,7 @@ export default function Scheduling() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [serviceAppointment, setServiceAppointment] = useState<AgendaAppointment | null>(null);
+  const [paymentAppointment, setPaymentAppointment] = useState<AgendaAppointment | null>(null);
   const [schedules, setSchedules] = useState<Record<string, Schedule[]>>({});
   const [lastServices,setLastServices]=useState<AgendaAppointment[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -241,8 +243,14 @@ export default function Scheduling() {
 
   const updateStatus = async (id: string, status: string) => {
     if (!user) return;
-    const { error } = await supabase.from("appointments").update({ status }).eq("id", id).eq("user_id", user.id);
-    if (error) { toast.error("Não foi possível alterar o status."); return; }
+    const request = supabase.from("appointments").update({ status }).eq("id", id).eq("user_id", user.id);
+    if (status === "no_show") request.in("status", ["agendado", "confirmado"]);
+    const { data, error } = await request.select("id").maybeSingle();
+    if (error || !data) {
+      toast.error("Não foi possível alterar o status. Confira a situação atual do agendamento.");
+      await loadData();
+      return;
+    }
     toast.success("Status atualizado");
     await loadData();
   };
@@ -366,11 +374,15 @@ export default function Scheduling() {
         <AgendaBoard professionals={professionals.filter(p => professionalFilter === "all" || p.id === professionalFilter)}
           days={viewMode === "weekly" ? weekDays : [selectedDate]} schedules={schedules} lastServices={lastServices}
           appointments={appointments.filter(a => professionalFilter === "all" || a.professional_id === professionalFilter)}
-          openNewAppointment={openNewAppointment} updateStatus={updateStatus} onAddServices={setServiceAppointment}
+          openNewAppointment={openNewAppointment} updateStatus={updateStatus} onAddServices={setServiceAppointment} onCheckout={setPaymentAppointment}
           onViewProfessional={id=>{ setProfessionalFilter(id); setWeekStart(startOfWeek(selectedDate, { weekStartsOn: 1 })); setViewMode("weekly"); }}
           onDayClick={day => { setSelectedDate(day); setViewMode("daily"); }} />
       )}
 
+      {paymentAppointment && (
+        <AppointmentPaymentDialog key={paymentAppointment.id} appointmentId={paymentAppointment.id}
+          customerName={paymentAppointment.customer_name} onSaved={() => void loadData()} onClose={() => setPaymentAppointment(null)} />
+      )}
       {serviceAppointment && (
         <AppointmentServicesDialog key={serviceAppointment.id} appointmentId={serviceAppointment.id}
           customerName={serviceAppointment.customer_name} services={services} onSaved={() => void loadData()} onClose={() => setServiceAppointment(null)} />
